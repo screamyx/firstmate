@@ -5109,6 +5109,23 @@ fi
 if [ "$KIND" = ship ] || [ "$KIND" = scout ]; then
   spawn_send_text_line "$T" "export FM_TASK_ID=$ID"
 fi
+# Give a ship or scout worker its agb identity through the same pre-launch
+# channel, so the harness's own agb session-start hook registers it. The
+# inbox's .agb-id tells the doorbell which identity to mail. bin/fm-agb.sh owns
+# the identity scheme and every agb call; all of it is best-effort and a
+# missing or disabled agb leaves the launch exactly as before.
+if { [ "$KIND" = ship ] || [ "$KIND" = scout ]; } &&
+  "$FM_ROOT/bin/fm-agb.sh" enabled &&
+  SPAWN_AGB_RUNTIME=$("$FM_ROOT/bin/fm-agb.sh" runtime "$HARNESS"); then
+  SPAWN_AGB_ID=$("$FM_ROOT/bin/fm-agb.sh" worker-id "$ID")
+  SPAWN_AGB_RECAP="firstmate $KIND $ID"
+  "$FM_ROOT/bin/fm-agb.sh" record-supervisor
+  timeout 5 agb reserve "$SPAWN_AGB_ID" --recap "$SPAWN_AGB_RECAP" >/dev/null 2>&1 || true
+  if mkdir -p "$STATE/$ID.inbox/handled" 2>/dev/null &&
+    printf '%s\n' "$SPAWN_AGB_ID" >"$STATE/$ID.inbox/.agb-id"; then
+    spawn_send_text_line "$T" "export AGB_AGENT_ID=$SPAWN_AGB_ID AGB_RUNTIME=$SPAWN_AGB_RUNTIME AGB_AGENT_RECAP=$(shell_quote "$SPAWN_AGB_RECAP")"
+  fi
+fi
 # Send through the exact channel that already ships GOTMPDIR, so every backend
 # and harness - ship, scout, and secondmate - gets it before launch. Skipped
 # entirely when trace context is off.
@@ -5135,7 +5152,7 @@ if [ "$LAUNCH_ENV_ENABLED" = 1 ]; then
     TMPDIR TMP TEMP GOTMPDIR TMUX TMUX_PANE HERDR_ENV HERDR_SESSION HERDR_SOCKET_PATH \
     HERDR_PANE_ID CMUX_WORKSPACE_ID CMUX_SURFACE_ID CMUX_TAB_ID CMUX_PANEL_ID \
     CMUX_SOCKET_PATH ZELLIJ ZELLIJ_SESSION_NAME ZELLIJ_PANE_ID FM_ZELLIJ_SESSION \
-    FM_TASK_ID COMPACT_ADVISER_DISABLE LAVISH_AXI_HOST \
+    FM_TASK_ID COMPACT_ADVISER_DISABLE LAVISH_AXI_HOST AGB_AGENT_ID AGB_RUNTIME AGB_AGENT_RECAP \
     $LAUNCH_ENV_NAMES; do
     # Only validated names enter shell syntax. Values expand once, quoted, in
     # the pane shell and never become source text or spawn-process snapshots.

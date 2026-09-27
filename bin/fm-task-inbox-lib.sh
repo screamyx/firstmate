@@ -296,6 +296,11 @@ fm_task_inbox_ring() {  # <backend> <target> <record-path> [expected-label]
   if ! line=$(fm_task_inbox_doorbell_line "$rec"); then
     return 2
   fi
+  # A live agb identity takes the ring as mail instead of terminal keystrokes;
+  # bin/fm-agb.sh owns that path and its fallback to typing below.
+  if "$(dirname "${BASH_SOURCE[0]}")/fm-agb.sh" ring "$rec" "$line"; then
+    return 0
+  fi
   cstate=$(fm_backend_composer_state "$backend" "$target" "$label" 2>/dev/null) || cstate=unknown
   case "$cstate" in
     pending)

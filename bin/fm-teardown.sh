@@ -3751,6 +3751,11 @@ rm -f "$STATE/$ID.turn-ended" "$STATE/$ID.progress" \
 # state/<id>.git-hooks is the spawn-owned commit-msg strip directory, left
 # read-only by its installer.
 chmod u+w "$STATE/$ID.git-hooks" 2>/dev/null || true
+# A worker given an agb identity at spawn (the inbox's .agb-id) has it
+# forgotten here, best-effort; bin/fm-agb.sh owns the call.
+if [ -f "$STATE/$ID.inbox/.agb-id" ]; then
+  "$FM_ROOT/bin/fm-agb.sh" forget "$ID" || true
+fi
 rm -rf "$STATE/$ID.inbox" "$STATE/$ID.git-hooks"
 # The record is gone, so the backlog must not still show this task in flight
 # when teardown reports success. Still under this task's meta lock, so a steer
