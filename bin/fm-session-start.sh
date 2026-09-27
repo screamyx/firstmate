@@ -737,9 +737,6 @@ elif [ "$REEMIT" -eq 1 ]; then
   BOOT_OUT=$(FM_BOOTSTRAP_DETECT_ONLY=1 FM_BOOTSTRAP_LOCKED=1 FM_BOOTSTRAP_NETWORK=skip \
     FM_TASKS_AXI_COMPATIBLE="$TASKS_AXI_COMPATIBLE" "$SCRIPT_DIR/fm-bootstrap.sh" 2>&1)
 else
-  # The lock holder records its agb identity so workers' status wakes reach
-  # this session after a restart (bin/fm-agb.sh owns the record); silent.
-  "$SCRIPT_DIR/fm-agb.sh" record-supervisor >/dev/null 2>&1 || true
   BOOT_OUT=$(
     "$SCRIPT_DIR/fm-herdr-session-cleanup.sh" 2>&1 || true
     FM_BOOTSTRAP_NETWORK=skip FM_TASKS_AXI_COMPATIBLE="$TASKS_AXI_COMPATIBLE" \

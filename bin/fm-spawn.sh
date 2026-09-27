@@ -5119,7 +5119,6 @@ if { [ "$KIND" = ship ] || [ "$KIND" = scout ]; } &&
   SPAWN_AGB_RUNTIME=$("$FM_ROOT/bin/fm-agb.sh" runtime "$HARNESS"); then
   SPAWN_AGB_ID=$("$FM_ROOT/bin/fm-agb.sh" worker-id "$ID")
   SPAWN_AGB_RECAP="firstmate $KIND $ID"
-  "$FM_ROOT/bin/fm-agb.sh" record-supervisor
   "$FM_ROOT/bin/fm-agb.sh" reserve "$ID" "$SPAWN_AGB_RECAP"
   if mkdir -p "$STATE/$ID.inbox/handled" 2>/dev/null &&
     printf '%s\n' "$SPAWN_AGB_ID" >"$STATE/$ID.inbox/.agb-id"; then
