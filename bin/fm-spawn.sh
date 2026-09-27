@@ -5120,7 +5120,7 @@ if { [ "$KIND" = ship ] || [ "$KIND" = scout ]; } &&
   SPAWN_AGB_ID=$("$FM_ROOT/bin/fm-agb.sh" worker-id "$ID")
   SPAWN_AGB_RECAP="firstmate $KIND $ID"
   "$FM_ROOT/bin/fm-agb.sh" record-supervisor
-  timeout 5 agb reserve "$SPAWN_AGB_ID" --recap "$SPAWN_AGB_RECAP" >/dev/null 2>&1 || true
+  "$FM_ROOT/bin/fm-agb.sh" reserve "$ID" "$SPAWN_AGB_RECAP"
   if mkdir -p "$STATE/$ID.inbox/handled" 2>/dev/null &&
     printf '%s\n' "$SPAWN_AGB_ID" >"$STATE/$ID.inbox/.agb-id"; then
     spawn_send_text_line "$T" "export AGB_AGENT_ID=$SPAWN_AGB_ID AGB_RUNTIME=$SPAWN_AGB_RUNTIME AGB_AGENT_RECAP=$(shell_quote "$SPAWN_AGB_RECAP")"

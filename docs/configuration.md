@@ -565,7 +565,7 @@ See [`trace-context.md`](trace-context.md) for carrier semantics, supported rout
 ## agb messaging (config/agb)
 
 When an `agb` binary is on PATH, Firstmate uses agb mail as a faster nudge in both directions.
-Each ship or scout worker on the claude, codex, or opencode harness gets its own agb identity at spawn.
+Each ship or scout worker on the claude, codex, or opencode harness is given its own agb identity at spawn; registration is verified for claude, and a worker that does not register keeps the typed doorbell.
 Steering doorbells go to a live worker as agb mail instead of terminal keystrokes, and each worker status line also mails the supervising firstmate a wake.
 The steering inbox and the status file stay the durable records, and the terminal doorbell and watcher poll remain the fallback.
 Put `off` on the first line of local, gitignored `config/agb` to disable it, or set `FM_AGB=off` for one process.

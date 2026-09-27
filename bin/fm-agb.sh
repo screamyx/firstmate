@@ -20,7 +20,10 @@
 #            bin/fm-spawn.sh reserves it and exports AGB_AGENT_ID,
 #            AGB_AGENT_RECAP, and AGB_RUNTIME into the worker pane before
 #            launch, so the harness's own agb session-start hook registers
-#            the worker. Only claude, codex, and opencode have an agb runtime.
+#            the worker. Only claude, codex, and opencode have an agb runtime;
+#            registration is verified for claude, while a codex or opencode
+#            worker without an agb hook stays unregistered and keeps the
+#            typed doorbell.
 #   firstmate  whatever agb identity the supervising session holds
 #            (AGB_AGENT_ID, else `agb status`). It is recorded in
 #            state/.agb-supervisor at session start and at every spawn, and
@@ -48,6 +51,7 @@
 #   fm-agb.sh ring <record-path> <line>       exit 0 rang by agb, 1 caller must type
 #   fm-agb.sh notify <state-dir> <task-id>    worker wake to firstmate (best-effort, silent)
 #   fm-agb.sh forget <task-id>                drop a finished worker identity (best-effort)
+#   fm-agb.sh reserve <task-id> <recap>       hold the worker identity before launch (best-effort)
 # Every agb call is bounded by FM_AGB_TIMEOUT seconds (default 5).
 set -u
 
@@ -57,9 +61,11 @@ FM_AGB_HOME=${FM_HOME:-$FM_AGB_ROOT}
 FM_AGB_STATE=${FM_STATE_OVERRIDE:-$FM_AGB_HOME/state}
 FM_AGB_CONFIG=${FM_CONFIG_OVERRIDE:-$FM_AGB_HOME/config}
 FM_AGB_TIMEOUT=${FM_AGB_TIMEOUT:-5}
+# shellcheck source=bin/fm-timeout-lib.sh
+. "$FM_AGB_SELF_DIR/fm-timeout-lib.sh"
 
 fm_agb_call() {
-  timeout "$FM_AGB_TIMEOUT" agb "$@"
+  fm_run_timed "$FM_AGB_TIMEOUT" agb "$@"
 }
 
 fm_agb_enabled() {
@@ -74,7 +80,11 @@ fm_agb_enabled() {
 fm_agb_home_hash() {
   local root
   root=$(cd "$FM_AGB_HOME" 2>/dev/null && pwd -P) || root=$FM_AGB_HOME
-  printf '%s' "$root" | sha256sum | cut -c1-6
+  if command -v shasum >/dev/null 2>&1; then
+    printf '%s' "$root" | shasum -a 256 | cut -c1-6
+  else
+    printf '%s' "$root" | sha256sum | cut -c1-6
+  fi
 }
 
 fm_agb_worker_id() {  # <task-id>
@@ -138,6 +148,12 @@ fm_agb_notify() {  # <state-dir> <task-id>
   return 0
 }
 
+fm_agb_reserve() {  # <task-id> <recap>
+  fm_agb_enabled || return 0
+  fm_agb_call reserve "$(fm_agb_worker_id "$1")" --recap "$2" >/dev/null 2>&1 || true
+  return 0
+}
+
 fm_agb_forget() {  # <task-id>
   fm_agb_enabled || return 0
   fm_agb_call forget "$(fm_agb_worker_id "$1")" --dead-letter >/dev/null 2>&1 || true
@@ -157,6 +173,7 @@ fm_agb_main() {
       fm_agb_ring "$1" "$2"
       ;;
     notify) [ $# -eq 2 ] || { echo "usage: fm-agb.sh notify <state-dir> <task-id>" >&2; return 2; }; fm_agb_notify "$1" "$2" ;;
+    reserve) [ $# -eq 2 ] || { echo "usage: fm-agb.sh reserve <task-id> <recap>" >&2; return 2; }; fm_agb_reserve "$1" "$2" ;;
     forget) [ $# -eq 1 ] || { echo "usage: fm-agb.sh forget <task-id>" >&2; return 2; }; fm_agb_forget "$1" ;;
     *) sed -n '2,/^set -u$/p' "${BASH_SOURCE[0]}" | sed '$d; s/^# \{0,1\}//'; [ -n "$cmd" ] && [ "$cmd" != --help ] && [ "$cmd" != -h ] && return 2; return 0 ;;
   esac
