@@ -29,6 +29,7 @@ PIDS=()
 cleanup_pids() {
   local pid
   for pid in ${PIDS[@]+"${PIDS[@]}"}; do
+    pkill -P "$pid" 2>/dev/null || true
     kill "$pid" 2>/dev/null || true
   done
 }
@@ -87,6 +88,9 @@ test_session_lock_ancestry_finds_the_harness() {
   pass "ps width: the session-lock ancestry walk finds its harness parent under a 4x2 width"
 }
 
+# These two reads were already width-pinned by issue #799, so this case passes
+# on code that predates the 4x2 fix; it pins that their move to the shared -ww
+# form keeps every recorded identity byte-identical.
 test_pid_identities_are_width_invariant() {
   local fn lib narrow wide
   for fn in fm_pid_identity fm_pending_reply_pid_identity; do
