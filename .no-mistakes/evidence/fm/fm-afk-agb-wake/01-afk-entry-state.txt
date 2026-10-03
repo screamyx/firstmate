@@ -1,0 +1,29 @@
+# lab state after /afk entry
+total 48
+drwxrwxr-x 3 user user 4096 Oct  4 05:04 .
+drwx------ 9 user user 4096 Oct  4 05:04 ..
+-rw------- 1 user user  343 Oct  4 05:04 .afk-contract
+-rw------- 1 user user 1013 Oct  4 05:04 home-summary.json
+-rw------- 1 user user   25 Oct  4 05:04 .inactive-outcome-reconcile
+-rw-rw-r-- 1 user user    8 Oct  4 05:04 .lock
+-rw------- 1 user user   37 Oct  4 05:04 .lock-session
+-rw------- 1 user user    8 Oct  4 05:04 .session-start-complete
+-rw------- 1 user user    0 Oct  4 05:04 .startup-network.report
+-rw------- 1 user user  170 Oct  4 05:04 .startup-network.status
+-rw------- 1 user user  201 Oct  4 05:04 .startup-network.timings
+drwxrwxr-x 2 user user 4096 Oct  4 05:04 terminal-outcomes
+-rw------- 1 user user   12 Oct  4 05:04 .trace-context-effective
+-rw-rw-r-- 1 user user    0 Oct  4 05:04 .wake-queue
+
+# state/.afk-contract
+version: 2
+entered: 2026-10-03T21:04:26Z
+entered_epoch: 1791061466
+expected_return: -
+reach_channels: none
+reach_announced: No phone channel is configured; anything that needs you waits for your return.
+spend_max_concurrent_workers: 4
+confirmed: 2026-10-03T21:04:26Z
+confirmed_epoch: 1791061466
+words: |-
+  going to sleep, back in the morning

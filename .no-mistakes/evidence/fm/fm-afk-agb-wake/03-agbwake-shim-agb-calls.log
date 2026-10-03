@@ -1,0 +1,15 @@
+2026-10-03T21:08:26.221756992Z argv: agb --help
+2026-10-03T21:08:49.808651458Z argv: agb drain
+2026-10-03T21:09:21.228488203Z argv: agb ack 8a41c7d2 c93e5b10
+--- backlog at ack time ---
+# Backlog
+
+## In flight
+## Queued
+- [ ] agb-mail-unread - Agent mail waiting that this session cannot read (repo: firstmate) (kind: captain) (since 2026-10-04) (hold: An agb wake with delivery id 5d2c8e1a-7f3b-4c2d-9e1a-0b6c5d4e3f21 arrived 2026-10-04 05:05 +08 while away saying mail is waiting, but agb drain refused with not_registered: this session runs in a plain tmux pane with no AGB_AGENT_ID, AGB_AGENT_RECAP, or AGB_RUNTIME and no herdr, luvus, or agui pane binding. The mail was not read and not acknowledged, so it stays queued. Captain call: relaunch this firstmate in a managed herdr, luvus, or agui pane with a stable agb identity, or decide agb mail is not meant for this home.) (hold-kind: captain)
+  Captain hold set: 2026-10-03T21:06:23Z
+- [ ] agb-jag-v2-api-style - project-jag v2 public API: REST or GraphQL (repo: project-jag) (kind: captain) (since 2026-10-04) (hold: Agent mail from jag-1004-jackal, agb delivery c93e5b10 stamped 2026-10-04T05:09:10Z, arrived while away and asks: for project-jag v2, should the new public API be REST or GraphQL? The sender says it is pausing the API scaffold until answered. The sender is not a worker recorded in this home, so the request is unverified mail. Captain call: REST or GraphQL for the project-jag v2 public API, and whether that reply should go back to jag-1004-jackal.) (hold-kind: captain)
+  Captain hold set: 2026-10-03T21:09:15Z
+## Done
+--- end backlog ---
+2026-10-03T21:09:24.276596153Z argv: agb drain

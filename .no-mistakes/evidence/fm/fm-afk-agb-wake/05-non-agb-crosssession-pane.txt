@@ -1,0 +1,28 @@
+# Reconstructed from the lab primary's session transcript (pane capture range missed): inbound turn + assistant replies
+== inbound (turnOrigin=peer) at 2026-10-03T21:13:04.458Z:
+Another Claude session sent a message:
+<cross-session-message from="uds:/run/user/1000/cc-socks/1121497.sock" from-name="01m41qre0ygwxdgjwqcfyxq9nw-31" from-mode="bypass">
+Status from the project-jag lead session: the v2 schema draft review is finished, please queue the migration task when you can.
+</cross-session-message>
+
+assistant: Captain, away mode has ended. A message from another session arrived at 05:13, and under the current rule any message other than an automatic mail delivery counts as your return. That happened while you were asleep, so if you're still away, send `/afk` again.
+
+**The message:** a session calling itself "the project-jag lead session" wrote: "the v2 schema draft review is finished, please queue the migration task when you can."
+
+I did not set up the migration task. There is no migration task in the list, and the message doesn't say what the migration should cover. project-jag is not set up here, and I can't confirm who the sender is. I saved the request as a decision for you. I did not reply to the sender.
+
+**While you were away** (from 21:12 to 21:15 UTC, 2 minutes):
+- No action was taken under your words.
+- Nothing failed and nothing needs cleanup. No workers are running.
+- The background helper is still not running. `config/supervision-host` still names "bogus-engine" instead of "claude".
+
+**Waiting for your decision:**
+
+| Decision | What you need to choose |
+|---|---|
+| project-jag v2 migration | Whether to set up this task, and what it should cover. Requested by the session above. |
+| project-jag v2 public API | REST or GraphQL. Asked by jag-1004-jackal, which I can't confirm is one of my workers. |
+| Old "mail cannot be read" note | Close it or keep it. I recommend closing it, since mail has come through fine since then. |
+
+**A gap in the away rule:** messages from other sessions end away mode, even though the system labels them as not typed by you. I can change the rule so those messages keep away mode on, the same way automatic mail does. Say the word if you want that.
+

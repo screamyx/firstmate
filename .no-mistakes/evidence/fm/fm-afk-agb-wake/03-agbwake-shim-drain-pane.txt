@@ -1,0 +1,31 @@
+› Message from @agb-wake: AGB WAKE: mail waiting. Drain, process, ack, repeat until empty. agb-delivery-id: 8a41c7d2-3b5e-4f60-a1c2-d3e4f5a6b7c8 (ctrl+o to expand)
+
+  Thought for 23s, searched for 1 pattern, read 1 file, ran 2 shell commands
+
+● Skill(afk)
+  ⎿  Successfully loaded skill
+
+  Thought for 27s, ran 3 shell commands
+
+● [05:09:10] Draining the agent mail now: two messages came in. One is informational, the other is a product question for you, so I'm recording it as a held decision before acknowledging the mail.
+
+  Thought for 14s, ran 4 shell commands
+
+● [05:09:30] Captain, both waiting messages are read and cleared. Away mode stays on, because this was an automatic mail delivery and not your return.
+
+  ┌─────────────────┬──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┬──────────────────────────────────────────────────────────────────┐
+  │      From       │                                                       What it said                                                       │                            What I did                            │
+  ├─────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────┤
+  │ ops-monitor     │ "Nightly backup of the project-jag database finished OK at 05:00. Informational only, nothing to do."                    │ Nothing needed. Cleared.                                         │
+  ├─────────────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────┤
+  │ jag-1004-jackal │ "for project-jag v2, should the new public API be REST or GraphQL? ... I am pausing the API scaffold until they answer." │ Saved as a decision waiting for you. Cleared after it was saved. │
+  └─────────────────┴──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┴──────────────────────────────────────────────────────────────────┘
+
+  Waiting for you when you're back:
+  - REST or GraphQL for the project-jag v2 public API. The sender says the API work is paused until you answer. This sender is not one of the workers I track, so I can't confirm who sent it. I have not replied to it.
+  - An older note says mail could not be read. It was saved when a check for this mail failed earlier. Mail is now coming through, so you can probably close it. While you're away I can't clear a decision you own, so it
+    stays open.
+
+  The mailbox is empty now.
+
+✻ Worked for 1m 12s · done 5:09 AM

@@ -1,0 +1,5 @@
+total 12
+drwxrwxr-x 2 user user 4096 Oct  4 05:11 .
+drwxrwxr-x 4 user user 4096 Oct  4 05:11 ..
+-rw------- 1 user user  343 Oct  4 05:04 1791061466.afk-contract
+(no live state/.afk-contract: away mode archived)

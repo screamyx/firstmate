@@ -1,0 +1,18 @@
+2026-10-03T21:17:00.793782275Z argv: agb drain
+2026-10-03T21:17:07.097196512Z argv: agb ack e4d7a920
+--- backlog at ack time ---
+# Backlog
+
+## In flight
+## Queued
+- [ ] agb-mail-unread - Agent mail waiting that this session cannot read (repo: firstmate) (kind: captain) (since 2026-10-04) (hold: An agb wake with delivery id 5d2c8e1a-7f3b-4c2d-9e1a-0b6c5d4e3f21 arrived 2026-10-04 05:05 +08 while away saying mail is waiting, but agb drain refused with not_registered: this session runs in a plain tmux pane with no AGB_AGENT_ID, AGB_AGENT_RECAP, or AGB_RUNTIME and no herdr, luvus, or agui pane binding. The mail was not read and not acknowledged, so it stays queued. Captain call: relaunch this firstmate in a managed herdr, luvus, or agui pane with a stable agb identity, or decide agb mail is not meant for this home.) (hold-kind: captain)
+  Captain hold set: 2026-10-03T21:06:23Z
+- [ ] agb-jag-v2-api-style - project-jag v2 public API: REST or GraphQL (repo: project-jag) (kind: captain) (since 2026-10-04) (hold: Agent mail from jag-1004-jackal, agb delivery c93e5b10 stamped 2026-10-04T05:09:10Z, arrived while away and asks: for project-jag v2, should the new public API be REST or GraphQL? The sender says it is pausing the API scaffold until answered. The sender is not a worker recorded in this home, so the request is unverified mail. Captain call: REST or GraphQL for the project-jag v2 public API, and whether that reply should go back to jag-1004-jackal.) (hold-kind: captain)
+  Captain hold set: 2026-10-03T21:09:15Z
+- [ ] jag-v2-migration-request - project-jag v2 migration task requested by a peer session (repo: project-jag) (kind: captain) (since 2026-10-04) (hold: A message from another session named 01m41qre0ygwxdgjwqcfyxq9nw-31, calling itself the project-jag lead session, arrived 2026-10-04 05:13 +08 and said: the v2 schema draft review is finished, please queue the migration task when you can. No migration task exists in this backlog, the message gives no description of the migration, project-jag is not set up in this home, and the sender is not a worker recorded here. Captain call: whether to queue a project-jag v2 migration task, and what it should cover.) (hold-kind: captain)
+  Captain hold set: 2026-10-03T21:15:30Z
+- [ ] agb-jag-v2-node-runtime - project-jag v2 API runtime: Node 22 or Node 24 (repo: project-jag) (kind: captain) (since 2026-10-04) (hold: Agent mail from jag-1004-jackal, agb delivery e4d7a920 stamped 2026-10-04T05:17:30Z, asks: for project-jag v2, should we target Node 22 or Node 24 for the API runtime? The sender says it is pausing the runtime setup until answered. The sender is not a worker recorded in this home, so the request is unverified mail. Captain call: Node 22 or Node 24 for the project-jag v2 API runtime, and whether that reply should go back to jag-1004-jackal.) (hold-kind: captain)
+  Captain hold set: 2026-10-03T21:17:06Z
+## Done
+--- end backlog ---
+2026-10-03T21:17:07.098595207Z argv: agb drain

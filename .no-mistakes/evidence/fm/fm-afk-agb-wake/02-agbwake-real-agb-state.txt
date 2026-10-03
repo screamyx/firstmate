@@ -1,0 +1,12 @@
+# lab state/.afk-contract after the agb wake (unchanged, away mode still on)
+-rw------- 1 user user 343 Oct  4 05:04 /tmp/fm-lab.Zp4Mdz/state/.afk-contract
+(no archived afk record)
+
+# lab data/backlog.md
+# Backlog
+
+## In flight
+## Queued
+- [ ] agb-mail-unread - Agent mail waiting that this session cannot read (repo: firstmate) (kind: captain) (since 2026-10-04) (hold: An agb wake with delivery id 5d2c8e1a-7f3b-4c2d-9e1a-0b6c5d4e3f21 arrived 2026-10-04 05:05 +08 while away saying mail is waiting, but agb drain refused with not_registered: this session runs in a plain tmux pane with no AGB_AGENT_ID, AGB_AGENT_RECAP, or AGB_RUNTIME and no herdr, luvus, or agui pane binding. The mail was not read and not acknowledged, so it stays queued. Captain call: relaunch this firstmate in a managed herdr, luvus, or agui pane with a stable agb identity, or decide agb mail is not meant for this home.) (hold-kind: captain)
+  Captain hold set: 2026-10-03T21:06:23Z
+## Done

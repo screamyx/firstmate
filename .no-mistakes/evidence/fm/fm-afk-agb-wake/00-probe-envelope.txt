@@ -1,0 +1,7 @@
+transcript origin: {"kind": "peer", "from": "uds:/run/user/1000/cc-socks/1270030.sock", "verifiedPeerPid": 1270030, "verifiedPeerProcStart": "483401790", "msg_id": "87c0306c-994f-42b9-90c9-778d9faca624", "name": "agb-wake", "fromMode": "bypass", "body": "PROBE: envelope check only, reply with the single word OK."}
+turnOrigin: peer
+rendered turn text (first 4 lines):
+Another Claude session sent a message:
+<cross-session-message from="uds:/run/user/1000/cc-socks/1270030.sock" from-name="agb-wake" from-mode="bypass">
+PROBE: envelope check only, reply with the single word OK.
+</cross-session-message>

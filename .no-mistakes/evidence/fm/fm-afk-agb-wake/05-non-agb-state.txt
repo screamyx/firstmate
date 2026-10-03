@@ -1,0 +1,7 @@
+total 16
+drwxrwxr-x 2 user user 4096 Oct  4 05:15 .
+drwxrwxr-x 4 user user 4096 Oct  4 05:15 ..
+-rw------- 1 user user  343 Oct  4 05:04 1791061466.afk-contract
+-rw------- 1 user user  349 Oct  4 05:12 1791061962.afk-contract
+live record: none
+agb calls during this turn: none

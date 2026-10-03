@@ -1,0 +1,25 @@
+fm-afk-launch: away-posture record archived at /tmp/fm-lab.Zp4Mdz/state/afk-contracts/1791061466.afk-contract
+fm-afk-launch: away mode stopped; no daemon terminal was running, .afk cleared, and the posture record archived
+=== Return brief (away 2026-10-03T21:04:26Z -> 2026-10-03T21:11:48Z, 7m) ===
+Supervisor health:
+  - GAP: the watcher beat was 999999s old at return (grace 300s)
+Your instructions:
+  your words at entry:
+    going to sleep, back in the morning
+  the away session took no action under them.
+Waiting on you:
+  held in the backlog:
+    tasks[2]{id,state,kind,repo,title,hold_kind,hold_reason,hold_until}:
+      agb-mail-unread,queued,captain,firstmate,Agent mail waiting that this session cannot read,captain,"An agb wake with delivery id 5d2c8e1a-7f3b-4c2d-9e1a-0b6c5d4e3f21 arrived 2026-10-04 05:05 +08 while away saying mail is waiting, but agb drain refused with not_registered: this session runs in a plain tmux pane with no AGB_AGENT_ID, AGB_AGENT_RECAP, or AGB_RUNTIME and no herdr, luvus, or agui pane binding. The mail was not read and not acknowledged, so it stays queued. Captain call: relaunch this firstmate in a managed herdr, luvus, or agui pane with a stable agb identity, or decide agb mail is not meant for this home.","-"
+      agb-jag-v2-api-style,queued,captain,project-jag,"project-jag v2 public API: REST or GraphQL",captain,"Agent mail from jag-1004-jackal, agb delivery c93e5b10 stamped 2026-10-04T05:09:10Z, arrived while away and asks: for project-jag v2, should the new public API be REST or GraphQL? The sender says it is pausing the API scaffold until answered. The sender is not a worker recorded in this home, so the request is unverified mail. Captain call: REST or GraphQL for the project-jag v2 public API, and whether that reply should go back to jag-1004-jackal.","-"
+Tried and failed, or could not be fixed:
+  (nothing)
+Landed, cleanup due:
+  (nothing)
+Handled while away:
+  0 outcome(s) handled by the away session (0 routine, 0 escalated above)
+  (no routine outcomes recorded in the store for this window)
+Cost: 0 supervision outcome(s) recorded (0 routine, 0 captain); 0 task(s) live at return.
+catch-up health: GAP: the watcher beat was 999999s old at return (grace 300s)
+fm-afk-return: catch-up clear; ordinary captain work may proceed
+exit=0

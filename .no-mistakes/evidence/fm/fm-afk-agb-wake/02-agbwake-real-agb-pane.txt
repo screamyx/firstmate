@@ -1,0 +1,14 @@
+› Message from @agb-wake: AGB WAKE: mail waiting. Drain, process, ack, repeat until empty. agb-delivery-id: 5d2c8e1a-7f3b-4c2d-9e1a-0b6c5d4e3f21 (ctrl+o to expand)
+
+  Thought for 47s, ran 6 shell commands
+
+● [05:06:45] Captain, a notice came in saying agent mail is waiting. This session couldn't read it, so the mail is still in the queue and nothing was lost.
+
+  - Why it couldn't be read: fetching the mail failed with "agb: not_registered: registration requires a complete pane binding". This session runs in a plain terminal pane with no agent-mail identity, so it can't receive
+    mail.
+  - What I did: I didn't mark the mail as read, because nobody has read it. I filed it as a decision waiting for you, named "agb-mail-unread", so it will appear in your morning summary.
+  - Your decision when you're back: either restart this session in a pane that has an agent-mail identity so it can read its mail, or confirm that agent mail isn't meant for this session.
+
+  Away mode is still on. No other work is in progress.
+
+✻ Crunched for 53s · done 5:06 AM
