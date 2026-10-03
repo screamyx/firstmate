@@ -128,8 +128,10 @@
 # contract below it, which that position-free deference already covers. An
 # absent or blank file changes nothing; a present path that is not a readable
 # regular file, or text carrying its own "Delivery contract: mode=" line (which
-# a later scout promotion could not outrank), stops the scaffold before
-# anything is written. Secondmate charters never take it.
+# a later scout promotion could not outrank) or "Base branch: " line (which
+# bin/fm-spawn.sh would read as the brief's base when the scaffold carries
+# none), stops the scaffold before anything is written. Secondmate charters
+# never take it.
 # Refuses to overwrite an existing brief.
 set -eu
 
