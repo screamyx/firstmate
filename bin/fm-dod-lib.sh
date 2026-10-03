@@ -289,14 +289,15 @@ EOF
 # Written once; only the two sentences about a green PR depend on the forge,
 # because on gerrit the ci step is skipped and there is no PR to report.
 fm_nm_driving_block() {  # <forge> [<base>]
-  local pr_return_line='' pr_reattach_clause=';' base_line=''
+  local pr_return_line='' pr_reattach_clause=';' base_line='' base_q
   if [ "$1" != gerrit ]; then
     pr_return_line="Only a drive call's return reports the green PR: \`no-mistakes axi status\` shows progress but never reports \`checks-passed\` while the ci step is still monitoring the PR for merge, so never wait on a status poll for the next gate or outcome.
 "
     pr_reattach_clause="; once checks are green it returns \`checks-passed\` immediately, and"
   fi
   if [ -n "${2:-}" ]; then
-    base_line="This project integrates on \`$2\`, not on origin's default branch: pass \`--base-branch $2\` on the \`no-mistakes axi run\` that starts the run, so the run rebases onto and targets \`$2\` rather than the default branch; the run keeps that base, so a reattaching call without flags is unchanged.
+    printf -v base_q '%q' "$2"
+    base_line="This project integrates on \`$2\`, not on origin's default branch: pass \`--base-branch $base_q\` on the \`no-mistakes axi run\` that starts the run, so the run rebases onto and targets \`$2\` rather than the default branch; the run keeps that base, so a reattaching call without flags is unchanged.
 "
   fi
   cat <<EOF
@@ -334,8 +335,11 @@ EOF
 # once. gerrit-axi owns the squash mechanics; this names the one call and what
 # to read back from it.
 fm_gerrit_publish_block() {  # [<base>]
-  local publish_step="2. Run \`gerrit-axi publish --squash --json\`, adding \`--branch <b>\` only when the task names a target branch other than the server's default."
-  [ -z "${1:-}" ] || publish_step="2. Run \`gerrit-axi publish --squash --json --branch $1\`: this project's base branch is \`$1\`, not the server's default."
+  local publish_step="2. Run \`gerrit-axi publish --squash --json\`, adding \`--branch <b>\` only when the task names a target branch other than the server's default." base_q
+  if [ -n "${1:-}" ]; then
+    printf -v base_q '%q' "$1"
+    publish_step="2. Run \`gerrit-axi publish --squash --json --branch $base_q\`: this project's base branch is \`$1\`, not the server's default."
+  fi
   cat <<EOF
 Publish from this copy with \`gerrit-axi\`, never with \`git push\`:
 1. Run \`git fetch origin\` so the server's branch tip is in this repository; \`gerrit-axi\` reads its base off the server and refuses when that tip is not here.
@@ -358,10 +362,11 @@ fm_dod_block() {  # <mode> <task-id> [branch] [<forge>] [<base>]
   local branch=${3:-fm/$id}
   local pr_open_line="When it is implemented and committed, push your branch and open a PR with \`gh-axi\` that is ready for review, not a draft."
   local ff_line="Keep your branch a clean fast-forward onto the current default branch - if \`main\` has advanced, rebase onto it so the eventual merge stays a fast-forward."
-  local landing=main
+  local landing=main base_q
   fm_forge_valid_for_mode "$forge" "$mode" fm_dod_block || return 1
   if [ -n "$base" ]; then
-    pr_open_line="When it is implemented and committed, push your branch and open a PR with \`gh-axi pr create --base $base\` that is ready for review, not a draft: this project integrates on \`$base\`, so the PR targets it, never origin's default branch."
+    printf -v base_q '%q' "$base"
+    pr_open_line="When it is implemented and committed, push your branch and open a PR with \`gh-axi pr create --base $base_q\` that is ready for review, not a draft: this project integrates on \`$base\`, so the PR targets it, never origin's default branch."
     ff_line="Keep your branch a clean fast-forward onto local \`$base\`, this project's base branch - if \`$base\` has advanced, rebase onto it so the eventual merge stays a fast-forward."
     landing=$base
   fi

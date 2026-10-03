@@ -1320,6 +1320,42 @@ test_base_branch_reaches_every_generated_section() {
   pass "fm-brief.sh: --base reaches the setup, rule 1, and every Definition of done, and its absence changes nothing"
 }
 
+# A base branch is a ref-format-valid name that can still carry shell
+# metacharacters, so every generated command naming it must keep it one literal
+# word: the direct-PR PR target, the no-mistakes run's --base-branch, and the
+# gerrit publish branch.
+test_base_branch_commands_are_shell_safe() {
+  local home marker base id_args id args pattern command brief
+  local -a words
+  home="$TMP_ROOT/base-branch-shell-safe-home"
+  marker="$TMP_ROOT/base-branch-shell-safe-marker"
+  base="\$(touch\${IFS}$marker)"
+  mkdir -p "$home/data"
+  git check-ref-format --branch "$base" >/dev/null 2>&1 || fail "fixture base must be a ref-format-valid branch name"
+  while IFS='|' read -r id_args pattern; do
+    [ -n "$id_args" ] || continue
+    id=${id_args%% *}
+    args=${id_args#* }
+    # shellcheck disable=SC2086  # args is an intentional word-split arg list
+    FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" some-proj $args --base "$base" >/dev/null 2>&1 \
+      || fail "$id: a ref-format-valid metacharacter base should scaffold"
+    brief="$home/data/$id/brief.md"
+    command=$(sed -n "$pattern" "$brief" | head -n 1)
+    [ -n "$command" ] || fail "$id: generated brief exposed no base command"
+    eval "words=($command)" || fail "$id: generated base command did not parse"
+    assert_absent "$marker" "$id: generated base command executed the base's command substitution"
+    [ "${words[${#words[@]}-1]}" = "$base" ] \
+      || fail "$id: generated base command did not keep the literal base (got '${words[${#words[@]}-1]}')"
+  done <<'ROWS'
+brief-base-safe-dp --mode direct-PR|s/.*open a PR with `\(gh-axi pr create --base [^`]*\)`.*/\1/p
+brief-base-safe-nm --mode no-mistakes|s/.*pass `\(--base-branch [^`]*\)` on the.*/\1/p
+brief-base-safe-gnm --mode no-mistakes --forge gerrit|s/.*pass `\(--base-branch [^`]*\)` on the.*/\1/p
+brief-base-safe-gnm2 --mode no-mistakes --forge gerrit|s/^2\. Run `\(gerrit-axi publish --squash --json --branch [^`]*\)`.*/\1/p
+brief-base-safe-gdp --mode direct-PR --forge gerrit|s/^2\. Run `\(gerrit-axi publish --squash --json --branch [^`]*\)`.*/\1/p
+ROWS
+  pass "fm-brief.sh: ref-format-valid shell metacharacters in a base stay literal in generated commands"
+}
+
 test_base_branch_is_refused_where_it_cannot_apply() {
   local home out status label args expect
   home="$TMP_ROOT/base-branch-refused-home"
@@ -1447,4 +1483,5 @@ test_branch_prefix_value_is_validated
 test_branch_prefix_command_is_shell_safe
 test_crewmate_scaffolds_forbid_pool_administration
 test_base_branch_reaches_every_generated_section
+test_base_branch_commands_are_shell_safe
 test_base_branch_is_refused_where_it_cannot_apply

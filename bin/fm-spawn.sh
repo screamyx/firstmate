@@ -3122,7 +3122,7 @@ if [ "$RELAUNCH" -eq 0 ] && [ "$KIND" != secondmate ]; then
   BRIEF_BASE=$(sed -n 's/^Base branch: //p' "$BRIEF" | head -n 1)
   if [ "$BRIEF_BASE" != "$BASE_BRANCH" ]; then
     if [ -n "$BASE_BRANCH" ]; then
-      base_scaffold="--base $BASE_BRANCH"
+      printf -v base_scaffold -- '--base %q' "$BASE_BRANCH"
       base_registered="registers base branch $BASE_BRANCH"
     else
       base_scaffold="no --base flag"
