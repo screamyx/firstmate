@@ -2046,8 +2046,8 @@ SH
 #!/usr/bin/env bash
 if [ -f "$FM_FAKE_DIR/herdr-agent-registration" ]; then
   case "$*" in
-    '-axo pid=,ppid=,comm=') printf '4242 1 bash\n' ;;
-    '-p 4242 -o args=') printf 'bash\n' ;;
+    '-ww -axo pid=,ppid=,comm=') printf '4242 1 bash\n' ;;
+    '-ww -p 4242 -o args=') printf 'bash\n' ;;
     *) exec /bin/ps "$@" ;;
   esac
 else

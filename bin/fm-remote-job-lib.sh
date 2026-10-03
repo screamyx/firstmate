@@ -914,7 +914,7 @@ fm_remote_job_process_start() {
 fm_remote_job_process_command() {
   local pid=$1 ps_bin value
   if [ -x /bin/ps ]; then ps_bin=/bin/ps; elif [ -x /usr/bin/ps ]; then ps_bin=/usr/bin/ps; else return 1; fi
-  value=$("$ps_bin" -p "$pid" -o command= 2>/dev/null) || return 1
+  value=$("$ps_bin" -ww -p "$pid" -o command= 2>/dev/null) || return 1
   [ -n "$value" ] || return 1
   case "$value" in *$'\n'*|*$'\r'*) return 1 ;; esac
   printf '%s\n' "$value"
@@ -1040,7 +1040,7 @@ fm_remote_job_worker_owned_alive() {
     [ ! -e "$lock/start" ] && [ ! -L "$lock/start" ] &&
     [ ! -e "$lock/command" ] && [ ! -L "$lock/command" ] || return 1
   if [ -x /bin/ps ]; then ps_bin=/bin/ps; elif [ -x /usr/bin/ps ]; then ps_bin=/usr/bin/ps; else return 1; fi
-  command=$("$ps_bin" -p "$pid" -o command= 2>/dev/null) || return 1
+  command=$("$ps_bin" -ww -p "$pid" -o command= 2>/dev/null) || return 1
   case "$command" in *"$root/bin/fm-remote-job-worker.sh"*) FM_REMOTE_JOB_OWNER_PID=$pid; return 0 ;; esac
   return 1
 }

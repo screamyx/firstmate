@@ -2302,7 +2302,7 @@ make_death_lab() {  # <dir> <shell-pid>
 case "\$*" in
   "-axo pid=,ppid=") printf '1 0\n$pid 1\n' ;;
   "-p $pid -o stat=") printf 'Ss+\n' ;;
-  "-p $pid -o comm=") printf -- '-zsh\n' ;;
+  "-ww -p $pid -o comm=") printf -- '-zsh\n' ;;
   *) exit 1 ;;
 esac
 SH
