@@ -1,0 +1,38 @@
+# Scenario 6 (adversarial): the spawn refuses a brief that disagrees with the registered base, and a registered pool root that does not exist
+
+## scout brief scaffolded WITHOUT --base, project registers base=v2
+
+$ bin/fm-spawn.sh rf-nobase $LAB/projects/jaglab --scout
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+error: base branch mismatch for rf-nobase: jaglab registers base branch v2 but $LAB/data/rf-nobase/brief.md records base branch 'none'; keep the filled ## Captain's intent and ## Firstmate spec bodies, remove $LAB/data/rf-nobase/brief.md, re-scaffold it with --base v2, then re-fill those two subsections, so the worker's instructions name the branch its copy is cut from
+exit=1  task record written: no
+
+## ship brief scaffolded with --base v3, project registers base=v2
+
+$ bin/fm-spawn.sh rf-v3 $LAB/projects/jaglab --mode direct-PR --yolo off
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+error: base branch mismatch for rf-v3: jaglab registers base branch v2 but $LAB/data/rf-v3/brief.md records base branch 'v3'; keep the filled ## Captain's intent and ## Firstmate spec bodies, remove $LAB/data/rf-v3/brief.md, re-scaffold it with --base v2, then re-fill those two subsections, so the worker's instructions name the branch its copy is cut from
+exit=1  task record written: no
+
+## ship brief scaffolded with --base v2, project registers no base
+
+$ bin/fm-spawn.sh rf-plainbase $LAB/projects/plainlab --mode direct-PR --yolo off
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+error: base branch mismatch for rf-plainbase: plainlab registers no base branch (origin's default branch) but $LAB/data/rf-plainbase/brief.md records base branch 'v2'; keep the filled ## Captain's intent and ## Firstmate spec bodies, remove $LAB/data/rf-plainbase/brief.md, re-scaffold it with no --base flag, then re-fill those two subsections, so the worker's instructions name the branch its copy is cut from
+exit=1  task record written: no
+
+## registered worktree-root that does not exist
+
+$ bin/fm-spawn.sh rf-root $LAB/projects/jaglab --scout
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+error: rf-root cannot launch: jaglab registers worktree-root=$LAB/missing-root, which is not an existing directory; create it or correct data/projects.md, then spawn again
+exit=1  task record written: no
+missing root created by the refused spawn: no
+
+## registry entry carrying a malformed base= stops the spawn instead of falling back to master
+
+$ bin/fm-spawn.sh rf-root $LAB/projects/jaglab --scout
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+refused: malformed base branch "base=-v2" registered for jaglab in $LAB/data/projects.md; register base=<branch> with a valid Git branch name, or drop the token to integrate on origin's default branch; correct the registry entry
+error: rf-root cannot launch: the registry entry for jaglab does not resolve to a base branch (see the refusal above); correct data/projects.md and spawn again
+exit=1  task record written: no

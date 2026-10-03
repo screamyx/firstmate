@@ -1,0 +1,33 @@
+# Scenario 8: cleanup landed check reads the task's recorded base (origin/v2), not origin's default branch
+origin history:
+* e298c36 Squash-merge fm/jag-ship2 into master (wrong branch)
+| * 0d91c2a Squash-merge fm/jag-ship into v2
+| * 60aeaa6 v2: advance
+| * 21a17cc v2: v2-only code
+|/  
+* 69ee57b master: initial
+
+## adversarial: jag-ship2 (base=v2) was squash-merged into master only - its work has NOT landed on its base
+$ bin/fm-teardown.sh jag-ship2
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+REFUSED: worktree $LAB/agent-worktrees/.treehouse/jaglab-d00e2e/3/jaglab has work not on any remote and not landed.
+unpushed commits:
+c56e44c jag-ship2: add NOTES2.md
+Push the branch, land its PR, or get the captain's explicit OK to discard, then --force.
+exit=1
+after: task record kept: yes  worktree kept with commit: jag-ship2: add NOTES2.md  window alive: 1
+
+## jag-ship (base=v2) was squash-merged into v2 - its content is in the up-to-date base, so cleanup proceeds without --force
+$ bin/fm-teardown.sh jag-ship
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+teardown: reaping leaked worktree process(es) for jag-ship: 1314263 1315617
+teardown: force-killing leaked worktree process(es) for jag-ship: 1314263
+A new version of treehouse is available: v3.1.0 → v3.1.2
+Run "treehouse update" to update
+
+🌳 Worktree returned to pool.
+jaglab: synced 60aeaa6..0d91c2a
+teardown jag-ship complete (window firstmate:fm-jag-ship, worktree $LAB/agent-worktrees/.treehouse/jaglab-d00e2e/1/jaglab)
+Backlog: jag-ship just finished (this home keeps no markdown backlog at $LAB/data/backlog.md). Update $LAB/data/backlog.md - move jag-ship to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+exit=0
+after: task record kept: no  window alive: 0  slot HEAD: 69ee57b (0 dirty paths)

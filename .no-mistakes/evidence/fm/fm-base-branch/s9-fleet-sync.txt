@@ -1,0 +1,24 @@
+# Scenario 9: fleet sync keeps a base=v2 clone on v2 (switching a clean clone off master) and never moves a dirty one
+clone branch: master  HEAD=69ee57b  origin/v2=21a17cc  origin/master=69ee57b
+
+## adversarial: dirty clone on master is left untouched
+$ bin/fm-fleet-sync.sh jaglab
+jaglab: STUCK: on branch master with uncommitted changes, 1 commits behind origin/v2 - needs attention
+clone branch: master  HEAD=69ee57b  origin/v2=21a17cc  origin/master=69ee57b
+scratch file still present: yes
+
+## clean clone on master is switched onto the registered base
+$ bin/fm-fleet-sync.sh jaglab
+jaglab: recovered: switched from master to registered base v2 (already current)
+clone branch: v2  HEAD=21a17cc  origin/v2=21a17cc  origin/master=69ee57b
+v2 upstream: origin/v2
+
+## origin/v2 advances; the next sync fast-forwards v2 (an ordinary sync, not a recovery)
+$ bin/fm-fleet-sync.sh jaglab
+jaglab: synced 21a17cc..60aeaa6
+clone branch: v2  HEAD=60aeaa6  origin/v2=60aeaa6  origin/master=69ee57b
+
+## regression: the no-base project stays on master
+$ bin/fm-fleet-sync.sh plainlab
+plainlab: already current
+plainlab clone branch: master

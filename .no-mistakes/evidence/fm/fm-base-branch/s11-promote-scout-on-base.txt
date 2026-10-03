@@ -1,0 +1,17 @@
+# Scenario 11: promoting the v2 scout yields a ship contract that targets its recorded base v2
+$ bin/fm-promote.sh jag-scout --mode direct-PR --yolo off
+
+promoted jag-scout to ship mode=direct-PR yolo=off (teardown protection restored)
+wrote ship instructions for mode=direct-PR: $LAB/data/jag-scout/ship-instructions.md
+
+## base-related lines in the generated ship-instructions.md
+11:3. Return to a clean base at this project's base branch `v2`, not origin's default branch, then create your branch: `git checkout -b fm/jag-scout --`.
+26:1. Never push to the default branch or to `v2` (push only your `fm/jag-scout` branch). Never merge a PR.
+33:When it is implemented and committed, push your branch and open a PR with `gh-axi pr create --base v2` that is ready for review, not a draft: this project integrates on `v2`, so the PR targets it, never origin's default branch.
+
+## task record after promotion
+base=v2
+kind=ship
+mode=direct-PR
+yolo=off
+branch=fm/jag-scout

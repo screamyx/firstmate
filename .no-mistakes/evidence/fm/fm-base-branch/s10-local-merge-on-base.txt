@@ -1,0 +1,30 @@
+# Scenario 10: local-only task on an origin-less base=v2 project - spawn cuts from local v2, merge lands on local v2, never master
+spawned jl-1 harness=bash kind=ship mode=local-only yolo=off window=firstmate:fm-jl-1 worktree=$LAB/th-default/.treehouse/jaglocal-d80707/1/jaglocal
+copy cut at: fcf5678 (local v2 at spawn: fcf5678, local master: e73a81f)
+worker commit on fm/jl-1: f0edbb9
+
+## adversarial: primary clone still stands on master
+$ bin/fm-merge-local.sh jl-1
+error: $LAB/projects/jaglocal is on 'master', expected base branch 'v2'; cannot merge safely
+exit=1
+local v2=fcf5678 local master=e73a81f
+
+## primary clone moved onto v2: the guarded fast-forward lands on v2
+$ bin/fm-merge-local.sh jl-1
+merged fm/jl-1 into local v2 (fcf5678 -> f0edbb9) in $LAB/projects/jaglocal
+exit=0
+local v2=f0edbb9 (worker commit f0edbb9)  local master=e73a81f (unchanged)
+
+## cleanup of the landed local-only task (landed check reads local v2)
+$ bin/fm-teardown.sh jl-1
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+teardown: reaping leaked worktree process(es) for jl-1: 1383355 1385143
+teardown: force-killing leaked worktree process(es) for jl-1: 1383355
+A new version of treehouse is available: v3.1.0 → v3.1.2
+Run "treehouse update" to update
+
+🌳 Worktree returned to pool.
+teardown jl-1 complete (window firstmate:fm-jl-1, worktree $LAB/th-default/.treehouse/jaglocal-d80707/1/jaglocal)
+Backlog: jl-1 just finished (this home keeps no markdown backlog at $LAB/data/backlog.md). Update $LAB/data/backlog.md - move jl-1 to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+exit=0
+task record kept: no

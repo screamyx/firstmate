@@ -1,0 +1,14 @@
+# Scenario 4: real scout spawn for the base=v2 project - an investigation-only copy also starts on v2
+$ bin/fm-spawn.sh jag-scout $LAB/projects/jaglab --scout --harness "bash -c 'echo lab-scout-ready; sleep 3600'"
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+spawned jag-scout harness=bash kind=scout window=firstmate:fm-jag-scout worktree=$LAB/agent-worktrees/.treehouse/jaglab-d00e2e/2/jaglab
+worktree:          $LAB/agent-worktrees/.treehouse/jaglab-d00e2e/2/jaglab
+copy HEAD:         21a17cce25626fb7478d14b6225ffe4dbb61488f  (v2: v2-only code)
+origin/v2:         21a17cce25626fb7478d14b6225ffe4dbb61488f
+origin/master:     69ee57b24d666a3b96156cecd8f6228160b8e572
+files in the copy: README.md v2-only.txt 
+# state/jag-scout.meta
+worktree=$LAB/agent-worktrees/.treehouse/jaglab-d00e2e/2/jaglab
+project=$LAB/projects/jaglab
+kind=scout
+base=v2

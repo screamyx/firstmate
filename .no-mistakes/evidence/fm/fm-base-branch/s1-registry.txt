@@ -1,0 +1,38 @@
+# Scenario 1: registry resolves base= and worktree-root= for a project-jag-shaped line
+$ cat $FM_HOME/data/projects.md
+# Projects
+- jaglab [direct-PR base=v2 worktree-root=$LAB/agent-worktrees] - project-jag-shaped fixture: master frozen, work lands on v2 (added 2026-10-04)
+- plainlab [direct-PR] - fixture with no base branch (added 2026-10-04)
+$ bin/fm-project-mode.sh --base jaglab
+[v2] exit=0
+$ bin/fm-project-mode.sh --worktree-root jaglab
+[$LAB/agent-worktrees] exit=0
+$ bin/fm-project-mode.sh jaglab
+[direct-PR off] exit=0
+$ bin/fm-project-mode.sh --raw jaglab
+[direct-PR off] exit=0
+$ bin/fm-project-mode.sh --branch-prefix jaglab
+[fm/] exit=0
+$ bin/fm-project-mode.sh --base plainlab
+[] exit=0
+$ bin/fm-project-mode.sh --worktree-root plainlab
+[] exit=0
+$ bin/fm-project-mode.sh --base never-registered
+[warn: project "never-registered" not in registry; defaulting to no-mistakes off] exit=0
+
+# Adversarial: malformed base= and relative worktree-root= are refused by their own query only
+$ bin/fm-project-mode.sh --base badbase
+stdout=[] exit=3
+stderr=refused: malformed base branch "base=-v2" registered for badbase in $LAB/data/projects.md; register base=<branch> with a valid Git branch name, or drop the token to integrate on origin's default branch; correct the registry entry
+$ bin/fm-project-mode.sh badbase
+stdout=[direct-PR off] exit=0
+stderr=
+$ bin/fm-project-mode.sh --base emptybase
+stdout=[] exit=3
+stderr=refused: malformed base branch "base=" registered for emptybase in $LAB/data/projects.md; register base=<branch> with a valid Git branch name, or drop the token to integrate on origin's default branch; correct the registry entry
+$ bin/fm-project-mode.sh --worktree-root relroot
+stdout=[] exit=3
+stderr=refused: worktree root "worktree-root=agent-worktrees" registered for relroot in $LAB/data/projects.md is not an absolute path; Treehouse resolves a relative root from the repository root, which would put the pool inside the clone; register worktree-root=/<absolute path>, or drop the token for Treehouse's default pool; correct the registry entry
+$ bin/fm-project-mode.sh --base relroot
+stdout=[] exit=0
+stderr=

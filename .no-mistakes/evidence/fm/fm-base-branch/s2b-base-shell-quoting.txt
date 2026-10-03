@@ -1,0 +1,29 @@
+# Scenario 2b (adversarial): a Git-valid base branch carrying shell metacharacters stays literal in the generated worker commands
+
+$ git check-ref-format --branch v2\;id -> accepted
+[direct-PR forge=none] brief renders: gh-axi pr create --base v2\;id
+argv: <pr> <create> <--base> <v2;id>
+no side effect file created
+[no-mistakes forge=none] brief renders: --base-branch v2\;id
+argv: <axi> <run> <--base-branch> <v2;id>
+no side effect file created
+[direct-PR --forge=gerrit] brief renders: gerrit-axi publish --squash --json --branch v2\;id
+argv: <publish> <--squash> <--json> <--branch> <v2;id>
+no side effect file created
+[no-mistakes --forge=gerrit] brief renders: --base-branch v2\;id
+argv: <axi> <run> <--base-branch> <v2;id>
+no side effect file created
+
+$ git check-ref-format --branch \$\(touch\$\{IFS\}PWNED\) -> accepted
+[direct-PR forge=none] brief renders: gh-axi pr create --base \$\(touch\$\{IFS\}PWNED\)
+argv: <pr> <create> <--base> <$(touch${IFS}PWNED)>
+no side effect file created
+[no-mistakes forge=none] brief renders: --base-branch \$\(touch\$\{IFS\}PWNED\)
+argv: <axi> <run> <--base-branch> <$(touch${IFS}PWNED)>
+no side effect file created
+[direct-PR --forge=gerrit] brief renders: gerrit-axi publish --squash --json --branch \$\(touch\$\{IFS\}PWNED\)
+argv: <publish> <--squash> <--json> <--branch> <$(touch${IFS}PWNED)>
+no side effect file created
+[no-mistakes --forge=gerrit] brief renders: --base-branch \$\(touch\$\{IFS\}PWNED\)
+argv: <axi> <run> <--base-branch> <$(touch${IFS}PWNED)>
+no side effect file created

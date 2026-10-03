@@ -1,0 +1,38 @@
+# Scenario 2: briefs scaffolded with --base v2 point setup, safety rule, and Definition of done at v2
+
+$ bin/fm-brief.sh jag-ship jaglab --mode direct-PR --base v2
+You are in a disposable git worktree of jaglab, at a detached HEAD on a clean copy of this project's base branch, not of origin's default branch.
+Base branch: v2
+1. Never push to the default branch or to `v2` (push only your `fm/jag-ship` branch). Never merge a PR.
+When it is implemented and committed, push your branch and open a PR with `gh-axi pr create --base v2` that is ready for review, not a draft: this project integrates on `v2`, so the PR targets it, never origin's default branch.
+
+$ bin/fm-brief.sh jag-nm jaglab --mode no-mistakes --base v2
+You are in a disposable git worktree of jaglab, at a detached HEAD on a clean copy of this project's base branch, not of origin's default branch.
+Base branch: v2
+1. Never push to the default branch or to `v2`. Never merge a PR.
+This project integrates on `v2`, not on origin's default branch: pass `--base-branch v2` on the `no-mistakes axi run` that starts the run, so the run rebases onto and targets `v2` rather than the default branch; the run keeps that base, so a reattaching call without flags is unchanged.
+
+$ bin/fm-brief.sh jag-scout jaglab --scout --base v2
+You are in a disposable git worktree of jaglab, at a detached HEAD on a clean copy of this project's base branch, not of origin's default branch.
+Base branch: v2
+1. Never push to any remote and never open a PR.
+
+$ bin/fm-brief.sh jag-local jaglab --mode local-only --base v2
+You are in a disposable git worktree of jaglab, at a detached HEAD on a clean copy of this project's base branch, not of origin's default branch.
+Base branch: v2
+1. Never push to any remote and never open a PR. Work only on your `fm/jag-local` branch; firstmate handles the merge into local `v2`.
+Keep your branch a clean fast-forward onto local `v2`, this project's base branch - if `v2` has advanced, rebase onto it so the eventual merge stays a fast-forward.
+The configured merge authority approves the ready branch, then firstmate merges it into local `v2` through the guarded fast-forward path.
+
+$ bin/fm-brief.sh plain-ship plainlab --mode direct-PR   (no --base: unchanged contract)
+You are in a disposable git worktree of plainlab, at a detached HEAD on a clean default branch.
+1. Never push to the default branch (push only your `fm/plain-ship` branch). Never merge a PR.
+When it is implemented and committed, push your branch and open a PR with `gh-axi` that is ready for review, not a draft.
+
+# Refusals
+$ bin/fm-brief.sh x1 jaglab --mode direct-PR --base "bad..name"
+error: --base must name a valid git branch (got 'bad..name')
+exit=1
+$ bin/fm-brief.sh x2 --secondmate --no-projects --base v2
+error: --base applies only to ship and scout briefs; a secondmate charter is not a task copy
+exit=1

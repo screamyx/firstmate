@@ -1,0 +1,20 @@
+# Scenario 7: review diff of a base=v2 task compares against origin/v2 (v2-only.txt would appear if it compared against master)
+$ bin/fm-review-diff.sh jag-ship
+diff base: origin/v2
+ NOTES.md | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/NOTES.md b/NOTES.md
+new file mode 100644
+index 0000000..862509a
+--- /dev/null
++++ b/NOTES.md
+@@ -0,0 +1 @@
++v2 notes from jag-ship
+exit=0
+
+# Control: the same branch diffed against origin/master by hand
+$ git diff --stat origin/master...fm/jag-ship
+ NOTES.md    | 1 +
+ v2-only.txt | 1 +
+ 2 files changed, 2 insertions(+)

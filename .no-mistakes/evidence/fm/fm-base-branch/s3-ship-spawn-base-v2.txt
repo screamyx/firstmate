@@ -1,0 +1,42 @@
+# Scenario 3: real ship spawn (tmux backend on the lab socket, real treehouse) for a project registering base=v2 worktree-root=$LAB/agent-worktrees
+$ bin/fm-spawn.sh jag-ship $LAB/projects/jaglab --mode direct-PR --yolo off --harness "bash -c 'echo lab-worker-ready; sleep 3600'"   (TREEHOUSE_ROOT=$LAB/th-default exported)
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+spawned jag-ship harness=bash kind=ship mode=direct-PR yolo=off window=firstmate:fm-jag-ship worktree=$LAB/agent-worktrees/.treehouse/jaglab-d00e2e/1/jaglab
+
+# The task copy
+worktree:            $LAB/agent-worktrees/.treehouse/jaglab-d00e2e/1/jaglab
+copy HEAD:           21a17cce25626fb7478d14b6225ffe4dbb61488f  (v2: v2-only code)
+origin/v2:           21a17cce25626fb7478d14b6225ffe4dbb61488f
+origin/master:       69ee57b24d666a3b96156cecd8f6228160b8e572
+HEAD state:          detached
+files in the copy:   README.md v2-only.txt 
+TREEHOUSE_ROOT pool ($LAB/th-default) contents: []
+
+# state/jag-ship.meta (task record)
+worktree=$LAB/agent-worktrees/.treehouse/jaglab-d00e2e/1/jaglab
+project=$LAB/projects/jaglab
+kind=ship
+mode=direct-PR
+yolo=off
+branch=fm/jag-ship
+base=v2
+
+# Worker pane on the lab tmux server (capture-pane)
+treehouse get --root '$LAB/agent-worktrees'
+user@pc-ajim:$LAB/projects/jaglab$ treehouse get --root '/tmp/fm-l
+ab.2hQYyo/agent-worktrees'
+A new version of treehouse is available: v3.1.0 → v3.1.2
+Run "treehouse update" to update
+🌳 Setting up worktree...
+🌳 Entered worktree at $LAB/agent-worktrees/.treehouse/jaglab-d00e
+2e/1/jaglab. Type 'exit' to return.
+user@pc-ajim:$LAB/agent-worktrees/.treehouse/jaglab-d00e2e/1/jagla
+b$ export GOTMPDIR=/tmp/fm-jag-ship/gotmp
+user@pc-ajim:$LAB/agent-worktrees/.treehouse/jaglab-d00e2e/1/jagla
+b$ export COMPACT_ADVISER_DISABLE=1
+user@pc-ajim:$LAB/agent-worktrees/.treehouse/jaglab-d00e2e/1/jagla
+b$ export FM_TASK_ID=jag-ship
+user@pc-ajim:$LAB/agent-worktrees/.treehouse/jaglab-d00e2e/1/jagla
+b$ . '/tmp/fm-jag-ship+27aa838e0ee38c80f25cc5ab53d72f0c3e54ac15a8439c83e41ad9533
+f977070/launch.s1791061522.1313671.8185.sh'
+lab-worker-ready

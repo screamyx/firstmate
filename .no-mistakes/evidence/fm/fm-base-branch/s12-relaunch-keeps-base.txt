@@ -1,0 +1,15 @@
+# Scenario 12: a relaunch keeps the base its task record holds, even after the registry entry changes
+registry now: - jaglab [direct-PR base=v3 worktree-root=$LAB/agent-worktrees] - project-jag-shaped fixture: master frozen, work lands on v2 (added 2026-10-04)
+before: worktree=$LAB/agent-worktrees/.treehouse/jaglab-d00e2e/3/jaglab branch=fm/jag-ship2 base=v2   worktree HEAD=c56e44c (jag-ship2: add NOTES2.md)
+(worker process in the pane stopped, so the endpoint is agent-free)
+$ bin/fm-spawn.sh jag-ship2 --relaunch --harness "bash -c 'sleep 3600'"
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+spawned jag-ship2 harness=bash kind=ship mode=direct-PR yolo=off window=firstmate:fm-jag-ship2 worktree=$LAB/agent-worktrees/.treehouse/jaglab-d00e2e/3/jaglab
+exit=0
+after:  worktree=$LAB/agent-worktrees/.treehouse/jaglab-d00e2e/3/jaglab branch=fm/jag-ship2 base=v2   worktree HEAD=c56e44c (jag-ship2: add NOTES2.md)
+
+# The relaunched task still lands against its recorded base: review diff after the relaunch
+$ bin/fm-review-diff.sh jag-ship2 --stat
+diff base: origin/v2
+ NOTES2.md | 1 +
+ 1 file changed, 1 insertion(+)

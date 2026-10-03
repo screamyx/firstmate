@@ -1,0 +1,13 @@
+# Scenario 5 (regression): a project registering no base keeps origin default branch, Treehouse default pool, and an unchanged record
+$ bin/fm-spawn.sh plain-ship $LAB/projects/plainlab --mode direct-PR --yolo off --harness "bash -c '...'"   (TREEHOUSE_ROOT=$LAB/th-default exported)
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+spawned plain-ship harness=bash kind=ship mode=direct-PR yolo=off window=firstmate:fm-plain-ship worktree=$LAB/th-default/.treehouse/plainlab-9b8cc3/1/plainlab
+worktree:          $LAB/th-default/.treehouse/plainlab-9b8cc3/1/plainlab
+copy HEAD:         fc9115276cce625ca64fea103c3d5190e032cf57  (plain: initial)
+origin/master:     fc9115276cce625ca64fea103c3d5190e032cf57
+origin/v2:         5908e63beb1dd4973e53afaae0244bf5ab5f9eaf
+files in the copy: README.md 
+base= lines in state/plain-ship.meta: 0
+# pane: treehouse invocation
+treehouse get
+user@pc-ajim:$LAB/projects/plainlab$ treehouse get
