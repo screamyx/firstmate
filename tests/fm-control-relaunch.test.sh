@@ -1098,6 +1098,23 @@ test_spawn_relaunch_of_promoted_scout_uses_the_recorded_branch() {
   pass "fm-spawn --relaunch: a promoted scout with a recorded custom branch relaunches on it instead of being refused"
 }
 
+# A task's base branch is what its copy was cut from, recorded at spawn. A
+# relaunch reuses that copy, so it keeps the recorded base exactly once and
+# never re-checks it against a brief or a registry that may have changed since.
+test_spawn_relaunch_keeps_the_recorded_base() {
+  local dir out
+  dir=$(new_case relaunchbase rl43)
+  add_ship_task "$dir" rl43 claude
+  printf 'base=v2\n' >> "$dir/home/state/rl43.meta"
+  printf 'zsh' > "$dir/fake/command"
+  out=$(run_spawn "$dir" rl43 --relaunch)
+  assert_contains "$out" "spawned rl43" "the relaunch should complete on the recorded base"
+  assert_not_contains "$out" "base branch mismatch" "a relaunch must not re-check the base against its brief"
+  [ "$(meta_field "$dir" rl43 base)" = v2 ] || fail "the recorded base must survive the relaunch"
+  [ "$(grep -c '^base=' "$dir/home/state/rl43.meta")" = 1 ] || fail "the relaunch duplicated the base= line"
+  pass "fm-spawn --relaunch: the task's recorded base branch survives exactly once"
+}
+
 test_promoted_scout_relaunch_receives_the_current_delivery_contract() {
   local dir home id brief launch out mode rule
   for mode in no-mistakes direct-PR local-only; do
@@ -2414,6 +2431,7 @@ test_explicit_secondmate_harness_ignores_configured_profile_axes
 test_ship_relaunch_ignores_the_crew_harness_config
 test_spawn_relaunch_without_a_harness_reuses_the_recorded_one
 test_spawn_relaunch_of_promoted_scout_uses_the_recorded_branch
+test_spawn_relaunch_keeps_the_recorded_base
 test_promoted_scout_relaunch_receives_the_current_delivery_contract
 test_prefixed_prior_harness_wiring_is_still_retired
 test_muse_session_binding_is_retired_on_a_harness_switch
