@@ -431,6 +431,87 @@ test_unresolvable_registry_posture_skipped() {
   pass "a clone whose registry entry the parser refuses is skipped, never synced on the default posture"
 }
 
+# Publish a v2 line on <name>'s origin and register the project with base=v2.
+add_registered_v2_base() {  # <home> <name>
+  local home=$1 name=$2 work
+  work="$home/work-$name"
+  git -C "$work" checkout -q -b v2
+  commit_file "$work" v2.txt v2 "v2 line"
+  git -C "$work" push -q origin v2
+  git -C "$work" checkout -q main
+  mkdir -p "$home/data"
+  printf -- '- %s [no-mistakes base=v2] - test project (added 2026-10-04)\n' "$name" >> "$home/data/projects.md"
+}
+
+# Registering a base moves a clean, fully published clone off origin's default
+# branch onto the base, so the clone firstmate reads holds the code tasks are cut
+# from, and later syncs keep fast-forwarding the base.
+test_registered_base_switches_a_clean_default_clone() {
+  local home clone out
+  home=$(new_home)
+  clone=$(build_pair "$home" basesw)
+  add_registered_v2_base "$home" basesw
+
+  out=$(run_sync "$home" "$clone")
+
+  assert_contains "$out" "basesw: recovered: switched from main to registered base v2" \
+    "a clean clone on origin's default branch was not moved onto the registered base"
+  [ "$(git -C "$clone" symbolic-ref --short HEAD)" = v2 ] || fail "the clone is not on the registered base"
+  [ "$(head_sha "$clone")" = "$(git -C "$clone" rev-parse origin/v2)" ] || fail "the clone is not at origin/v2"
+  [ "$(git -C "$clone" rev-parse --abbrev-ref 'v2@{upstream}')" = origin/v2 ] \
+    || fail "the created base branch does not track origin/v2"
+
+  git -C "$home/work-basesw" checkout -q v2
+  commit_file "$home/work-basesw" v2.txt v2-next "v2 advance"
+  git -C "$home/work-basesw" push -q origin v2
+  out=$(run_sync "$home" "$clone")
+  assert_contains "$out" "basesw: synced" "a clone on its registered base was not fast-forwarded"
+  assert_not_contains "$out" "recovered" "an ordinary base fast-forward was labelled recovered"
+  [ "$(head_sha "$clone")" = "$(git -C "$clone" rev-parse origin/v2)" ] || fail "the base was not fast-forwarded"
+  pass "a registered base moves a clean default-branch clone onto the base and keeps it current"
+}
+
+# A clone on origin's default branch that holds commits origin lacks, or a dirty
+# one, may hold real work, so registering a base leaves it untouched and STUCK.
+test_registered_base_never_moves_unpublished_or_dirty_work() {
+  local home clone out before
+  home=$(new_home)
+  clone=$(build_pair "$home" baseunpub)
+  add_registered_v2_base "$home" baseunpub
+  commit_file "$clone" local.txt local "unpublished local commit"
+  before=$(head_sha "$clone")
+
+  out=$(run_sync "$home" "$clone")
+  assert_contains "$out" "baseunpub: STUCK: on branch main" "an unpublished default-branch commit was not reported STUCK"
+  assert_contains "$out" "behind origin/v2 - needs attention" "STUCK was not measured against the registered base"
+  [ "$(git -C "$clone" symbolic-ref --short HEAD)" = main ] || fail "a clone holding unpublished work was switched"
+  [ "$(head_sha "$clone")" = "$before" ] || fail "a clone holding unpublished work was moved"
+
+  home=$(new_home)
+  clone=$(build_pair "$home" basedirty)
+  add_registered_v2_base "$home" basedirty
+  printf 'dirty\n' > "$clone/file.txt"
+  out=$(run_sync "$home" "$clone")
+  assert_contains "$out" "basedirty: STUCK: on branch main with uncommitted changes" "a dirty default-branch clone was not reported STUCK"
+  [ "$(git -C "$clone" symbolic-ref --short HEAD)" = main ] || fail "a dirty clone was switched"
+  pass "a registered base never moves a clone holding unpublished or uncommitted work"
+}
+
+test_malformed_registered_base_skipped() {
+  local home clone out before
+  home=$(new_home)
+  clone=$(build_pair "$home" basebad)
+  advance_origin "$home" basebad C1
+  before=$(head_sha "$clone")
+  mkdir -p "$home/data"
+  printf -- '- basebad [no-mistakes base=] - test project (added 2026-10-04)\n' > "$home/data/projects.md"
+
+  out=$(run_sync "$home" "$clone")
+  assert_contains "$out" "basebad: skipped: registry base branch does not resolve" "a malformed base was not reported as a skip"
+  [ "$(head_sha "$clone")" = "$before" ] || fail "a clone whose base the registry refused was still synced"
+  pass "a clone whose registered base the parser refuses is skipped, never synced on the default branch"
+}
+
 test_single_project_by_bare_name_resolves() {
   local home out
   home=$(new_home)
@@ -725,6 +806,9 @@ test_on_default_clean_behind_fast_forwards
 test_already_current_unchanged
 test_no_origin_skipped
 test_local_only_skipped
+test_registered_base_switches_a_clean_default_clone
+test_registered_base_never_moves_unpublished_or_dirty_work
+test_malformed_registered_base_skipped
 test_unresolvable_registry_posture_skipped
 test_single_project_by_bare_name_resolves
 test_single_project_by_bare_name_ignores_cwd_shadow

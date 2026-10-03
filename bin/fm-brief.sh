@@ -14,8 +14,8 @@
 # charters still use a single `{TASK}` charter fill. Firstmate may adjust other
 # sections when the task genuinely deviates (e.g. working an existing external
 # PR instead of shipping a new one).
-# Usage: fm-brief.sh <task-id> <repo-name> --mode <no-mistakes|direct-PR|local-only> [--branch-prefix <prefix>] [--forge <none|gerrit> [--shape squash]] [--herdr-lab]
-#        fm-brief.sh <task-id> <repo-name> --scout [--herdr-lab]
+# Usage: fm-brief.sh <task-id> <repo-name> --mode <no-mistakes|direct-PR|local-only> [--branch-prefix <prefix>] [--forge <none|gerrit> [--shape squash]] [--base <branch>] [--herdr-lab]
+#        fm-brief.sh <task-id> <repo-name> --scout [--base <branch>] [--herdr-lab]
 #        fm-brief.sh <task-id> --secondmate {<project>...|--no-projects}
 #   --scout writes the scout contract instead: the deliverable is a report at
 #   data/<task-id>/report.md (no branch, no push, no PR) and the worktree is scratch.
@@ -67,6 +67,17 @@
 # header owns what the binding means, and bin/fm-dod-lib.sh owns what `gerrit`
 # changes for the worker. A forge on --mode local-only is refused, because that
 # mode publishes nothing.
+# --base <branch> names the project's registered base branch, for ship and scout
+# briefs alike, because a scout cut from the wrong branch reads the wrong code.
+# Like --forge it is the captain's registry binding (bin/fm-project-mode.sh's
+# header owns the base= token), read at intake through
+# `bin/fm-project-mode.sh --base <project>` and passed here; this script never
+# looks it up, and bin/fm-spawn.sh refuses a brief whose base disagrees with the
+# registry. It writes a machine-readable "Base branch: <branch>" line under the
+# Setup heading and points the setup line and the Definition of done
+# (bin/fm-dod-lib.sh) at that branch. Omitted, the brief is unchanged: the copy
+# starts on origin's default branch and carries no base line. Refused on
+# --secondmate, whose charter is not a task copy.
 # --shape names how a forge=gerrit task is published, and only `squash` - one
 # change - is accepted: `stack` is refused until a stack can be watched by its
 # membership pinned when its watch is armed, because the merge watch follows one
@@ -191,6 +202,8 @@ FORGE=none
 FORGE_SET=0
 SHAPE=
 SHAPE_SET=0
+BASE=
+BASE_SET=0
 POS=()
 want_value=
 for a in "$@"; do
@@ -203,6 +216,7 @@ for a in "$@"; do
       branch-prefix) BRANCH_PREFIX=$a; BRANCH_PREFIX_SET=1 ;;
       forge) FORGE=$a; FORGE_SET=1 ;;
       shape) SHAPE=$a; SHAPE_SET=1 ;;
+      base) BASE=$a; BASE_SET=1 ;;
       *) echo "error: internal parser state for --$want_value" >&2; exit 1 ;;
     esac
     want_value=
@@ -221,6 +235,8 @@ for a in "$@"; do
     --forge=*) FORGE=${a#--forge=}; FORGE_SET=1 ;;
     --shape) want_value=shape ;;
     --shape=*) SHAPE=${a#--shape=}; SHAPE_SET=1 ;;
+    --base) want_value=base ;;
+    --base=*) BASE=${a#--base=}; BASE_SET=1 ;;
     # yolo never reaches the worker: it is firstmate's merge authority, not a
     # brief input. Refuse it loudly so it is never silently dropped here and then
     # believed to have been recorded.
@@ -280,6 +296,21 @@ elif [ "$FORGE_SET" -eq 1 ] || [ "$SHAPE_SET" -eq 1 ]; then
   echo "error: --forge and --shape apply only to ship briefs; a scout delivers a report and a secondmate charter is not a delivery contract" >&2
   exit 1
 fi
+# The registry parser owns full base validation and bin/fm-spawn.sh compares the
+# two; this only stops a value no branch could carry before anything is written.
+if [ "$BASE_SET" -eq 1 ]; then
+  if [ "$KIND" = secondmate ]; then
+    echo "error: --base applies only to ship and scout briefs; a secondmate charter is not a task copy" >&2
+    exit 1
+  fi
+  if [ -z "$BASE" ] || ! git check-ref-format --branch "$BASE" >/dev/null 2>&1; then
+    echo "error: --base must name a valid git branch (got '$BASE')" >&2
+    exit 1
+  fi
+fi
+SETUP_BASE="at a detached HEAD on a clean default branch."
+[ -z "$BASE" ] || SETUP_BASE="at a detached HEAD on a clean copy of this project's base branch, not of origin's default branch.
+Base branch: $BASE"
 ID=${POS[0]}
 BRANCH="$BRANCH_PREFIX$ID"
 if ! git check-ref-format --branch "$BRANCH" >/dev/null 2>&1; then
@@ -309,6 +340,10 @@ if [ "$KIND" != secondmate ] && { [ -e "$BRIEF_INCLUDE_FILE" ] || [ -L "$BRIEF_I
   }
   if printf '%s\n' "$BRIEF_INCLUDE_BODY" | grep -q '^Delivery contract: mode='; then
     echo "error: $BRIEF_INCLUDE_FILE must not carry a 'Delivery contract: mode=' line; the delivery mode is a per-task --mode decision" >&2
+    exit 1
+  fi
+  if printf '%s\n' "$BRIEF_INCLUDE_BODY" | grep -q '^Base branch: '; then
+    echo "error: $BRIEF_INCLUDE_FILE must not carry a 'Base branch: ' line; the base branch is the project's registered base= binding, passed as --base" >&2
     exit 1
   fi
   [ -n "$(printf '%s' "$BRIEF_INCLUDE_BODY" | tr -d '[:space:]')" ] || BRIEF_INCLUDE_BODY=
@@ -549,7 +584,7 @@ $TASK_SECTION
 $HERDR_SECTION
 
 # Setup
-You are in a disposable git worktree of $REPO, at a detached HEAD on a clean default branch.
+You are in a disposable git worktree of $REPO, $SETUP_BASE
 This is a SCOUT task: the deliverable is a written report, not a PR.
 The worktree is your laboratory - install, run, edit, and make scratch commits freely; all of it is discarded at teardown.
 The report is the only thing that survives, so anything worth keeping must be in it.
@@ -609,8 +644,8 @@ case "$MODE" in
 2. Run \`no-mistakes doctor\`; if it reports the repo is not initialized here, run \`no-mistakes init\`."
     ;;
 esac
-RULE1=$(fm_ship_rule_one "$MODE" "$ID" "$BRANCH" "$FORGE") || exit 1
-DOD=$(fm_dod_block "$MODE" "$ID" "$BRANCH" "$FORGE") || exit 1
+RULE1=$(fm_ship_rule_one "$MODE" "$ID" "$BRANCH" "$FORGE" "$BASE") || exit 1
+DOD=$(fm_dod_block "$MODE" "$ID" "$BRANCH" "$FORGE" "$BASE") || exit 1
 
 cat > "$BRIEF" <<EOF
 You are a crewmate: an autonomous worker agent managed by firstmate. Work on your own; do not wait for a human.
@@ -620,7 +655,7 @@ $TASK_SECTION
 $HERDR_SECTION
 
 # Setup
-You are in a disposable git worktree of $REPO, at a detached HEAD on a clean default branch.
+You are in a disposable git worktree of $REPO, $SETUP_BASE
 
 **Verify isolation before anything else.** Run \`pwd -P\` and \`git rev-parse --show-toplevel\`; both must resolve to the disposable task worktree you were launched in, such as a treehouse pool path or an Orca-managed worktree, not the primary checkout firstmate operates from.
 The path check is authoritative: \`git rev-parse --git-dir\` and \`git rev-parse --git-common-dir\` can help inspect the repo, but they do not prove you are outside the primary checkout.

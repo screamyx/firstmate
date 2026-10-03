@@ -47,7 +47,9 @@
 # upstream-contribution PRs pushed to a fork satisfy this in any mode), OR - for a
 # normal ship task whose commits are not so reachable - when its PR is merged and
 # GitHub reports a PR head that contains the current local work, or its content is
-# already present in the up-to-date default branch. This recognizes the common
+# already present in the up-to-date default branch (the task's recorded base=
+# branch when its spawn recorded one, for a local-only task too, since that is the
+# branch it was cut from and lands on). This recognizes the common
 # squash-merge-then-delete-branch flow, where the branch's own commits live nowhere
 # on a remote yet the change is fully in main.
 # Squash merges collapse the branch's commits, so per-commit patch ids against main
@@ -1313,8 +1315,17 @@ elif [ "$FORCE" != "--force" ] && fm_pf_relay_active "$FM_HOME"; then
   PUBLIC_FOLLOWUP_RELAY_ACTIVE=1
 fi
 
+# The branch this task integrates on: the base= its spawn recorded from the
+# project's registered base branch (bin/fm-spawn.sh), or else the project's
+# default branch, which is what a task recorded without one was cut from.
 default_branch() {
-  local ref branch
+  local ref branch base
+  base=$(fm_meta_get "$META" base)
+  if [ -n "$base" ]; then
+    git check-ref-format --branch "$base" >/dev/null 2>&1 || return 1
+    echo "$base"
+    return 0
+  fi
   ref=$(git -C "$PROJ" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)
   if [ -n "$ref" ]; then
     echo "${ref#origin/}"
@@ -1548,7 +1559,8 @@ pr_is_merged() {
   return 0
 }
 
-# Is the branch's content already present in the up-to-date default branch? Fetches
+# Is the branch's content already present in the up-to-date default branch - the
+# task's recorded base branch when it has one (default_branch above)? Fetches
 # first, then 3-way merges the default branch with HEAD: when HEAD introduces nothing
 # the default branch does not already contain (e.g. its change landed via squash) the
 # merged tree equals the default branch's tree. This isolates branch-only changes, so
@@ -1876,7 +1888,7 @@ validate_worktree_teardown_safety() {
   unpushed=$(printf '%s\n' "$unpushed_raw" | head -5)
 
   if [ -n "$unpushed" ] && [ "$MODE" = local-only ]; then
-    DEFAULT=$(default_branch) || { echo "REFUSED: cannot determine default branch for $PROJ; expected origin/HEAD, main, or master." >&2; return 1; }
+    DEFAULT=$(default_branch) || { echo "REFUSED: cannot determine the task's base or default branch for $PROJ; expected a valid recorded base=, origin/HEAD, main, or master." >&2; return 1; }
     if ! unmerged_raw=$(git -C "$WT" log --oneline HEAD --not "$DEFAULT" -- 2>/dev/null); then
       if worktree_safety_blocked_by_lock "commits not on $DEFAULT"; then
         return "$TEARDOWN_WORKTREE_SAFETY_LOCK_BLOCKED"

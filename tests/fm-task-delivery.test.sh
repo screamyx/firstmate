@@ -1331,6 +1331,66 @@ EOF
   pass "fm-spawn: a registered forge must reach the worker's brief"
 }
 
+# The registered base branch is a project fact every task copy is cut from, so a
+# brief that names a different base, or none where one is registered, would give
+# the worker instructions for one branch on a copy of another. Ship and scout
+# spawns both refuse that drift before any record exists, and a base the registry
+# itself refuses stops the spawn rather than falling back to the default branch.
+test_spawn_requires_the_brief_to_carry_the_registered_base() {
+  local rec home proj fakebin out status
+  rec=$(make_home base-agree "- proj [no-mistakes base=v2] - fixture (added 2026-01-01)")
+  IFS='|' read -r home proj fakebin <<EOF
+$rec
+EOF
+  FM_HOME="$home" "$BRIEF" base-agree-b1 proj --scout >/dev/null || fail "a scout brief should scaffold"
+  fill_brief_subsections "$home/data/base-agree-b1/brief.md" "Read the v2 code." "Report."
+  out=$(run_spawn "$home" "$fakebin" base-agree-b1 "$proj" claude --scout 2>&1)
+  status=$?
+  [ "$status" -ne 0 ] || fail "a scout launched on a brief that records no base for a base=v2 project"
+  assert_contains "$out" "base branch mismatch for base-agree-b1" "the scout refusal did not name the drift"
+  assert_contains "$out" "re-scaffold it with --base v2" "the refusal did not name the flag the re-scaffold needs"
+  assert_contains "$out" "remove $home/data/base-agree-b1/brief.md" "the refusal did not name the authored brief"
+  assert_absent "$home/state/base-agree-b1.meta" "the refused scout still recorded a task"
+
+  FM_HOME="$home" "$BRIEF" base-agree-b2 proj --mode no-mistakes --base v2 >/dev/null || fail "a ship brief with --base should scaffold"
+  fill_brief_subsections "$home/data/base-agree-b2/brief.md" "Ship on v2." "Ship it."
+  out=$(run_spawn "$home" "$fakebin" base-agree-b2 "$proj" claude --mode no-mistakes --yolo off 2>&1)
+  assert_not_contains "$out" "base branch mismatch" "an agreeing brief and registry were reported as drift"
+
+  FM_HOME="$home" "$BRIEF" base-agree-b3 proj --mode no-mistakes --base v3 >/dev/null || fail "a ship brief with --base should scaffold"
+  fill_brief_subsections "$home/data/base-agree-b3/brief.md" "Ship on v3." "Ship it."
+  out=$(run_spawn "$home" "$fakebin" base-agree-b3 "$proj" claude --mode no-mistakes --yolo off 2>&1)
+  status=$?
+  [ "$status" -ne 0 ] || fail "a ship launched on a brief naming a different base"
+  assert_contains "$out" "records base branch 'v3'" "the refusal did not name the brief's base"
+  assert_absent "$home/state/base-agree-b3.meta" "the refused ship still recorded a task"
+
+  rec=$(make_home base-agree-unbound "- proj [no-mistakes] - fixture (added 2026-01-01)")
+  IFS='|' read -r home proj fakebin <<EOF
+$rec
+EOF
+  FM_HOME="$home" "$BRIEF" base-agree-b4 proj --scout --base v2 >/dev/null || fail "a scout brief with --base should scaffold"
+  fill_brief_subsections "$home/data/base-agree-b4/brief.md" "Read the code." "Report."
+  out=$(run_spawn "$home" "$fakebin" base-agree-b4 "$proj" claude --scout 2>&1)
+  status=$?
+  [ "$status" -ne 0 ] || fail "a base brief launched on a project that registers no base"
+  assert_contains "$out" "re-scaffold it with no --base flag" "the unbound refusal did not say to drop the flag"
+  assert_absent "$home/state/base-agree-b4.meta" "the refused spawn still recorded a task"
+
+  rec=$(make_home base-agree-malformed "- proj [no-mistakes base=] - fixture (added 2026-01-01)")
+  IFS='|' read -r home proj fakebin <<EOF
+$rec
+EOF
+  write_brief "$home" base-agree-b5 no-mistakes
+  out=$(run_spawn "$home" "$fakebin" base-agree-b5 "$proj" claude --mode no-mistakes --yolo off 2>&1)
+  status=$?
+  [ "$status" -ne 0 ] || fail "a malformed registered base let the spawn fall back to the default branch"
+  assert_contains "$out" "malformed base branch" "the parser's own refusal did not reach the operator"
+  assert_contains "$out" "does not resolve to a base branch" "the spawn did not explain why it stopped"
+  assert_absent "$home/state/base-agree-b5.meta" "the refused spawn still recorded a task"
+  pass "fm-spawn: a registered base branch must reach the ship or scout brief, and a malformed one stops the spawn"
+}
+
 # The ship branch is immutable once the task record exists (state/<id>.meta
 # branch=), so the spawn is the last checkpoint where a drift between the branch
 # selected at intake (the brief's "Ship branch:" line) and the branch this spawn
@@ -1508,6 +1568,90 @@ STUB
   pass "fm-promote: a promoted worker receives the project's registered forge contract with no flag to remember"
 }
 
+# A scout copy cut from a registered base is promoted onto that same base: the
+# contract it receives targets the base its record kept, not the registry's
+# current answer, and matches an ordinary ship brief for that base byte for byte.
+test_promotion_targets_the_recorded_base() {
+  local home sendroot meta out payload id
+  home="$TMP_ROOT/base-promote/home"
+  sendroot="$TMP_ROOT/base-promote/sendroot"
+  mkdir -p "$home/state" "$home/data" "$home/projects/proj" "$sendroot/bin"
+  # The registry has since dropped the base; the record still holds the one the copy was cut from.
+  printf '%s\n' '- proj [no-mistakes] - fixture (added 2026-01-01)' > "$home/data/projects.md"
+  cat > "$sendroot/bin/fm-send.sh" <<'STUB'
+#!/usr/bin/env bash
+printf '%s' "$2" > "$FM_TEST_CAPTURE"
+STUB
+  chmod +x "$sendroot/bin/fm-send.sh"
+
+  id="base-promote-p1"
+  meta="$home/state/$id.meta"
+  printf 'window=fm-%s\nkind=scout\nworktree=/tmp/wt\nproject=%s\nbase=v2\n' "$id" "$home/projects/proj" > "$meta"
+  FM_HOME="$home" "$BRIEF" "$id" proj --scout --base v2 >/dev/null 2>&1 || fail "scout brief generation should succeed"
+  fill_brief_subsections "$home/data/$id/brief.md" "Fix what the v2 investigation found." "Carry over only the fix."
+  out=$(FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" "$PROMOTE" "$id" --mode direct-PR --yolo off 2>&1) \
+    || fail "promotion of a scout with a recorded base should succeed: $out"
+  payload="$TMP_ROOT/base-promote/payload"
+  ( cd "$sendroot" \
+    && FM_TEST_CAPTURE="$payload" \
+       eval "$(printf '%s\n' "$out" | sed -n 's/^next: //p' | grep 'fm-send\.sh')" ) \
+    || fail "promotion's delivery command did not run"
+  # shellcheck disable=SC2016 # Backticks are literal generated Markdown.
+  assert_grep "Return to a clean base at this project's base branch \`v2\`" "$payload" \
+    "the promoted worker was told to return to the default branch instead of its base"
+  # shellcheck disable=SC2016
+  assert_grep 'open a PR with `gh-axi pr create --base v2`' "$payload" \
+    "the promoted worker's PR does not target the recorded base"
+  grep -qx 'base=v2' "$meta" || fail "promotion dropped the recorded base from the task record"
+
+  rm "$home/data/$id/brief.md"
+  FM_HOME="$home" "$BRIEF" "$id" proj --mode direct-PR --base v2 >/dev/null 2>&1 || fail "ordinary ship brief generation should succeed"
+  awk '/^# Definition of done$/ { emit=1 } emit' "$home/data/$id/brief.md" > "$TMP_ROOT/base-promote/brief-dod"
+  awk '/^# Definition of done$/ { emit=1 } emit' "$payload" > "$TMP_ROOT/base-promote/delivered-dod"
+  cmp -s "$TMP_ROOT/base-promote/brief-dod" "$TMP_ROOT/base-promote/delivered-dod" \
+    || fail "promotion and ordinary brief generation delivered different base contracts"
+  pass "fm-promote: a promoted scout ships against the base its record kept"
+}
+
+# A local-only task cut from a base lands on that base: the guarded fast-forward
+# moves the recorded base branch, never the default branch, and requires the
+# primary checkout to stand on the base.
+test_local_merge_lands_on_the_recorded_base() {
+  local home proj id main fix out status
+  home="$TMP_ROOT/local-merge-base/home"
+  proj="$TMP_ROOT/local-merge-base/proj"
+  id=local-merge-base-e3
+  mkdir -p "$home/state" "$home/data" "$proj"
+  git -C "$proj" init -q || fail "could not initialize local-merge base fixture"
+  git -C "$proj" config user.email test@example.com
+  git -C "$proj" config user.name test
+  printf 'base\n' > "$proj/base"
+  git -C "$proj" add base || fail "could not stage fixture base"
+  git -C "$proj" commit -qm base || fail "could not commit fixture base"
+  main=$(git -C "$proj" branch --show-current)
+  git -C "$proj" branch v2 || fail "could not create the base branch"
+  git -C "$proj" checkout -qb "fm/$id" v2 || fail "could not create the ship branch"
+  printf 'change\n' > "$proj/change"
+  git -C "$proj" add change || fail "could not stage the ship change"
+  git -C "$proj" commit -qm change || fail "could not commit the ship change"
+  fix=$(git -C "$proj" rev-parse HEAD)
+  git -C "$proj" checkout -q "$main" || fail "could not restore the default branch"
+  printf 'project=%s\nmode=local-only\nbranch=fm/%s\nbase=v2\n' "$proj" "$id" > "$home/state/$id.meta"
+
+  status=0
+  out=$(FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" "$MERGE_LOCAL" "$id" 2>&1) || status=$?
+  [ "$status" -ne 0 ] || fail "a base-recorded merge ran while the primary checkout stood on the default branch"
+  assert_contains "$out" "expected base branch 'v2'" "the refusal did not name the base the checkout must stand on"
+
+  git -C "$proj" checkout -q v2 || fail "could not move the fixture checkout to the base"
+  out=$(FM_HOME="$home" FM_STATE_OVERRIDE="$home/state" "$MERGE_LOCAL" "$id") \
+    || fail "local merge did not land on the recorded base: $out"
+  [ "$(git -C "$proj" rev-parse v2)" = "$fix" ] || fail "local merge did not fast-forward the base branch"
+  [ "$(git -C "$proj" rev-parse "$main")" != "$fix" ] || fail "local merge moved the default branch"
+  assert_contains "$out" "merged fm/$id into local v2" "local merge did not report the base it landed on"
+  pass "fm-merge-local: a task recorded with a base lands on that base, never the default branch"
+}
+
 # direct-PR composes with the forge: the mode still means "publish without the
 # pipeline", and on Gerrit publishing is one gerrit-axi call rather than a push
 # plus a pull request. The worker reports the published change, never submits or
@@ -1612,6 +1756,70 @@ EOF
   pass "fm-project-mode: --branch-prefix resolves order-independently and defaults to the legacy fm/ prefix"
 }
 
+# base= and worktree-root= are orthogonal project facts: each query answers only
+# its own token, an absent token (or project, or registry) answers an empty line
+# meaning today's behaviour, every other output form ignores both tokens, and a
+# malformed value is refused only by its own query.
+test_project_mode_resolves_base_and_worktree_root() {
+  local home out err status
+  home="$TMP_ROOT/project-mode-base/home"
+  mkdir -p "$home/data"
+  cat > "$home/data/projects.md" <<'EOF'
+- plainproj [direct-PR] - fixture with no base (added 2026-01-01)
+- v2proj [no-mistakes-prod-only base=v2 worktree-root=/store/agent-worktrees] - fixture with both tokens (added 2026-01-01)
+- reorderedproj [worktree-root=/srv/wt base=release/1.0 direct-PR +yolo branch=fix/] - fixture with tokens before the mode (added 2026-01-01)
+- emptybaseproj [no-mistakes base=] - fixture with an empty base (added 2026-01-01)
+- badbaseproj [no-mistakes base=-v2] - fixture with an invalid branch name (added 2026-01-01)
+- relrootproj [no-mistakes worktree-root=.] - fixture with a relative root (added 2026-01-01)
+EOF
+  out=$(FM_HOME="$home" "$PROJECT_MODE" --base plainproj 2>/dev/null)
+  [ "$out" = "" ] || fail "a project with no base= must answer an empty base (got '$out')"
+  out=$(FM_HOME="$home" "$PROJECT_MODE" --worktree-root plainproj 2>/dev/null)
+  [ "$out" = "" ] || fail "a project with no worktree-root= must answer an empty root (got '$out')"
+
+  out=$(FM_HOME="$home" "$PROJECT_MODE" --base v2proj 2>/dev/null)
+  [ "$out" = v2 ] || fail "a registered base= was not resolved (got '$out')"
+  out=$(FM_HOME="$home" "$PROJECT_MODE" --worktree-root v2proj 2>/dev/null)
+  [ "$out" = /store/agent-worktrees ] || fail "a registered worktree-root= was not resolved (got '$out')"
+  out=$(FM_HOME="$home" "$PROJECT_MODE" v2proj 2>/dev/null)
+  [ "$out" = "no-mistakes off" ] || fail "base= or worktree-root= leaked into the mode/yolo output (got '$out')"
+  out=$(FM_HOME="$home" "$PROJECT_MODE" --raw v2proj 2>/dev/null)
+  [ "$out" = "no-mistakes-prod-only off" ] || fail "base= or worktree-root= displaced the registered conditional policy (got '$out')"
+
+  out=$(FM_HOME="$home" "$PROJECT_MODE" reorderedproj 2>/dev/null)
+  [ "$out" = "direct-PR on" ] || fail "tokens before the mode must not be mistaken for the mode (got '$out')"
+  out=$(FM_HOME="$home" "$PROJECT_MODE" --base reorderedproj 2>/dev/null)
+  [ "$out" = release/1.0 ] || fail "a base= before the mode was not resolved (got '$out')"
+  out=$(FM_HOME="$home" "$PROJECT_MODE" --worktree-root reorderedproj 2>/dev/null)
+  [ "$out" = /srv/wt ] || fail "a worktree-root= before the mode was not resolved (got '$out')"
+  out=$(FM_HOME="$home" "$PROJECT_MODE" --branch-prefix reorderedproj 2>/dev/null)
+  [ "$out" = fix/ ] || fail "base= and worktree-root= disturbed the branch prefix (got '$out')"
+
+  for proj in emptybaseproj badbaseproj; do
+    status=0
+    out=$(FM_HOME="$home" "$PROJECT_MODE" --base "$proj" 2>/dev/null) || status=$?
+    [ "$status" -eq 3 ] || fail "a malformed base for $proj must be refused with status 3 (got $status)"
+    [ -z "$out" ] || fail "a refused base for $proj must print nothing on stdout (got '$out')"
+    err=$(FM_HOME="$home" "$PROJECT_MODE" --base "$proj" 2>&1 >/dev/null || true)
+    assert_contains "$err" "malformed base branch" "the base refusal for $proj did not name the token"
+    out=$(FM_HOME="$home" "$PROJECT_MODE" "$proj" 2>/dev/null) || fail "a malformed base must not refuse the default output for $proj"
+    [ "$out" = "no-mistakes off" ] || fail "a malformed base changed the default output for $proj (got '$out')"
+  done
+  status=0
+  out=$(FM_HOME="$home" "$PROJECT_MODE" --worktree-root relrootproj 2>/dev/null) || status=$?
+  [ "$status" -eq 3 ] && [ -z "$out" ] || fail "a relative worktree root must be refused with status 3 and no stdout (got $status '$out')"
+  err=$(FM_HOME="$home" "$PROJECT_MODE" --worktree-root relrootproj 2>&1 >/dev/null || true)
+  assert_contains "$err" "not an absolute path" "the worktree-root refusal did not explain itself"
+  out=$(FM_HOME="$home" "$PROJECT_MODE" --base relrootproj 2>/dev/null) || fail "a relative worktree root must not refuse the --base query"
+  [ "$out" = "" ] || fail "a project with no base= answered '$out' beside a bad root"
+
+  out=$(FM_HOME="$home" "$PROJECT_MODE" --base never-registered 2>/dev/null)
+  [ "$out" = "" ] || fail "an unregistered project must answer an empty base (got '$out')"
+  out=$(FM_HOME="$TMP_ROOT/project-mode-base/no-registry-home" "$PROJECT_MODE" --worktree-root anyproj 2>/dev/null)
+  [ "$out" = "" ] || fail "an absent registry must answer an empty worktree root (got '$out')"
+  pass "fm-project-mode: --base and --worktree-root resolve orthogonally and refuse only their own malformed token"
+}
+
 test_ship_spawn_requires_a_valid_delivery_contract
 test_scout_and_secondmate_refuse_delivery_flags
 test_spawn_refuses_a_brief_mode_mismatch
@@ -1637,4 +1845,8 @@ test_spawn_refuses_a_registry_forge_it_cannot_read
 test_promotion_carries_the_forge_binding
 test_spawn_and_promote_require_filled_task_subsections
 test_project_mode_resolves_branch_prefix
+test_project_mode_resolves_base_and_worktree_root
+test_spawn_requires_the_brief_to_carry_the_registered_base
+test_promotion_targets_the_recorded_base
+test_local_merge_lands_on_the_recorded_base
 echo "# all fm-task-delivery tests passed"

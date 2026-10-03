@@ -215,6 +215,95 @@ test_non_main_default_branch_refreshes_before_branching() {
   pass "a stale pooled worktree resolves and refreshes a non-main default branch"
 }
 
+# Publish a v2 line on the case's origin that the default branch does not have,
+# register the project with base=v2, and record that base in the brief, the way
+# `fm-brief.sh --base v2` would.
+register_v2_base() {
+  local publisher="$CASE_DIR/publisher"
+  git -C "$publisher" checkout --quiet -b v2
+  printf 'only on v2\n' > "$publisher/v2-only.txt"
+  git -C "$publisher" add v2-only.txt
+  git -C "$publisher" -c user.name='Firstmate Tests' -c user.email='tests@example.invalid' commit -qm v2-line
+  git -C "$publisher" push --quiet origin v2
+  printf -- '- %s [no-mistakes base=v2] - fixture with a base branch (added 2026-10-04)\n' \
+    "$(basename "$PROJECT_DIR")" > "$HOME_DIR/data/projects.md"
+}
+
+add_brief_base() {  # <id> <base>
+  printf '\nBase branch: %s\n' "$2" >> "$HOME_DIR/data/$1/brief.md"
+}
+
+# A registered base is where every task copy starts, ship and scout alike, and the
+# task record keeps it so cleanup and landing read the same branch later.
+test_registered_base_cuts_ship_and_scout_copies() {
+  local rec id out status kind v2 default_tip
+  for kind in ship scout; do
+    id="pool-base-v2-$kind-r1"
+    rec=$(make_case "base-v2-$kind" "$id")
+    read_case_record "$rec"
+    register_v2_base
+    add_brief_base "$id" v2
+    if [ "$kind" = ship ]; then
+      out=$(run_spawn "$id" --mode no-mistakes --yolo off)
+    else
+      out=$(run_spawn "$id" --scout)
+    fi
+    status=$?
+    expect_code 0 "$status" "$kind: spawn should cut the copy from the registered base"$'\n'"$out"
+    v2=$(git -C "$POOL_DIR" rev-parse origin/v2)
+    default_tip=$(git -C "$POOL_DIR" rev-parse "origin/$DEFAULT_BRANCH")
+    [ "$(git -C "$POOL_DIR" rev-parse HEAD)" = "$v2" ] \
+      || fail "$kind: the copy is not at origin/v2"
+    [ "$v2" != "$default_tip" ] || fail "$kind: fixture did not separate v2 from the default branch"
+    [ -f "$POOL_DIR/v2-only.txt" ] || fail "$kind: the copy does not hold the v2 line's content"
+    grep -qx 'base=v2' "$HOME_DIR/state/$id.meta" || fail "$kind: the task record does not keep its base"
+  done
+  pass "a registered base branch is where ship and scout copies start, and the task record keeps it"
+}
+
+# Without the token nothing changes: the copy follows origin's default branch and
+# the record carries no base line at all.
+test_unregistered_base_keeps_the_default_branch_and_record() {
+  local rec id out status
+  id='pool-base-none-r2'
+  rec=$(make_case base-none "$id")
+  read_case_record "$rec"
+  printf -- '- %s [no-mistakes] - fixture without a base (added 2026-10-04)\n' "$(basename "$PROJECT_DIR")" > "$HOME_DIR/data/projects.md"
+  out=$(run_spawn "$id" --scout)
+  status=$?
+  expect_code 0 "$status" "spawn without a registered base should launch"$'\n'"$out"
+  [ "$(git -C "$POOL_DIR" rev-parse HEAD)" = "$(git -C "$POOL_DIR" rev-parse "origin/$DEFAULT_BRANCH")" ] \
+    || fail "without a base the copy must follow origin's default branch"
+  assert_no_grep 'base=' "$HOME_DIR/state/$id.meta" "a task without a registered base must record no base line"
+  pass "an unregistered base keeps origin's default branch and an unchanged task record"
+}
+
+# The registered worktree root reaches Treehouse through its own --root flag, and
+# a root that does not exist stops the spawn before any copy is acquired.
+test_registered_worktree_root_reaches_treehouse_get() {
+  local rec id out status pane_log launch_log
+  id='pool-wt-root-r3'
+  rec=$(make_case wt-root "$id")
+  read_case_record "$rec"
+  printf -- '- %s [no-mistakes worktree-root=%s] - fixture with a pool root (added 2026-10-04)\n' \
+    "$(basename "$PROJECT_DIR")" "$CASE_DIR/wtroot" > "$HOME_DIR/data/projects.md"
+  out=$(run_spawn "$id" --scout)
+  status=$?
+  [ "$status" -ne 0 ] || fail "a registered worktree root that does not exist must stop the spawn"
+  assert_contains "$out" "not an existing directory" "the missing-root refusal did not explain itself"
+  [ ! -e "$HOME_DIR/state/$id.meta" ] || fail "a refused worktree root still wrote a task record"
+
+  mkdir -p "$CASE_DIR/wtroot"
+  pane_log="$CASE_DIR/pane.log"
+  launch_log="$CASE_DIR/launch.log"
+  out=$(FM_FAKE_PANE_LOG="$pane_log" FM_FAKE_LAUNCH_LOG="$launch_log" run_spawn "$id" --scout)
+  status=$?
+  expect_code 0 "$status" "spawn with an existing worktree root should launch"$'\n'"$out"
+  cat "$pane_log" "$launch_log" 2>/dev/null | grep -qxF "treehouse get --root '$CASE_DIR/wtroot'" \
+    || fail "treehouse get did not receive the registered root (pane: $(cat "$pane_log" "$launch_log" 2>/dev/null | grep treehouse))"
+  pass "a registered worktree root reaches treehouse get --root, and a missing root refuses the spawn"
+}
+
 make_originless_case() {  # <name> <id>
   local name=$1 id=$2 case_dir home project pool fakebin initial
   case_dir="$TMP_ROOT/$name"
@@ -260,6 +349,28 @@ test_originless_pool_launches_without_a_freshness_fetch() {
     printf '# observed origin-less launch: %s\n' "$(printf '%s\n' "$out" | tail -n 1)"
   fi
   pass "an origin-less pooled worktree launches as-is, skipping the freshness gate"
+}
+
+# On a clone without origin a registered base is the local branch of that name.
+test_originless_registered_base_uses_the_local_branch() {
+  local rec id out status v2
+  id='pool-originless-base-r7'
+  rec=$(make_originless_case originless-base "$id")
+  read_case_record "$rec"
+  git -C "$PROJECT_DIR" branch v2
+  git -C "$PROJECT_DIR" worktree add --quiet "$CASE_DIR/v2-author" v2
+  printf 'local v2\n' > "$CASE_DIR/v2-author/v2-only.txt"
+  git -C "$CASE_DIR/v2-author" add v2-only.txt
+  git -C "$CASE_DIR/v2-author" -c user.name='Firstmate Tests' -c user.email='tests@example.invalid' commit -qm local-v2
+  v2=$(git -C "$PROJECT_DIR" rev-parse v2)
+  printf -- '- %s [local-only base=v2] - fixture with a local base (added 2026-10-04)\n' "$(basename "$PROJECT_DIR")" > "$HOME_DIR/data/projects.md"
+  printf '\nBase branch: v2\n' >> "$HOME_DIR/data/$id/brief.md"
+  out=$(run_spawn "$id" --scout)
+  status=$?
+  expect_code 0 "$status" "an origin-less spawn with a registered base should launch"$'\n'"$out"
+  [ "$(git -C "$POOL_DIR" rev-parse HEAD)" = "$v2" ] || fail "the origin-less copy is not at the local base branch"
+  [ ! -e "$POOL_DIR/.git/FETCH_HEAD" ] || fail "spawn fetched against a pooled worktree with no origin"
+  pass "an origin-less copy with a registered base starts from the local base branch"
 }
 
 test_originless_dirty_pool_refuses_without_discarding_work() {
@@ -753,6 +864,10 @@ test_dirty_pool_refuses_without_discarding_work
 test_unresolved_remote_default_refuses_pool
 test_unreachable_origin_refuses_stale_pool_base
 test_originless_pool_launches_without_a_freshness_fetch
+test_originless_registered_base_uses_the_local_branch
+test_registered_base_cuts_ship_and_scout_copies
+test_unregistered_base_keeps_the_default_branch_and_record
+test_registered_worktree_root_reaches_treehouse_get
 test_originless_dirty_pool_refuses_without_discarding_work
 test_origin_config_without_url_refuses_pool
 test_empty_origin_config_section_refuses_pool

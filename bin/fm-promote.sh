@@ -35,6 +35,10 @@
 # its value against the registry; bin/fm-project-mode.sh's header owns the
 # binding and bin/fm-dod-lib.sh owns what it changes for the worker, including
 # the refusal of a forge on local-only.
+# The base branch is read from the scout's own task record instead: the base=
+# its spawn recorded (bin/fm-spawn.sh) is the branch its copy was cut from, so
+# the promoted contract targets that branch, and a record without one keeps
+# origin's default branch. Neither the registry nor a flag can retarget it here.
 # Usage: fm-promote.sh <task-id> --mode <no-mistakes|direct-PR|local-only> --yolo <on|off> [--branch-prefix <prefix>]
 set -eu
 
@@ -195,6 +199,14 @@ if [ -n "$PROMOTE_PROJECT" ]; then
   FORGE=${PROMOTE_STANDING_FORGE:-none}
   refuse_impossible_forge_posture || exit 1
 fi
+# The base this scout's copy was cut from, recorded at spawn.
+PROMOTE_BASE=$(sed -n 's/^base=//p' "$META" | head -n 1)
+if [ -n "$PROMOTE_BASE" ] && ! git check-ref-format --branch "$PROMOTE_BASE" >/dev/null 2>&1; then
+  echo "error: task $ID has an invalid recorded base branch '$PROMOTE_BASE'" >&2
+  exit 1
+fi
+PROMOTE_BASE_STEP="Return to a clean default-branch base"
+[ -z "$PROMOTE_BASE" ] || PROMOTE_BASE_STEP="Return to a clean base at this project's base branch \`$PROMOTE_BASE\`, not origin's default branch"
 # An unbound project keeps the exact wording it always had.
 PROMOTE_FORGE_WORDS=
 [ "$FORGE" = none ] || PROMOTE_FORGE_WORDS=" forge=$FORGE"
@@ -237,7 +249,7 @@ IFS= read -r -d '' PROMOTION_SHIP_SPEC <<EOF || true
 If these promotion steps were already completed before a relaunch, preserve the existing \`$BRANCH_Q\` branch and continue from its current state; do not repeat them destructively.
 1. **Verify isolation before anything else.** Run \`pwd -P\` and \`git rev-parse --show-toplevel\`; both must resolve to the disposable task worktree you were launched in, such as a treehouse pool path or an Orca-managed worktree, not the primary checkout firstmate operates from. If either does not resolve to the worktree you were launched in, stop and escalate to firstmate.
 2. Inventory this worktree's scratch state with \`git status\` and \`git log\` before changing anything.
-3. Return to a clean default-branch base, then create your branch: \`git checkout -b $BRANCH_Q --\`.
+3. $PROMOTE_BASE_STEP, then create your branch: \`git checkout -b $BRANCH_Q --\`.
 4. Carry over only the intended fix changes. Leave scratch commits, debug edits, and experiment files behind.
 5. If you reproduced a bug, turn that reproduction into a regression test.
 6. Treat the scout-time Firstmate spec and any unmarked legacy \`# Task\` text as investigation context, not captain intent or current ship-time instructions.
@@ -254,13 +266,13 @@ The mode-specific Definition of done below is the current delivery contract.
 
 # Current ship safety rule
 EOF
-  fm_ship_rule_one "$MODE" "$ID" "$BRANCH" "$FORGE"
+  fm_ship_rule_one "$MODE" "$ID" "$BRANCH" "$FORGE" "$PROMOTE_BASE"
   if [ -n "$PROMOTION_ASK_USER_BLOCK" ]; then
     printf '\nThe no-mistakes ask-user escalation below supersedes the scout rule 6 escalation shape.\n'
     printf '%s\n' "$PROMOTION_ASK_USER_BLOCK"
   fi
   printf '\n'
-  fm_dod_block "$MODE" "$ID" "$BRANCH" "$FORGE"
+  fm_dod_block "$MODE" "$ID" "$BRANCH" "$FORGE" "$PROMOTE_BASE"
 }
 mkdir -p "$DATA/$ID"
 [ ! -d "$INSTRUCTIONS" ] || { echo "error: ship instructions path is a directory: $INSTRUCTIONS" >&2; exit 1; }

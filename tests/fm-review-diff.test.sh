@@ -15,6 +15,8 @@
 #       reviewed even when the worktree HEAD has moved off it
 #   (g) meta records a corrupt branch= -> refused, never silently reviewed as
 #       the moved worktree HEAD
+#   (h) meta records base=<branch> -> the diff is taken against origin/<branch>,
+#       so the base line's own history is never reviewed as the task's change
 set -u
 
 # shellcheck source=tests/lib.sh
@@ -216,6 +218,31 @@ test_corrupt_recorded_branch_is_refused() {
   pass "fm-review-diff refuses a corrupt recorded ship branch instead of reviewing the wrong content"
 }
 
+test_recorded_base_is_the_diff_base() {
+  local case_dir out
+  case_dir=$(make_case recorded-base)
+  # origin gains a v2 line the default branch does not have, and the task is cut from it.
+  git -C "$case_dir/project" checkout -q -b v2 origin/main
+  printf 'v2-only\n' > "$case_dir/project/v2.txt"
+  git -C "$case_dir/project" add v2.txt
+  git -C "$case_dir/project" commit -qm "v2 line"
+  git -C "$case_dir/project" push -q origin v2
+  git -C "$case_dir/project" checkout -q main
+  git -C "$case_dir/wt" fetch -q origin
+  git -C "$case_dir/wt" reset -q --hard origin/v2
+  printf 'task-on-v2\n' > "$case_dir/wt/feature.txt"
+  git -C "$case_dir/wt" add feature.txt
+  git -C "$case_dir/wt" commit -qm "task work on v2"
+  write_task_meta "$case_dir" "base=v2"
+
+  out=$(run_review_diff "$case_dir" task-x1 2> "$case_dir/stderr")
+
+  assert_contains "$out" 'diff base: origin/v2' "recorded-base: the diff did not use the recorded base"
+  assert_contains "$out" '+task-on-v2' "recorded-base: the task's own change is missing"
+  assert_not_contains "$out" '+v2-only' "recorded-base: the base line's history was reviewed as the task's change"
+  pass "fm-review-diff compares a task recorded with a base against that base"
+}
+
 test_pr_meta_uses_pr_head_not_stale_local
 test_pr_meta_fetches_pull_head_without_recorded_sha
 test_stale_recorded_pr_head_loses_to_fetched_pull_head
@@ -223,3 +250,4 @@ test_no_pr_meta_uses_local_branch
 test_unreachable_pr_head_falls_back_with_warning
 test_recorded_branch_beats_moved_worktree_head
 test_corrupt_recorded_branch_is_refused
+test_recorded_base_is_the_diff_base

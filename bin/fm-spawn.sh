@@ -444,6 +444,19 @@
 # A ship task records the explicit mode/yolo it was passed; a secondmate spawn records
 # mode=secondmate, yolo=off, home=, and projects=; a scout records neither, and both the
 # success line and state/<id>.meta omit them.
+# A ship or scout spawned for a project that registers a base branch
+# (bin/fm-project-mode.sh's base= token) is cut from origin/<base> - the local
+# <base> on a clone without origin - instead of origin's default branch, and
+# records base=<base>; the spawn refuses first unless the brief's machine-readable
+# "Base branch:" line (bin/fm-brief.sh --base) names that same branch, and none
+# when none is registered. That record, not the registry, is what cleanup, local
+# merge, review, promotion, and a relaunch read afterwards, so a later registry
+# edit never retargets a task already cut. A project without the token records
+# no base= line and keeps origin's default branch.
+# A project registering worktree-root=<path> acquires its Treehouse slot with
+# `treehouse get --root <path>`, so its pool lives there rather than in Treehouse's
+# default location; the directory must already exist, and an Orca spawn, which
+# never uses Treehouse, is refused rather than placed elsewhere.
 # Every fresh spawn or relaunch records a new spawn_gen= incarnation token so durable
 # consumers can distinguish a replacement worker that reuses the same task id.
 # When the home session's frozen trace-context decision is enabled (see
@@ -638,6 +651,9 @@ BACKEND_ARG=
 MODE=
 YOLO=
 BRANCH_PREFIX=fm/
+# Registry project facts for ship and scout copies, resolved after the brief.
+BASE_BRANCH=
+WORKTREE_ROOT=
 TRACEPARENT_ARG=
 HARNESS_SET=0
 MODEL_SET=0
@@ -1779,6 +1795,7 @@ if [ "$RELAUNCH" -eq 1 ]; then
       exit 1
     fi
   fi
+  [ "$KIND" = secondmate ] || BASE_BRANCH=$(fm_meta_get "$RELAUNCH_META" base)
   RELAUNCH_WT=$(fm_meta_get "$RELAUNCH_META" worktree)
   [ -n "$RELAUNCH_WT" ] && [ -d "$RELAUNCH_WT" ] || {
     echo "error: task $ID's recorded worktree '${RELAUNCH_WT:-none}' is missing; refusing to relaunch without the local copy its work lives in" >&2
@@ -3090,6 +3107,47 @@ if [ "$KIND" = ship ]; then
   fi
 fi
 
+# Brief/spawn base agreement and worktree location, for ship and scout alike and
+# before any endpoint exists. The registered base (bin/fm-project-mode.sh) is a
+# project fact, so a brief that names a different base - or none where one is
+# registered - would hand the worker instructions for one branch on a copy cut
+# from another. A relaunch keeps the base its record already holds instead.
+if [ "$RELAUNCH" -eq 0 ] && [ "$KIND" != secondmate ]; then
+  PROJ_NAME=$(basename "$PROJ_ABS")
+  if ! BASE_BRANCH=$("$FM_ROOT/bin/fm-project-mode.sh" --base "$PROJ_NAME" 2>/dev/null); then
+    "$FM_ROOT/bin/fm-project-mode.sh" --base "$PROJ_NAME" >/dev/null || true
+    echo "error: $ID cannot launch: the registry entry for $PROJ_NAME does not resolve to a base branch (see the refusal above); correct data/projects.md and spawn again" >&2
+    exit 1
+  fi
+  BRIEF_BASE=$(sed -n 's/^Base branch: //p' "$BRIEF" | head -n 1)
+  if [ "$BRIEF_BASE" != "$BASE_BRANCH" ]; then
+    if [ -n "$BASE_BRANCH" ]; then
+      base_scaffold="--base $BASE_BRANCH"
+      base_registered="registers base branch $BASE_BRANCH"
+    else
+      base_scaffold="no --base flag"
+      base_registered="registers no base branch (origin's default branch)"
+    fi
+    echo "error: base branch mismatch for $ID: $PROJ_NAME $base_registered but $SOURCE_BRIEF records base branch '${BRIEF_BASE:-none}'; keep the filled ## Captain's intent and ## Firstmate spec bodies, remove $SOURCE_BRIEF, re-scaffold it with $base_scaffold, then re-fill those two subsections, so the worker's instructions name the branch its copy is cut from" >&2
+    exit 1
+  fi
+  if ! WORKTREE_ROOT=$("$FM_ROOT/bin/fm-project-mode.sh" --worktree-root "$PROJ_NAME" 2>/dev/null); then
+    "$FM_ROOT/bin/fm-project-mode.sh" --worktree-root "$PROJ_NAME" >/dev/null || true
+    echo "error: $ID cannot launch: the registry entry for $PROJ_NAME does not resolve to a worktree root (see the refusal above); correct data/projects.md and spawn again" >&2
+    exit 1
+  fi
+  if [ -n "$WORKTREE_ROOT" ]; then
+    if [ "$BACKEND" = orca ]; then
+      echo "error: $ID cannot launch on the orca backend: $PROJ_NAME registers worktree-root=$WORKTREE_ROOT, and Orca places its own worktrees rather than using a Treehouse pool there; spawn on a Treehouse-backed backend" >&2
+      exit 1
+    fi
+    [ -d "$WORKTREE_ROOT" ] || {
+      echo "error: $ID cannot launch: $PROJ_NAME registers worktree-root=$WORKTREE_ROOT, which is not an existing directory; create it or correct data/projects.md, then spawn again" >&2
+      exit 1
+    }
+  fi
+fi
+
 BRIEF_DIR_REAL=$(cd "$(dirname "$BRIEF")" && pwd -P)
 BRIEF_REAL="$BRIEF_DIR_REAL/$(basename "$BRIEF")"
 
@@ -3253,8 +3311,8 @@ spawn_worktree_has_origin_config() { # <worktree>
   return 1
 }
 
-freshen_spawn_worktree_base() { # <worktree>
-  local worktree=$1 default target expected actual status
+freshen_spawn_worktree_base() { # <worktree> [<base-branch>]
+  local worktree=$1 base=${2:-} default target expected actual status
   status=$(git -C "$worktree" -c core.quotePath=false status --porcelain) || {
     echo "error: could not inspect pooled worktree '$worktree' before refreshing its base" >&2
     return 1
@@ -3268,24 +3326,33 @@ freshen_spawn_worktree_base() { # <worktree>
     return 1
   fi
   if ! spawn_worktree_has_origin_config "$worktree"; then
-    return 0
-  fi
-  if ! git -C "$worktree" fetch --quiet origin; then
-    echo "error: could not fetch origin for pooled worktree '$worktree'; refusing to launch from a potentially stale base" >&2
-    return 1
-  fi
-  if ! git -C "$worktree" remote set-head origin --auto >/dev/null 2>&1; then
-    echo "error: could not resolve origin's current default branch for pooled worktree '$worktree'; refusing to launch from a potentially stale base" >&2
-    return 1
-  fi
-  default=$(default_branch "$worktree") || {
-    echo "error: could not determine origin's default branch for pooled worktree '$worktree'; refusing to launch from a potentially stale base" >&2
-    return 1
-  }
-  target="origin/$default"
-  if ! git -C "$worktree" fetch --quiet origin "+refs/heads/$default:refs/remotes/origin/$default"; then
-    echo "error: could not fetch '$target' for pooled worktree '$worktree'; refusing to launch from a potentially stale base" >&2
-    return 1
+    # A clone without origin has no remote base to refresh; a registered base
+    # is then the local branch of that name, and otherwise the slot stays as
+    # Treehouse handed it.
+    [ -n "$base" ] || return 0
+    target="refs/heads/$base"
+  else
+    if ! git -C "$worktree" fetch --quiet origin; then
+      echo "error: could not fetch origin for pooled worktree '$worktree'; refusing to launch from a potentially stale base" >&2
+      return 1
+    fi
+    if [ -n "$base" ]; then
+      default=$base
+    else
+      if ! git -C "$worktree" remote set-head origin --auto >/dev/null 2>&1; then
+        echo "error: could not resolve origin's current default branch for pooled worktree '$worktree'; refusing to launch from a potentially stale base" >&2
+        return 1
+      fi
+      default=$(default_branch "$worktree") || {
+        echo "error: could not determine origin's default branch for pooled worktree '$worktree'; refusing to launch from a potentially stale base" >&2
+        return 1
+      }
+    fi
+    target="origin/$default"
+    if ! git -C "$worktree" fetch --quiet origin "+refs/heads/$default:refs/remotes/origin/$default"; then
+      echo "error: could not fetch '$target' for pooled worktree '$worktree'; refusing to launch from a potentially stale base" >&2
+      return 1
+    fi
   fi
   expected=$(git -C "$worktree" rev-parse --verify --quiet "$target^{commit}" 2>/dev/null) || {
     echo "error: '$target' is not a commit for pooled worktree '$worktree'; refusing to launch from a potentially stale base" >&2
@@ -4127,7 +4194,11 @@ if [ "$RELAUNCH" -eq 1 ]; then
   fi
   [ "$KIND" = secondmate ] || validate_spawn_worktree "relaunch" "$T"
 elif [ "$KIND" != secondmate ] && [ "$BACKEND" != orca ]; then
-  spawn_send_text_line "$WT_TARGET" 'treehouse get'
+  if [ -n "$WORKTREE_ROOT" ]; then
+    spawn_send_text_line "$WT_TARGET" "treehouse get --root '${WORKTREE_ROOT//\'/\'\\\'\'}'"
+  else
+    spawn_send_text_line "$WT_TARGET" 'treehouse get'
+  fi
 
   # Wait for the treehouse subshell: the pane's cwd moves from the project to the worktree.
   # Target the stable window id, not the name: if the name is ever lost (e.g. an
@@ -4209,7 +4280,7 @@ elif [ "$KIND" != secondmate ] && [ "$BACKEND" != orca ]; then
   fi
 fi
 if [ "$RELAUNCH" -eq 0 ] && [ "$KIND" != secondmate ]; then
-  freshen_spawn_worktree_base "$WT" || exit 1
+  freshen_spawn_worktree_base "$WT" "$BASE_BRANCH" || exit 1
 fi
 
 # Pre-register Claude's workspace trust for the directory this launch starts in,
@@ -4761,7 +4832,7 @@ SPAWN_META_PATH=$SPAWN_META_TMP
 preserve_relaunch_meta() {
   awk -F= '
     BEGIN {
-      split("window endpoint_task_id worktree project harness kind mode yolo branch tasktmp model effort account account_provider busy_gen spawn_gen traceparent backend herdr_session herdr_workspace_id herdr_tab_id herdr_pane_id zellij_session zellij_tab_id zellij_pane_id orca_worktree_id terminal cmux_workspace_id cmux_surface_id home projects control_relaunch_tx", keys, " ")
+      split("window endpoint_task_id worktree project harness kind mode yolo branch base tasktmp model effort account account_provider busy_gen spawn_gen traceparent backend herdr_session herdr_workspace_id herdr_tab_id herdr_pane_id zellij_session zellij_tab_id zellij_pane_id orca_worktree_id terminal cmux_workspace_id cmux_surface_id home projects control_relaunch_tx", keys, " ")
       for (i in keys) owned[keys[i]] = 1
     }
     !($1 in owned)
@@ -4777,6 +4848,7 @@ preserve_relaunch_meta() {
   [ -z "$MODE" ] || echo "mode=$MODE"
   [ -z "$YOLO" ] || echo "yolo=$YOLO"
   [ -z "${BRANCH:-}" ] || echo "branch=$BRANCH"
+  [ -z "$BASE_BRANCH" ] || echo "base=$BASE_BRANCH"
   echo "tasktmp=$TASK_TMP"
   echo "model=${MODEL:-default}"
   echo "effort=${EFFORT:-default}"

@@ -9,6 +9,12 @@
 # With --forge it prints one word instead: the project's registered forge,
 # none|gerrit. The forge is asked for explicitly, so the default output stays
 # the same two words for every project, bound or not.
+# --base prints the project's registered base branch, or an empty line when it
+# registers none, is unregistered, or the registry is absent; empty means
+# origin's default branch, so every existing installation is unchanged.
+# --worktree-root prints the project's registered Treehouse worktree root, or an
+# empty line under the same three conditions; empty means Treehouse's own
+# default pool location.
 #
 # MECHANICAL CONSUMERS ONLY. This answers "what posture did the captain register
 # for this project", never "how does this task ship". A task's delivery mode,
@@ -20,7 +26,9 @@
 # run no-mistakes init), bin/fm-spawn.sh's advisory registry-deviation notice,
 # and --forge for bin/fm-spawn.sh's forge agreement and yolo refusal and for
 # bin/fm-promote.sh, which takes the forge binding from here because it is a
-# project fact rather than a task choice.
+# project fact rather than a task choice. --base is read by bin/fm-spawn.sh for
+# every ship and scout spawn and by bin/fm-fleet-sync.sh, and --worktree-root by
+# bin/fm-spawn.sh's Treehouse acquisition; both are project facts too.
 #
 # Registry line format (data/projects.md):
 #   - <name> - <desc> (added <date>)                                 -> no-mistakes off fm/  (legacy default)
@@ -28,12 +36,14 @@
 #   - <name> [<mode> +yolo] - <desc> (added <date>)                  -> <mode> on fm/
 #   - <name> [<mode> +yolo branch=<prefix>] - <desc> (added <date>)  -> <mode> <yolo> <prefix>
 #   - <name> [<mode> forge=gerrit] - <desc> (added <date>)           -> <mode> off, --forge gerrit
+#   - <name> [<mode> base=v2 worktree-root=/store/wt] - <desc> (added <date>)
+#                                                     -> <mode> off, --base v2, --worktree-root /store/wt
 #   <name> may contain spaces; it ends at the literal " [" or " - " that follows it.
-#   Bracket tokens are order-independent: +yolo, branch=<prefix>, and forge=<value>
-#   are recognized by their own shape wherever they appear, and whichever token is
-#   left over is the mode. <prefix> must not contain a space; an empty override
-#   ("branch=") resolves to "" for a bare "<task-id>" ship branch instead of the
-#   legacy "fm/<task-id>".
+#   Bracket tokens are order-independent: +yolo, branch=<prefix>, forge=<value>,
+#   base=<branch>, and worktree-root=<path> are recognized by their own shape
+#   wherever they appear, and whichever token is left over is the mode. No token
+#   value may contain a space. An empty prefix override ("branch=") resolves to ""
+#   for a bare "<task-id>" ship branch instead of the legacy "fm/<task-id>".
 #
 # Registered modes:
 #   no-mistakes            full pipeline -> PR -> configured merge authority (default)
@@ -66,6 +76,30 @@
 #   lands by fast-forwarding local main, which on a review-server project
 #   advances it with content the server has never seen
 #   (docs/gerrit-forge-integration.md section 3).
+# base=<branch> (orthogonal) = the branch the project integrates on when it is not
+#   origin's default branch, e.g. a long-lived release line while the default
+#   branch is frozen. Every task copy, ship or scout, is cut from origin/<branch>
+#   (the local <branch> on a clone without origin), every PR targets it, a
+#   local-only landing fast-forwards it, and fleet sync keeps the clone on it.
+#   bin/fm-spawn.sh records the base it cut a task from as base= in the task
+#   record, so cleanup, local merge, review, and promotion read that task's own
+#   base without consulting this registry again. bin/fm-brief.sh takes it as an
+#   explicit --base flag and bin/fm-spawn.sh refuses a brief that disagrees.
+#   A malformed value - empty, or not a valid Git branch name - is REFUSED in
+#   the --base output form: nothing on stdout, exit status 3, the token named,
+#   because launching on origin's default branch instead is exactly the wrong
+#   code the binding exists to prevent.
+# worktree-root=<path> (orthogonal) = the directory Treehouse keeps this project's
+#   pool under, passed as `treehouse get --root <path>` (Treehouse's own flag,
+#   overriding TREEHOUSE_ROOT and its config) so no file is ever written into the
+#   clone to select it. Treehouse nests the pool inside it, so a slot lands at
+#   <path>/.treehouse/<repo>-<id>/<slot>/<repo>. Treehouse returns and recognizes a
+#   slot from its own path, so only acquisition needs it. An empty or relative value is REFUSED in the
+#   --worktree-root output form the same way: Treehouse resolves a relative root
+#   from the repository root, which would put the pool inside the clone.
+#
+# --base and --worktree-root answer only their own token, and the default,
+# --raw, --branch-prefix, and --forge forms never refuse on either.
 #
 # A registered `forge=gerrit` project reports yolo=off with an explicit stderr
 # refusal, on the captain's decision of 2026-09-15: a Gerrit Code-Review+2 is a
@@ -79,9 +113,9 @@
 # An unknown/missing project or unknown mode falls back to "no-mistakes off" (or
 # "fm/" under --branch-prefix) and warns to stderr, so a typo never silently
 # drops the gate. Other annotation tokens are ignored, as they always were, keyed
-# ones included: a `<key>=<value>` token whose key is neither exactly `forge` nor
-# `branch` resolves as it did before the forge existed, and in the mode slot it
-# is read as an unknown mode. A key one or two edits from `forge` (such as
+# ones included: a `<key>=<value>` token whose key is none of exactly `forge`,
+# `branch`, `base`, or `worktree-root` resolves as it did before the forge
+# existed, and in the mode slot it is read as an unknown mode. A key one or two edits from `forge` (such as
 # `forg=` or `Forge=`) is still ignored, with one stderr warning naming the token
 # and the forge=gerrit spelling. The one refusal is a malformed forge binding - a
 # `forge=` token whose value is empty or outside the closed set - which is
@@ -93,7 +127,7 @@
 # to the forge binding, so it prints even when the forge token is malformed;
 # every path that reads the forge binding (default, --forge, and spawn's
 # forge-agreement check) still refuses.
-# Usage: fm-project-mode.sh [--raw|--branch-prefix|--forge] <project-name>
+# Usage: fm-project-mode.sh [--raw|--branch-prefix|--forge|--base|--worktree-root] <project-name>
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -104,27 +138,38 @@ REG="$DATA/projects.md"
 RAW=0
 BRANCH_PREFIX_QUERY=0
 WANT_FORGE=0
+# Which single-token query, if any: base or worktree-root.
+TOKEN_QUERY=
 case "${1:-}" in
   --raw) RAW=1; shift ;;
   --branch-prefix) BRANCH_PREFIX_QUERY=1; shift ;;
   --forge) WANT_FORGE=1; shift ;;
+  --base) TOKEN_QUERY=base; shift ;;
+  --worktree-root) TOKEN_QUERY=worktree-root; shift ;;
 esac
-NAME=${1:?usage: fm-project-mode.sh [--raw|--branch-prefix|--forge] <project-name>}
+NAME=${1:?usage: fm-project-mode.sh [--raw|--branch-prefix|--forge|--base|--worktree-root] <project-name>}
+
+# What an unregistered project resolves to, in the requested output form.
+print_unregistered_default() {
+  if [ -n "$TOKEN_QUERY" ]; then
+    echo ""
+  elif [ "$BRANCH_PREFIX_QUERY" -eq 1 ]; then
+    echo "fm/"
+  elif [ "$WANT_FORGE" -eq 1 ]; then echo none; else echo "no-mistakes off"; fi
+}
 
 if [ ! -f "$REG" ]; then
   echo "warn: no registry at $REG; defaulting $NAME to no-mistakes off" >&2
-  if [ "$BRANCH_PREFIX_QUERY" -eq 1 ]; then
-    echo "fm/"
-  elif [ "$WANT_FORGE" -eq 1 ]; then echo none; else echo "no-mistakes off"; fi
+  print_unregistered_default
   exit 0
 fi
 
 # awk emits one "near <token>" line per keyed token whose key is a near miss of
-# `forge`, then "posture <mode> <yolo> <branch-prefix> <forge>" (branch-prefix is
-# the raw prefix, defaulting to "fm/"; forge is `none` or the whole `forge=<value>`
-# token, so an empty value survives the split), or nothing if the project is
-# absent. Every other token beside the mode is ignored, exactly as before either
-# annotation existed.
+# `forge`, then "posture <mode> <yolo> <forge> <base> <worktree-root> <branch-prefix>"
+# (forge, base, and worktree-root are each `none` or their whole `<key>=<value>`
+# token, so an empty value survives the split; branch-prefix is the raw prefix,
+# defaulting to "fm/"), or nothing if the project is absent. Every other token
+# beside the mode is ignored, exactly as before any annotation existed.
 parsed=$(awk -v n="$NAME" '
   function dist(x, y,   i, j, lx, ly, d, c, v) {
     lx = length(x); ly = length(y);
@@ -149,22 +194,25 @@ parsed=$(awk -v n="$NAME" '
     if (substr($0, 1, plen) != prefix) next
     after = substr($0, plen + 1);
     if (after != "" && substr(after, 1, 2) != " [" && substr(after, 1, 3) != " - ") next
-    mode="no-mistakes"; yolo="off"; branch="fm/"; forge="none";
+    mode="no-mistakes"; yolo="off"; branch="fm/"; forge="none"; base="none"; root="none";
     if (substr(after, 1, 2) == " [") {
       s="";
       nk = split(after, rest, " ");
       for (i=1; i<=nk; i++) { s = s (s==""?"":" ") rest[i]; if (rest[i] ~ /\]$/) break }
       gsub(/^\[|\]$/, "", s);           # strip the surrounding brackets
       k = split(s, a, " ");
-      # Tokens are order-independent: +yolo, branch=<prefix>, and forge=<value>
-      # are recognized by their own shape wherever they appear, keyed tokens
-      # that are neither are ignored (with a near-miss warning for the forge
-      # spelling), and the first token left over is the mode.
+      # Tokens are order-independent: +yolo, branch=<prefix>, forge=<value>,
+      # base=<branch>, and worktree-root=<path> are recognized by their own
+      # shape wherever they appear, other keyed tokens are ignored (with a
+      # near-miss warning for the forge spelling), and the first token left
+      # over is the mode.
       mode_set = 0
       for (j=1; j<=k; j++) {
         if (a[j]=="+yolo") { yolo="on"; continue }
         if (a[j] ~ /^branch=/) { branch = substr(a[j], 8); continue }
         if (a[j] ~ /^forge=/) { forge = a[j]; continue }
+        if (a[j] ~ /^base=/) { base = a[j]; continue }
+        if (a[j] ~ /^worktree-root=/) { root = a[j]; continue }
         if (a[j] ~ /^[^=]+=/) {
           key = substr(a[j], 1, index(a[j], "=") - 1);
           e = dist(key, "forge");
@@ -177,15 +225,13 @@ parsed=$(awk -v n="$NAME" '
     }
     # branch is printed LAST: an empty branch= override must survive as an
     # empty final field, which only holds when nothing follows it.
-    print "posture", mode, yolo, forge, branch; exit
+    print "posture", mode, yolo, forge, base, root, branch; exit
   }
 ' "$REG")
 
 if [ -z "$parsed" ]; then
   echo "warn: project \"$NAME\" not in registry; defaulting to no-mistakes off" >&2
-  if [ "$BRANCH_PREFIX_QUERY" -eq 1 ]; then
-    echo "fm/"
-  elif [ "$WANT_FORGE" -eq 1 ]; then echo none; else echo "no-mistakes off"; fi
+  print_unregistered_default
   exit 0
 fi
 
@@ -198,12 +244,37 @@ while IFS=' ' read -r kind rest; do
 done <<EOF
 $parsed
 EOF
-while IFS=' ' read -r m y f b; do
-  mode=$m; yolo=$y; rest_forge=$f; branch=$b
+while IFS=' ' read -r m y f bs r b; do
+  mode=$m; yolo=$y; rest_forge=$f; rest_base=$bs; rest_root=$r; branch=$b
 done <<EOF
 $posture
 EOF
 forge=${rest_forge:-none}
+
+# The single-token queries answer before any posture check, so a refusal of
+# another token never hides them and they never refuse on another token.
+case "$TOKEN_QUERY" in
+  base)
+    if [ "$rest_base" = none ]; then echo ""; exit 0; fi
+    base=${rest_base#base=}
+    # --branch rejects a leading dash and HEAD; the full-ref form rejects @{...}.
+    if [ -z "$base" ] || [ "$base" = @ ] \
+      || ! git check-ref-format --branch "$base" >/dev/null 2>&1 \
+      || ! git check-ref-format "refs/heads/$base" >/dev/null 2>&1; then
+      echo "refused: malformed base branch \"$rest_base\" registered for $NAME in $REG; register base=<branch> with a valid Git branch name, or drop the token to integrate on origin's default branch; correct the registry entry" >&2
+      exit 3
+    fi
+    echo "$base"
+    exit 0 ;;
+  worktree-root)
+    if [ "$rest_root" = none ]; then echo ""; exit 0; fi
+    root=${rest_root#worktree-root=}
+    case "$root" in
+      /*) echo "$root"; exit 0 ;;
+    esac
+    echo "refused: worktree root \"$rest_root\" registered for $NAME in $REG is not an absolute path; Treehouse resolves a relative root from the repository root, which would put the pool inside the clone; register worktree-root=/<absolute path>, or drop the token for Treehouse's default pool; correct the registry entry" >&2
+    exit 3 ;;
+esac
 case "$mode" in
   no-mistakes|direct-PR|local-only|no-mistakes-prod-only) ;;
   *) echo "warn: unknown mode \"$mode\" for $NAME; defaulting to no-mistakes off" >&2; mode=no-mistakes; yolo=off; branch=fm/ ;;

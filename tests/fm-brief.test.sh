@@ -1258,6 +1258,93 @@ test_branch_prefix_command_is_shell_safe() {
   pass "fm-brief.sh: ref-format-valid shell metacharacters stay literal in generated branch commands"
 }
 
+# A registered base branch reaches every place a brief names the branch the work
+# starts from and lands on: the machine-readable Setup line spawn checks, the
+# setup sentence, rule 1, and each mode's Definition of done. Omitted, nothing
+# names a base at all, so a project without one keeps today's brief.
+test_base_branch_reaches_every_generated_section() {
+  local home id brief
+  home="$TMP_ROOT/base-branch-home"
+  mkdir -p "$home/data"
+
+  for id_mode in "brief-base-none-nm:no-mistakes" "brief-base-none-lo:local-only" "brief-base-none-scout:scout"; do
+    id=${id_mode%%:*}
+    if [ "${id_mode##*:}" = scout ]; then
+      FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" some-proj --scout >/dev/null 2>&1 || fail "$id: scaffold without --base failed"
+    else
+      FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" some-proj --mode "${id_mode##*:}" >/dev/null 2>&1 || fail "$id: scaffold without --base failed"
+    fi
+    brief="$home/data/$id/brief.md"
+    assert_no_grep 'Base branch:' "$brief" "$id: a brief without --base must not record a base"
+    assert_grep 'at a detached HEAD on a clean default branch.' "$brief" "$id: a brief without --base changed its setup line"
+    assert_no_grep '--base-branch' "$brief" "$id: a brief without --base named a no-mistakes base"
+  done
+
+  id="brief-base-nm"
+  FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" some-proj --mode no-mistakes --base v2 >/dev/null 2>&1 || fail "no-mistakes: --base v2 scaffold failed"
+  brief="$home/data/$id/brief.md"
+  grep -qx 'Base branch: v2' "$brief" || fail "no-mistakes: the machine-readable base line is missing"
+  assert_grep "clean copy of this project's base branch, not of origin's default branch" "$brief" "no-mistakes: the setup line still names the default branch"
+  # shellcheck disable=SC2016  # literal backticks stay unexpanded
+  assert_grep 'Never push to the default branch or to `v2`' "$brief" "no-mistakes: rule 1 does not protect the base branch"
+  # shellcheck disable=SC2016
+  assert_grep 'pass `--base-branch v2` on the `no-mistakes axi run` that starts the run' "$brief" "no-mistakes: the run is not told its base branch"
+
+  id="brief-base-dp"
+  FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" some-proj --mode direct-PR --base v2 >/dev/null 2>&1 || fail "direct-PR: --base v2 scaffold failed"
+  brief="$home/data/$id/brief.md"
+  grep -qx 'Base branch: v2' "$brief" || fail "direct-PR: the machine-readable base line is missing"
+  # shellcheck disable=SC2016
+  assert_grep 'open a PR with `gh-axi pr create --base v2`' "$brief" "direct-PR: the PR is not opened against the base branch"
+
+  id="brief-base-lo"
+  FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" some-proj --mode local-only --base v2 >/dev/null 2>&1 || fail "local-only: --base v2 scaffold failed"
+  brief="$home/data/$id/brief.md"
+  # shellcheck disable=SC2016
+  assert_grep 'firstmate merges it into local `v2`' "$brief" "local-only: the landing branch is not the base"
+  # shellcheck disable=SC2016
+  assert_grep 'Keep your branch a clean fast-forward onto local `v2`' "$brief" "local-only: the rebase target is not the base"
+  # shellcheck disable=SC2016
+  assert_no_grep 'local `main`' "$brief" "local-only: a base brief still names local main"
+
+  id="brief-base-gerrit"
+  FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" some-proj --mode direct-PR --forge gerrit --base v2 >/dev/null 2>&1 || fail "gerrit: --base v2 scaffold failed"
+  brief="$home/data/$id/brief.md"
+  # shellcheck disable=SC2016
+  assert_grep 'gerrit-axi publish --squash --json --branch v2`' "$brief" "gerrit: the change is not published to the base branch"
+
+  id="brief-base-scout"
+  FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" some-proj --scout --base release/1.0 >/dev/null 2>&1 || fail "scout: --base scaffold failed"
+  brief="$home/data/$id/brief.md"
+  grep -qx 'Base branch: release/1.0' "$brief" || fail "scout: a scout copy must record its base too"
+  pass "fm-brief.sh: --base reaches the setup, rule 1, and every Definition of done, and its absence changes nothing"
+}
+
+test_base_branch_is_refused_where_it_cannot_apply() {
+  local home out status label args expect
+  home="$TMP_ROOT/base-branch-refused-home"
+  mkdir -p "$home/data"
+  while IFS='|' read -r label args expect; do
+    [ -n "$label" ] || continue
+    # shellcheck disable=SC2086  # args is an intentional word-split arg list
+    out=$(FM_HOME="$home" "$ROOT/bin/fm-brief.sh" $args 2>&1)
+    status=$?
+    [ "$status" -ne 0 ] || fail "$label: expected a non-zero exit"
+    assert_contains "$out" "$expect" "$label: refusal did not explain why"
+    assert_absent "$home/data/${args%% *}/brief.md" "$label: refused scaffold still wrote a brief"
+  done <<'ROWS'
+base on a secondmate charter|brief-baseref-s1 --secondmate --no-projects --base v2|--base applies only to ship and scout briefs
+base that is not a branch name|brief-baseref-s2 some-proj --mode no-mistakes --base=-v2|--base must name a valid git branch
+base that is empty|brief-baseref-s3 some-proj --scout --base=|--base must name a valid git branch
+ROWS
+  mkdir -p "$home/config"
+  printf 'Base branch: v2\n' > "$home/config/brief-include.md"
+  out=$(FM_HOME="$home" "$ROOT/bin/fm-brief.sh" brief-baseref-s4 some-proj --scout 2>&1) && fail "an include carrying a base line must be refused"
+  assert_contains "$out" "must not carry a 'Base branch: ' line" "the include refusal did not explain why"
+  assert_absent "$home/data/brief-baseref-s4/brief.md" "a refused include still wrote a brief"
+  pass "fm-brief.sh: --base is refused on a charter or an invalid branch, and a home include cannot forge a base line"
+}
+
 test_worker_role_scope
 
 # Rule 2 governs file edits rather than pool administration, so every crewmate
@@ -1359,3 +1446,5 @@ test_branch_prefix_is_refused_where_it_does_not_apply
 test_branch_prefix_value_is_validated
 test_branch_prefix_command_is_shell_safe
 test_crewmate_scaffolds_forbid_pool_administration
+test_base_branch_reaches_every_generated_section
+test_base_branch_is_refused_where_it_cannot_apply
