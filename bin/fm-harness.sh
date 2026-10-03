@@ -161,7 +161,7 @@ harness_marker() {
 ancestry_names_omp() {
   local pid=$$ comm
   for _ in 1 2 3 4 5 6 7 8; do
-    comm=$(ps -o comm= -p "$pid" 2>/dev/null) || return 1
+    comm=$(ps -ww -o comm= -p "$pid" 2>/dev/null) || return 1
     [ "$(basename -- "$comm")" = omp ] && return 0
     pid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
     [ -n "$pid" ] && [ "$pid" -gt 1 ] || return 1
@@ -179,7 +179,7 @@ ancestry_names_omp() {
 #          used only when no marker is present.
 harness_process_verdict() {  # <pid>
   local pid=$1 comm args argv0
-  comm=$(ps -o comm= -p "$pid" 2>/dev/null) || return 0
+  comm=$(ps -ww -o comm= -p "$pid" 2>/dev/null) || return 0
   argv0=$(fm_cursor_argv0_for_pid "$pid" "$comm" 2>/dev/null || true)
   if fm_cursor_process_matches "$comm" '' "$argv0"; then
     echo "comm cursor"
@@ -241,7 +241,7 @@ harness_process_verdict() {  # <pid>
     devin) echo "comm devin"; return ;;
     node*|python*)
       # Bare interpreter: match the harness name in its script path.
-      args=$(ps -o args= -p "$pid" 2>/dev/null)
+      args=$(ps -ww -o args= -p "$pid" 2>/dev/null)
       if fm_gemini_args_are_gemini "$args"; then
         echo "args gemini"
         return

@@ -250,7 +250,7 @@ fm_backend_tmux_foreground_comms() {  # <target>
   local target=$1 tty pid pgid tpgid comm
   tty=$(tmux display-message -p -t "$target" '#{pane_tty}' 2>/dev/null) || return 0
   [ -n "$tty" ] || return 0
-  LC_ALL=C ps -t "${tty#/dev/}" -o pid=,pgid=,tpgid=,comm= 2>/dev/null \
+  LC_ALL=C ps -ww -t "${tty#/dev/}" -o pid=,pgid=,tpgid=,comm= 2>/dev/null \
     | while read -r pid pgid tpgid comm; do
         [ -n "$comm" ] || continue
         [ "$pgid" = "$tpgid" ] || continue
@@ -265,11 +265,11 @@ fm_backend_tmux_foreground_args() {  # <target>
   local target=$1 tty pid pgid tpgid comm args
   tty=$(tmux display-message -p -t "$target" '#{pane_tty}' 2>/dev/null) || return 0
   [ -n "$tty" ] || return 0
-  LC_ALL=C ps -t "${tty#/dev/}" -o pid=,pgid=,tpgid=,comm= 2>/dev/null \
+  LC_ALL=C ps -ww -t "${tty#/dev/}" -o pid=,pgid=,tpgid=,comm= 2>/dev/null \
     | while read -r pid pgid tpgid comm; do
         [ -n "$comm" ] || continue
         [ "$pgid" = "$tpgid" ] || continue
-        args=$(LC_ALL=C ps -p "$pid" -o args= 2>/dev/null) || continue
+        args=$(LC_ALL=C ps -ww -p "$pid" -o args= 2>/dev/null) || continue
         [ -n "$args" ] && printf '%s\n' "$args"
       done
 }
@@ -278,7 +278,7 @@ fm_backend_tmux_foreground_pids() {  # <target>
   local target=$1 tty pid pgid tpgid comm
   tty=$(tmux display-message -p -t "$target" '#{pane_tty}' 2>/dev/null) || return 0
   [ -n "$tty" ] || return 0
-  LC_ALL=C ps -t "${tty#/dev/}" -o pid=,pgid=,tpgid=,comm= 2>/dev/null \
+  LC_ALL=C ps -ww -t "${tty#/dev/}" -o pid=,pgid=,tpgid=,comm= 2>/dev/null \
     | while read -r pid pgid tpgid comm; do
         [ -n "$comm" ] || continue
         [ "$pgid" = "$tpgid" ] || continue
@@ -290,11 +290,11 @@ fm_backend_tmux_foreground_argv0s() {  # <target>
   local target=$1 tty pid pgid tpgid comm args argv0
   tty=$(tmux display-message -p -t "$target" '#{pane_tty}' 2>/dev/null) || return 0
   [ -n "$tty" ] || return 0
-  LC_ALL=C ps -t "${tty#/dev/}" -o pid=,pgid=,tpgid=,comm= 2>/dev/null \
+  LC_ALL=C ps -ww -t "${tty#/dev/}" -o pid=,pgid=,tpgid=,comm= 2>/dev/null \
     | while read -r pid pgid tpgid comm; do
         [ -n "$comm" ] || continue
         [ "$pgid" = "$tpgid" ] || continue
-        args=$(LC_ALL=C ps -p "$pid" -o args= 2>/dev/null) || continue
+        args=$(LC_ALL=C ps -ww -p "$pid" -o args= 2>/dev/null) || continue
         args=${args#"${args%%[![:space:]]*}"}
         argv0=${args%%[[:space:]]*}
         [ -n "$argv0" ] && printf '%s\n' "$argv0"

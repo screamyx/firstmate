@@ -116,8 +116,8 @@ fm_harness_process_matches() {  # <comm> <args>
 fm_harness_ancestry_pids() {
   local pid=$$ comm args extending=0 printed=0
   for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16; do
-    comm=$(ps -o comm= -p "$pid" 2>/dev/null) || break
-    args=$(ps -o args= -p "$pid" 2>/dev/null)
+    comm=$(ps -ww -o comm= -p "$pid" 2>/dev/null) || break
+    args=$(ps -ww -o args= -p "$pid" 2>/dev/null)
     if fm_harness_process_matches "$comm" "$args"; then
       printf '%s\n' "$pid"
       printed=1
@@ -164,8 +164,8 @@ EOF
 fm_harness_pid_alive() {
   local pid=$1 comm args
   kill -0 "$pid" 2>/dev/null || return 1
-  comm=$(ps -o comm= -p "$pid" 2>/dev/null) || return 1
-  args=$(ps -o args= -p "$pid" 2>/dev/null)
+  comm=$(ps -ww -o comm= -p "$pid" 2>/dev/null) || return 1
+  args=$(ps -ww -o args= -p "$pid" 2>/dev/null)
   fm_harness_process_matches "$comm" "$args"
 }
 
@@ -205,8 +205,8 @@ fm_session_lock_trusted_session_id() {  # [<ancestry-pids>]
   fi
   while IFS= read -r pid; do
     [ "$pid" = "$claude_pid" ] || continue
-    comm=$(ps -o comm= -p "$pid" 2>/dev/null) || return 1
-    args=$(ps -o args= -p "$pid" 2>/dev/null)
+    comm=$(ps -ww -o comm= -p "$pid" 2>/dev/null) || return 1
+    args=$(ps -ww -o args= -p "$pid" 2>/dev/null)
     fm_harness_process_matches "$comm" "$args" || return 1
     [ "$FM_HARNESS_IS_CLAUDE" -eq 1 ] || return 1
     printf '%s\n' "$id"
@@ -373,7 +373,7 @@ fm_session_lock_inspect() {  # <state>
     fi
     return 0
   fi
-  if ps -o comm= -p "$pid" >/dev/null 2>&1; then
+  if ps -ww -o comm= -p "$pid" >/dev/null 2>&1; then
     FM_LOCK_INSPECT_STATE=unknown
     return 0
   fi

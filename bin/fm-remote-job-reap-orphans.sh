@@ -92,7 +92,7 @@ reap_orphans() {
   local uid scan pid command live root own_pgid pgid
   uid=$(id -u 2>/dev/null || true)
   case "$uid" in ''|*[!0-9]*) reap_die "cannot resolve the current uid" ;; esac
-  scan=$(ps -u "$uid" -o pid=,command= 2>/dev/null) ||
+  scan=$(ps -ww -u "$uid" -o pid=,command= 2>/dev/null) ||
     reap_die "cannot scan this account's processes for remote job workers"
   own_pgid=$(fm_remote_job_process_pgid "$$" 2>/dev/null || true)
   # ps pads the pid column to the widest pid on the host, so the fields are read

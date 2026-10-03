@@ -212,7 +212,7 @@ fm_backend_detect_cmux_app_is_ancestor() {
     if [ -n "$cmux_pid" ] && [ "$pid" = "$cmux_pid" ]; then
       return 0
     fi
-    comm=$(ps -o comm= -p "$pid" 2>/dev/null) || comm=""
+    comm=$(ps -ww -o comm= -p "$pid" 2>/dev/null) || comm=""
     comm="${comm#"${comm%%[![:space:]]*}"}"
     comm="${comm%"${comm##*[![:space:]]}"}"
     [ -n "$comm" ] || return 1

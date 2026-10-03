@@ -944,7 +944,7 @@ async function pidIdentity(pid) {
     }
     return `linux-starttime=${fields[19]} cmdline-hex=${cmdline.toString("hex")}`;
   }
-  return capturedProcessOutput("/bin/ps", ["-p", String(pid), "-o", "lstart=", "-o", "command="]);
+  return capturedProcessOutput("/bin/ps", ["-ww", "-p", String(pid), "-o", "lstart=", "-o", "command="]);
 }
 
 async function selfIdentity() {
@@ -958,7 +958,7 @@ async function selfIdentity() {
 }
 
 async function processGroupId(pid) {
-  const output = await capturedProcessOutput("/bin/ps", ["-p", String(pid), "-o", "pgid="]);
+  const output = await capturedProcessOutput("/bin/ps", ["-ww", "-p", String(pid), "-o", "pgid="]);
   if (!/^[0-9]+$/u.test(output)) fail("process-identity-uncertain", "cannot inspect extension process group");
   return Number(output);
 }
@@ -971,7 +971,7 @@ async function processIdentityState(pid, expected) {
         const cmdline = await readFile(`/proc/${pid}/cmdline`);
         return cmdline.includes(Buffer.from(expected, "utf8")) ? 0 : 2;
       }
-      const command = await capturedProcessOutput("/bin/ps", ["-p", String(pid), "-o", "command="]);
+      const command = await capturedProcessOutput("/bin/ps", ["-ww", "-p", String(pid), "-o", "command="]);
       return command.includes(expected) ? 0 : 2;
     } catch {
       return pidAlive(pid) ? 2 : 1;
@@ -998,7 +998,7 @@ async function barrierProcessGroupState(pid, expectedIdentity) {
       if (fields.length < 3 || Number(fields[2]) !== pid || !argv.includes(LAUNCH_BARRIER) || !argv.includes(token)) return 2;
       return 0;
     }
-    const output = await capturedProcessOutput("/bin/ps", ["-p", String(pid), "-o", "pgid=", "-o", "command="]);
+    const output = await capturedProcessOutput("/bin/ps", ["-ww", "-p", String(pid), "-o", "pgid=", "-o", "command="]);
     const match = output.match(/^\s*([0-9]+)\s+(.+)$/su);
     if (!match || Number(match[1]) !== pid || !match[2].includes(LAUNCH_BARRIER) || !match[2].includes(token)) return 2;
     return 0;

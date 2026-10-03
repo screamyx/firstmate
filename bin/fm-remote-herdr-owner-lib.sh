@@ -69,7 +69,7 @@ fm_remote_herdr_socket_owner() { # <socket-path>
   [ -n "$candidates" ] || return 0
   while IFS= read -r candidate; do
     [ -n "$candidate" ] || continue
-    cmd=$(ps -o command= -p "$candidate" 2>/dev/null || true)
+    cmd=$(ps -ww -o command= -p "$candidate" 2>/dev/null || true)
     case " $cmd " in *' server '*) printf '%s\n' "$candidate"; return 0 ;; esac
   done <<EOF2
 $candidates
@@ -92,7 +92,7 @@ fm_remote_herdr_process_ancestry() { # <pid>
   while [ "$depth" -lt 64 ]; do
     case "$pid" in ''|*[!0-9]*) return 0 ;; esac
     [ "$pid" -gt 0 ] || return 0
-    line=$(ps -o ppid=,command= -p "$pid" 2>/dev/null) || return 0
+    line=$(ps -ww -o ppid=,command= -p "$pid" 2>/dev/null) || return 0
     [ -n "$line" ] || return 0
     ppid=$(printf '%s' "$line" | awk '{print $1}')
     printf '%s %s\n' "$pid" "$(printf '%s' "$line" | sed 's/^[[:space:]]*[0-9]*[[:space:]]*//')"

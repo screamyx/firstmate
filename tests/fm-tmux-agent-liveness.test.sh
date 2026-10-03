@@ -254,6 +254,13 @@ if [ -n "$CC_BIN" ] &&
   assert_sources_disagree "$SESSION:titled" "version-string process name"
   pass "tmux liveness: a version-named executable under a harness install path classifies alive"
 
+  # Claude Code runs hooks with a 4x2 display size. There the title still reads
+  # the version string, so the install path in argv[0] is the only surviving
+  # source, and an unpinned `ps` would cut it to its first four characters.
+  COLUMNS=4 LINES=2 wait_for_state "$SESSION:titled" alive \
+    || fail "a version-named executable under a harness install path must classify alive under a 4x2 width"
+  pass "tmux liveness: a version-named executable under a harness install path classifies alive under a 4x2 width"
+
   new_window path-decoy "$LAB/bin/decoy/2.1.220"
   wait_for_state "$SESSION:path-decoy" ambiguous \
     || fail "a version-named executable without a whole harness path component must stay ambiguous"

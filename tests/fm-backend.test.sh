@@ -83,7 +83,8 @@ exit 0
 SH
   cat > "$fb/ps" <<'SH'
 #!/bin/sh
-# supports exactly: ps -o ppid= -p <pid> / ps -o comm= -p <pid>
+# supports exactly: ps -o ppid= -p <pid> / ps -ww -o comm= -p <pid>
+[ "${1:-}" != -ww ] || shift
 field=${2:-} pid=${4:-}
 while IFS="	" read -r tpid tppid tcomm; do
   if [ "$tpid" = "$pid" ]; then

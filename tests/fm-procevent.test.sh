@@ -2782,6 +2782,8 @@ SH
   kill -STOP "$POST_TERM_RUNNER" || fail "the post-TERM fixture could not keep its leader alive"
   cat > "$POST_TERM_BIN/ps" <<SH
 #!/usr/bin/env bash
+args=("\$@")
+[ "\${1-}" != -ww ] || shift
 if [ "\${1-}" = -p ] && [ "\${2-}" = "$POST_TERM_RUNNER" ] \
   && [ "\${3-}" = -o ] && [ "\${4-}" = lstart= ]; then
   if [ "$post_term_case" = mismatch ]; then
@@ -2797,7 +2799,7 @@ if [ "\${1-}" = -o ] && [ "\${2-}" = pgid= ] \
     nonleader) printf '0\n'; exit 0 ;;
   esac
 fi
-exec "$REAL_PS" "\$@"
+exec "$REAL_PS" "\${args[@]}"
 SH
   chmod +x "$POST_TERM_BIN/ps"
   post_term_status=0
@@ -3617,12 +3619,14 @@ REUSED_GROUP_BIN=$(fm_fakebin "$TMP_ROOT/reused-runner-group-bin")
 REAL_PS=$(command -v ps) || fail "the reused-group fixture requires ps"
 cat > "$REUSED_GROUP_BIN/ps" <<SH
 #!/usr/bin/env bash
+args=("\$@")
+[ "\${1-}" != -ww ] || shift
 if [ -e "$REUSED_GROUP_MARKER" ] && [ "\${1-}" = -p ] \
   && [ "\${3-}" = -o ] && [ "\${4-}" = lstart= ]; then
   printf 'reused runner identity\n'
   exit 0
 fi
-exec "$REAL_PS" "\$@"
+exec "$REAL_PS" "\${args[@]}"
 SH
 chmod +x "$REUSED_GROUP_BIN/ps"
 pe_register "$HREUSED_GROUP" lavish reused-runner-group-src -- \

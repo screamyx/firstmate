@@ -192,7 +192,7 @@ fm_cursor_argv0_for_pid() {  # <pid> [comm-fallback]
     [ -n "$argv0" ] && { printf '%s\n' "$argv0"; return 0; }
   fi
   if [ -z "$fallback" ]; then
-    fallback=$(LC_ALL=C ps -p "$pid" -o comm= 2>/dev/null || true)
+    fallback=$(LC_ALL=C ps -ww -p "$pid" -o comm= 2>/dev/null || true)
   fi
   [ -n "$fallback" ] || return 1
   printf '%s\n' "$fallback"
