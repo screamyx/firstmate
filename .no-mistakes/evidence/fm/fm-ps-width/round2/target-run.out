@@ -1,0 +1,27 @@
+Note: switching to 'b8fb4882926c0b6ddad151d1fc09a059adc2e625'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+[05:37:02] variant=target project=/tmp/fm-labproj.jPdt2h/fm head=b8fb488 FM_HOME=/tmp/fm-lab.Bv8GhY
+[05:37:02] claude started on private socket fm-lab
+[05:37:03] accepted the folder trust dialog
+[05:37:07] session start complete=yes lock=2801409
+lock owner: 2801409 2801402 claude          /home/user/.local/state/claude-wrapper/claude --tools Agent,Artifact,ArtifactCheck,ArtifactComments,ArtifactData,Bash,Edit,Glob,
+[05:37:08] pane resized to 4x2
+[05:37:09] prompt sent at 4x2
+[05:42:15] wait finished: drains=2 transcript=/home/user/.claude/projects/-tmp-fm-labproj-jPdt2h-fm/d2304253-6da3-4247-a003-d5e471bce10d.jsonl
+[05:42:17] evidence written to /home/user/.no-mistakes/evidence/01M41QQYPP1ZP31YCVAQEYH82V/round2/live-target
+[05:42:18] teardown done: lab and project removed

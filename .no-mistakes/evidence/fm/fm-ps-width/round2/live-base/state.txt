@@ -1,0 +1,36 @@
+## state/.lock
+2802508
+## lock owner process (ps -ww)
+2802508 claude          /home/user/.local/state/claude-wrapper/claude --tools Agent,Artifact,ArtifactCheck,ArtifactComments,ArtifactData,Bash,Edit,Glob,Grep,Lis
+## state/.claude-autoarm-epoch
+(absent)
+## state/arm-ran (hook-owned arm invocations)
+(absent)
+## state/drain-ran
+drain-run=1
+drain-run=2
+drain-run=3
+## state/tool-calls.log (model-issued Bash)
+bin/fm-wake-drain.sh
+bin/fm-wake-drain.sh
+## state/task.meta present?
+no
+## state listing
+total 64
+drwxrwxr-x 3 user user 4096 Oct  4 05:37 .
+drwx------ 7 user user 4096 Oct  4 05:37 ..
+-rw-rw-r-- 1 user user    2 Oct  4 05:37 drain-count
+-rw-rw-r-- 1 user user   36 Oct  4 05:37 drain-ran
+-rw-rw-r-- 1 user user   13 Oct  4 05:37 .guard-watcher-stale-banner
+-rw------- 1 user user 1322 Oct  4 05:37 home-summary.json
+-rw------- 1 user user   25 Oct  4 05:37 .inactive-outcome-reconcile
+-rw-rw-r-- 1 user user    8 Oct  4 05:37 .lock
+-rw------- 1 user user   37 Oct  4 05:37 .lock-session
+-rw------- 1 user user   80 Oct  4 05:37 .session-start-agents-baseline
+-rw------- 1 user user    8 Oct  4 05:37 .session-start-complete
+-rw------- 1 user user    0 Oct  4 05:37 .startup-network.report
+-rw------- 1 user user  170 Oct  4 05:37 .startup-network.status
+-rw------- 1 user user  202 Oct  4 05:37 .startup-network.timings
+drwxrwxr-x 2 user user 4096 Oct  4 05:37 terminal-outcomes
+-rw-rw-r-- 1 user user   42 Oct  4 05:37 tool-calls.log
+-rw------- 1 user user   12 Oct  4 05:37 .trace-context-effective

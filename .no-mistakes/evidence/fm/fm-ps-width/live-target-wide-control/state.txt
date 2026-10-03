@@ -1,0 +1,43 @@
+## state/.lock
+1742463
+## lock owner process (ps -ww)
+1742463 claude          /home/user/.local/state/claude-wrapper/claude --tools Agent,Artifact,ArtifactCheck,ArtifactComments,ArtifactData,Bash,Edit,Glob,Grep,Lis
+## state/.claude-autoarm-epoch
+epoch=2 owner_pid=1751879 outcome=clean updated_at=1791062089
+linux-starttime=483470030 cmdline-hex=62617368002f746d702f666d2d6c616270726f6a2e555566734f6e2f666d2f62696e2f666d2d636c617564652d73746f702d6175746f61726d2e736800
+## state/arm-ran (hook-owned arm invocations)
+arm-run=1 pid=1749006 COLUMNS=200 LINES=50
+arm-run=2 pid=1749029 COLUMNS=200 LINES=50
+arm-run=3 pid=1752116 COLUMNS=200 LINES=50
+arm-run=4 pid=1752133 COLUMNS=200 LINES=50
+## state/drain-ran
+drain-run=1
+drain-run=2
+## state/tool-calls.log (model-issued Bash)
+bin/fm-wake-drain.sh
+## state/task.meta present?
+no
+## state listing
+total 80
+drwxrwxr-x 3 user user 4096 Oct  4 05:15 .
+drwx------ 7 user user 4096 Oct  4 05:14 ..
+-rw-rw-r-- 1 user user    2 Oct  4 05:14 arm-count
+-rw-rw-r-- 1 user user  172 Oct  4 05:14 arm-ran
+-rw-rw-r-- 1 user user  223 Oct  4 05:14 .claude-autoarm-epoch
+-rw-rw-r-- 1 user user    2 Oct  4 05:14 drain-count
+-rw-rw-r-- 1 user user   24 Oct  4 05:14 drain-ran
+-rw-rw-r-- 1 user user   13 Oct  4 05:14 .guard-watcher-stale-banner
+-rw------- 1 user user 1322 Oct  4 05:14 home-summary.json
+-rw------- 1 user user   25 Oct  4 05:14 .inactive-outcome-reconcile
+-rw-rw-r-- 1 user user    0 Oct  4 05:14 .last-watcher-beat
+-rw-rw-r-- 1 user user    8 Oct  4 05:14 .lock
+-rw------- 1 user user   37 Oct  4 05:14 .lock-session
+-rw------- 1 user user   80 Oct  4 05:14 .session-start-agents-baseline
+-rw------- 1 user user    8 Oct  4 05:14 .session-start-complete
+-rw------- 1 user user    0 Oct  4 05:14 .startup-network.report
+-rw------- 1 user user  170 Oct  4 05:14 .startup-network.status
+-rw------- 1 user user  202 Oct  4 05:14 .startup-network.timings
+drwxrwxr-x 2 user user 4096 Oct  4 05:14 terminal-outcomes
+-rw-rw-r-- 1 user user   21 Oct  4 05:14 tool-calls.log
+-rw------- 1 user user   12 Oct  4 05:14 .trace-context-effective
+-rw-rw-r-- 1 user user   38 Oct  4 05:14 .watcher-down

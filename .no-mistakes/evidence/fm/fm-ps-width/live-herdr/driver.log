@@ -1,0 +1,18 @@
+[05:26:08] provisioned lab session fm-lab-pswidth-2162317-13042 (herdr herdr 0.9.3)
+[05:26:08] workspace created, pane=w1:p1
+[05:26:11] herdr pane process-info: shell_pid=2163197 foreground=["bash"]
+[05:26:11] background harness stand-in under the pane shell: pid=2166065
+# process table as seen by an unpinned read vs -ww at COLUMNS=4 LINES=2
+unpinned: 2166065 2163197 clau
+-ww:      2166065 2163197 claude
+unpinned args: /tmp
+-ww args:      /tmp/fm-herdr-pswidth.kLuLP9/bin/claude -c sleep 600; :
+| tree | width | pane process-state sample | pane shell bare-shell check |
+|---|---|---|---|
+| target (b8fb488) | COLUMNS=4 LINES=2 | agent | bare-shell |
+| target (b8fb488) | COLUMNS=1000 | agent | bare-shell |
+| base (72ec8e0) | COLUMNS=4 LINES=2 | shell | bare-shell |
+| base (72ec8e0) | COLUMNS=1000 | agent | bare-shell |
+
+pane shell comm (unpinned at 4x2): 'bash'  (-ww: 'bash')
+[05:26:12] lab session fm-lab-pswidth-2162317-13042 torn down

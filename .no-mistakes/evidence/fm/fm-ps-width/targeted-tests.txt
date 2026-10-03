@@ -1,0 +1,38 @@
+# Targeted test runs (worktree at b8fb488), with base 72ec8e0 comparisons for host-limited failures
+
+tests/fm-ps-width.test.sh: rc=0, 8 ok
+tests/fm-tmux-agent-liveness.test.sh: rc=0, 17 ok (includes the new 4x2 version-named pane case)
+tests/fm-backend.test.sh: rc=0, 30 ok
+
+tests/fm-session-lock-ancestry.test.sh: 11 ok, then:
+  not ok - the pty-host was not reparented to init after the daemon ended
+  host cause: orphans on this host reparent to the systemd --user subreaper (pid 1653), not pid 1; the case asserts ppid==1 and is untouched by this change.
+  the new 4x2 Stop auto-arm e2e case ran before it and passed:
+    ok - session-lock e2e: a session claims the home and arms supervision under a 4x2 hook width
+  the 5 cases after it, run from a temp copy with only that one call skipped (copy removed): rc=0, all 5 ok
+    (same-session confirmation x2, failed lock write x2, verified reclaim)
+
+tests/fm-control-relaunch.test.sh: 63 ok, then:
+  not ok - Herdr Pi relaunch should complete (pi registration)
+  error: pi executable not found on PATH; install it or select a different verified harness: expected exit 0, got 1
+  base 72ec8e0 fails identically: 63 ok, not ok - Herdr Pi relaunch should complete (pi registration)
+  host cause: no 'pi' executable on PATH. With a throwaway 'pi' stub prepended to PATH: rc=0, 73 ok (the Herdr Pi relaunch case uses the edited '-ww -axo pid=,ppid=,comm=' / '-ww -p 4242 -o args=' ps fake).
+
+tests/fm-backend-herdr.test.sh: 121 ok, then:
+  not ok - session lock path resolution failed for home A
+  base 72ec8e0 fails identically: 121 ok, not ok - session lock path resolution failed for home A
+  host cause: /tmp/firstmate-herdr-presentation is owned by another account (user2, mode 700).
+  with only that case skipped (temp copy, removed): rc=0, 226 ok; the pane-death cases that use the edited '-ww -p <pid> -o comm=' fake pass:
+    ok - herdr presentation cleanup: a transient prompt helper settles into the pane-death path instead of the plain close
+    ok - herdr presentation cleanup: a failed pane-death close falls back to the plain close
+    ok - herdr presentation cleanup: the exact-tab restore remains the backstop behind the pane-death close
+
+tests/fm-procevent.test.sh: 110 ok, then:
+  not ok - the listener under test was not reparented away from its session (ppid 1653)
+  host cause: same systemd --user subreaper (ppid 1653); the later cases are orphan-reparenting lifecycle cases untouched by this change.
+  both edited ps fakes ran and passed before it:
+    ok - stop mismatch evidence preserves the proved-stop boundary
+    ok - stop unreadable evidence preserves the proved-stop boundary
+    ok - stop unreadable-pgid evidence preserves the proved-stop boundary
+    ok - stop nonleader evidence preserves the proved-stop boundary
+    ok - a detected ambiguous reused-PID group is not signalled

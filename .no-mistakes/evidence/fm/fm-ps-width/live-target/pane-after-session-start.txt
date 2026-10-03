@@ -1,0 +1,50 @@
+
+ ▐▛███▛█   Claude Code v2.1.288
+▝▜██████▀  Haiku 4.5 · Claude Max
+ ▝▝   ▝▝   /tmp/fm-labproj.52m3dd/fm · /rc
+
+⚠ AGENTS.md is over the 40.0k-char limit (48.0k chars) · /memory to free up context
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                                                                                  Advisor Tool (experimental) is on and may use more tokens · /advisor
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  fm  ⎇ HEAD  ✎ 3  Haiku 4.5  🕐 05:13                                                                                                                                            Clawd lv41  (o.O)
+  ● b8fb488 no-mistakes(review): Widen remaining herdr and …
+  <account-redacted>  5h [█░░░░░░░░░] 15% ↻2h6m  7d [░░░░░░░░░░] 3% ↻6d5h  Fable [░░░░░░░░░░] 0% ↻6d5h  Codex 7d [░░░░░░░░░░] 0% ↻6d7h  $0.00
+  ⏵⏵ bypass permissions on (shift+tab to cycle) · ← for agents

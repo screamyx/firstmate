@@ -1,0 +1,58 @@
+# Claude Code 2.1.288 (Claude Code) interactive session in a tmux pane resized to 4x2; a Stop hook (sync and asyncRewake) records its env and ps reads of its ancestors.
+# probe.sh: COLUMNS/LINES, then per ancestor: unpinned 'ps -o comm=/args=' vs 'ps -ww -o comm=/args=' (stderr merged)
+== probe.async.1440387.txt
+COLUMNS=4 LINES=2
+tty: not a tty
+your 4x2 screen size is bogus. expect trouble
+ancestor 1440385: unpinned comm='your 4x2 screen size is bogus. expect trouble
+sh' args='your 4x2 screen size is bogus. expect trouble
+/bin' | -ww comm='your 4x2 screen size is bogus. expect trouble
+sh' args='your 4x2 screen size is bogus. expect trouble
+/bin/sh -c "$CLAUDE_PROJECT_DIR"/probe.sh async'
+your 4x2 screen size is bogus. expect trouble
+ancestor 1402803: unpinned comm='your 4x2 screen size is bogus. expect trouble
+clau' args='your 4x2 screen size is bogus. expect trouble
+/hom' | -ww comm='your 4x2 screen size is bogus. expect trouble
+claude' args='your 4x2 screen size is bogus. expect trouble
+/home/user/.local/state/claude-wrapper/claude --tools Agent,Artifact,ArtifactChe'
+your 4x2 screen size is bogus. expect trouble
+ancestor 1402802: unpinned comm='your 4x2 screen size is bogus. expect trouble
+tmux' args='your 4x2 screen size is bogus. expect trouble
+tmux' | -ww comm='your 4x2 screen size is bogus. expect trouble
+tmux: server' args='your 4x2 screen size is bogus. expect trouble
+tmux -L fm-probe new-session -d -s probe -x 200 -y 50 -c /tmp/fm-hookprobe.3MMOu'
+your 4x2 screen size is bogus. expect trouble
+ancestor 1653: unpinned comm='your 4x2 screen size is bogus. expect trouble
+syst' args='your 4x2 screen size is bogus. expect trouble
+/usr' | -ww comm='your 4x2 screen size is bogus. expect trouble
+systemd' args='your 4x2 screen size is bogus. expect trouble
+/usr/lib/systemd/systemd --user --deserialize=8'
+your 4x2 screen size is bogus. expect trouble
+== probe.sync.1440386.txt
+COLUMNS=4 LINES=2
+tty: not a tty
+your 4x2 screen size is bogus. expect trouble
+ancestor 1440384: unpinned comm='your 4x2 screen size is bogus. expect trouble
+sh' args='your 4x2 screen size is bogus. expect trouble
+/bin' | -ww comm='your 4x2 screen size is bogus. expect trouble
+sh' args='your 4x2 screen size is bogus. expect trouble
+/bin/sh -c "$CLAUDE_PROJECT_DIR"/probe.sh sync'
+your 4x2 screen size is bogus. expect trouble
+ancestor 1402803: unpinned comm='your 4x2 screen size is bogus. expect trouble
+clau' args='your 4x2 screen size is bogus. expect trouble
+/hom' | -ww comm='your 4x2 screen size is bogus. expect trouble
+claude' args='your 4x2 screen size is bogus. expect trouble
+/home/user/.local/state/claude-wrapper/claude --tools Agent,Artifact,ArtifactChe'
+your 4x2 screen size is bogus. expect trouble
+ancestor 1402802: unpinned comm='your 4x2 screen size is bogus. expect trouble
+tmux' args='your 4x2 screen size is bogus. expect trouble
+tmux' | -ww comm='your 4x2 screen size is bogus. expect trouble
+tmux: server' args='your 4x2 screen size is bogus. expect trouble
+tmux -L fm-probe new-session -d -s probe -x 200 -y 50 -c /tmp/fm-hookprobe.3MMOu'
+your 4x2 screen size is bogus. expect trouble
+ancestor 1653: unpinned comm='your 4x2 screen size is bogus. expect trouble
+syst' args='your 4x2 screen size is bogus. expect trouble
+/usr' | -ww comm='your 4x2 screen size is bogus. expect trouble
+systemd' args='your 4x2 screen size is bogus. expect trouble
+/usr/lib/systemd/systemd --user --deserialize=8'
+your 4x2 screen size is bogus. expect trouble

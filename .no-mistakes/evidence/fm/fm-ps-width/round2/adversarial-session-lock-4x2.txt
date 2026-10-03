@@ -1,0 +1,16 @@
+# fm_harness_pid_alive at COLUMNS=4 LINES=2 (target b8fb488 vs base 72ec8e0)
+real-claude   target -> live-harness
+real-claude   base   -> not-harness
+real-claude   base-w -> live-harness   (wide-shell reference: base at COLUMNS=1000)
+claude-decoy  target -> live-harness
+claude-decoy  base   -> not-harness
+claude-decoy  base-w -> live-harness   (wide-shell reference: base at COLUMNS=1000)
+plain-sleep   target -> not-harness
+plain-sleep   base   -> not-harness
+plain-sleep   base-w -> not-harness   (wide-shell reference: base at COLUMNS=1000)
+dead-pid      target -> not-harness
+dead-pid      base   -> not-harness
+dead-pid      base-w -> not-harness   (wide-shell reference: base at COLUMNS=1000)
+
+unpinned comm at 4x2: real='clau' decoy='clau'
+-ww comm at 4x2:      real='claude' decoy='claude-decoy'

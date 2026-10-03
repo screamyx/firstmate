@@ -1,0 +1,12 @@
+{
+  "shell_pid": 2810696,
+  "foreground_processes": [
+    {
+      "pid": 2810696,
+      "name": "bash",
+      "argv": [
+        "/bin/bash"
+      ]
+    }
+  ]
+}

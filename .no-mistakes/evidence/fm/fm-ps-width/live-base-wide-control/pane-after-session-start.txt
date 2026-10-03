@@ -1,0 +1,50 @@
+
+ ▐▛███▛█   Claude Code v2.1.288
+▝▜██████▀  Haiku 4.5 · Claude Max
+ ▝▝   ▝▝   /tmp/fm-labproj.K2Dxty/fm · /rc
+
+⚠ AGENTS.md is over the 40.0k-char limit (48.0k chars) · /memory to free up context
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+cache: no request yet                                                                                                                                                                                [-]
+no agb seat | detached HEAD, main checkout | CI 0 of 6 runners busy
+                                                                                                                                  Advisor Tool (experimental) is on and may use more tokens · /advisor
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  fm  ⎇ HEAD  ✎ 3  Haiku 4.5  🕐 05:20                                                                                                                                            Clawd lv41  (o.o)
+  ● 72ec8e0 fix(bin): drop the worker-to-firstmate agb wake
+  <account-redacted>  5h [█░░░░░░░░░] 16% ↻1h59m  7d [░░░░░░░░░░] 4% ↻6d5h  Fable [░░░░░░░░░░] 0% ↻6d5h  Codex 7d [░░░░░░░░░░] 0% ↻6d6h  $0.00
+  ⏵⏵ bypass permissions on (shift+tab to cycle) · ← for agents

@@ -1,0 +1,12 @@
+[05:19:54] variant=base project=/tmp/fm-labproj.aeTee4/fm head=72ec8e0 FM_HOME=/tmp/fm-lab.kOb0d2
+[05:19:54] claude started on private socket fm-lab
+[05:19:55] accepted the folder trust dialog
+[05:19:59] session start complete=yes lock=1868972
+lock owner: 1868972 1868971 claude          /home/user/.local/state/claude-wrapper/claude --tools Agent,Artifact,ArtifactCheck,ArtifactComments,ArtifactData,Bash,Edit,Glob,
+[05:20:00] pane resized to 4x2
+[05:20:01] prompt sent at 4x2
+[05:20:21] wait finished: drains=1 transcript=/home/user/.claude/projects/-tmp-fm-labproj-aeTee4-fm/2660f952-ccbb-415a-a173-faa73569f8b8.jsonl
+Stop hook feedback mentions: 10
+TURN WOULD END BLIND mentions: 4
+[05:20:23] evidence written to /home/user/.no-mistakes/evidence/01M41QQYPP1ZP31YCVAQEYH82V/live-base
+[05:20:24] teardown done: lab and project removed

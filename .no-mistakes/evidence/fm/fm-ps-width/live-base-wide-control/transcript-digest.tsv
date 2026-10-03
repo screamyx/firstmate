@@ -1,0 +1,17 @@
+user	After reading the complete session-start digest, reply with exactly CYCLE0 and stop. Whenever a Stop hook feedback message wakes you, run exactly `bin/fm-wake-drain.sh` once with Bash, then reply with exactly ACK and stop. Never run bin/fm-watch-arm.sh or any other arm command, and never use any other tool.	
+assistant	null	
+assistant	CYCLE0	
+system		
+system		
+user	<task-notification>\n<summary>Stop hook feedback</summary>\n</task-notification>\n<system-reminder>\nStop hook blocking error from command "Stop": firstmate watcher wake - one supervision event needs a handling turn now.\nstale: fixture-rapid-1\nRun bin/fm-wake-drain.sh first, handle the wake, then run its exact WAKE_ACK_REQUIRED --ack-through command. Until that post-handling acknowledgement, interruption leaves the wake durable for idempotent re-handling. This Stop hook owns watcher continuity: when the handling turn ends, the next needed cycle arms automatically - do NOT run bin/fm-wat
+assistant	null	
+assistant	{"command":"bin/fm-wake-drain.sh","description":"Drain the wake queue to handle the stale fixture-rapid-1 event"}	
+user	stale: fixture-rapid drained	
+assistant	null	
+assistant	ACK	
+user	Stop hook feedback:\n[[ -z "${GROK_AGENT:-}${GROK_HOOK_EVENT:-}" ] || exit 0; exec "$CLAUDE_PROJECT_DIR"/bin/fm-turnend-guard.sh --claude]: ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n●  TURN WOULD END BLIND - SUPERVISION IS OFF\n●  1 task(s) in flight, but no live watcher holds this home lock (last beat: 4s ago).\n●  The Stop-owned auto-arm did not claim this home either, so recovery is NOT already under way.\n
+system		
+assistant	null	
+assistant	ACK	
+system		
+system		

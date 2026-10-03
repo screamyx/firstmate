@@ -1,0 +1,50 @@
+
+● [05:37:12] CYCLE0
+
+✻ Crunched for 3s · done 5:37 AM
+
+● Stop hook feedback
+
+  Thought for 5s, ran 1 shell command
+
+● [05:37:20] ACK
+
+● Ran 5 stop hooks
+  ⎿  Stop hook error: [[ -z "${GROK_AGENT:-}${GROK_HOOK_EVENT:-}" ] || exit 0; exec "$CLAUDE_PROJECT_DIR"/bin/fm-turnend-guard.sh --claude]:
+  ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ●  TURN WOULD END BLIND - SUPERVISION IS OFF
+  ●  1 task(s) in flight, but no live watcher holds this home lock (last beat: 7s ago).
+  ●  The Stop-owned auto-arm did not claim this home either, so recovery is NOT already under way.
+  ●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+  ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+  Thought for 12s
+
+● [05:37:33] This is a critical system issue blocking supervision. The turnend-guard reports:
+
+  - 1 task in flight with no live watcher holding the home lock
+  - Stop-owned auto-arm did not claim this home
+  - Supervision recovery is not under way
+
+  The guard is explicitly requesting investigation of hook registration and startup status before proceeding. This requires human attention to restore the supervision cycle.
+
+  The constraint to only run bin/fm-wake-drain.sh and reply with ACK cannot resolve a broken supervision mechanism. You need to:
+
+  1. Check the Stop hook registration and status
+  2. Verify the watcher startup path is functional
+  3. Restart or repair the supervision mechanism
+
+  This is beyond what the limited response protocol can handle.
+
+✻ Crunched for 20s · done 5:37 AM
+cache: hit 99% | last miss 05:37 first request | misses 1 of 4 requests                                                                                                                              [-]
+no agb seat | detached HEAD, main checkout | CI 0 of 6 runners busy | context 24% used
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  fm  ⎇ HEAD  ✎ 3  Haiku 4.5  [████████░░] 76% left  🕐 05:42                                                                                                                     Clawd lv41  (o.o)
+  ● b8fb488 no-mistakes(review): Widen remaining herdr and …
+  screamyx@gmail.com  5h [█░░░░░░░░░] 17% ↻1h37m  7d [░░░░░░░░░░] 4% ↻6d5h  Fable [░░░░░░░░░░] 0% ↻6d5h  Codex 7d [░░░░░░░░░░] 0% ↻6d6h  $0.09
+  ⏵⏵ bypass permissions on (shift+tab to cycle) · ← for agents

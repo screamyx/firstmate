@@ -1,0 +1,19 @@
+user	After reading the complete session-start digest, reply with exactly CYCLE0 and stop. Whenever a Stop hook feedback message wakes you, run exactly `bin/fm-wake-drain.sh` once with Bash, then reply with exactly ACK and stop. Never run bin/fm-watch-arm.sh or any other arm command, and never use any other tool.	
+assistant	null	
+assistant	CYCLE0	
+user	Stop hook feedback:\n[[ -z "${GROK_AGENT:-}${GROK_HOOK_EVENT:-}" ] || exit 0; exec "$CLAUDE_PROJECT_DIR"/bin/fm-turnend-guard.sh --claude]: ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n●  TURN WOULD END BLIND - SUPERVISION IS OFF\n●  1 task(s) in flight, but no live watcher holds this home lock (last beat: never).\n●  The Stop-owned auto-arm did not claim this home either, so recovery is NOT already under way.\n�
+system		
+assistant	null	
+assistant	{"command":"bin/fm-wake-drain.sh","description":"Drain wake queue at Stop hook feedback"}	
+user	stale: fixture-rapid drained	
+assistant	null	
+assistant	ACK	
+user	Stop hook feedback:\n[[ -z "${GROK_AGENT:-}${GROK_HOOK_EVENT:-}" ] || exit 0; exec "$CLAUDE_PROJECT_DIR"/bin/fm-turnend-guard.sh --claude]: ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n●  TURN WOULD END BLIND - SUPERVISION IS OFF\n●  1 task(s) in flight, but no live watcher holds this home lock (last beat: never).\n●  The Stop-owned auto-arm did not claim this home either, so recovery is NOT already under way.\n�
+system		
+assistant	null	
+assistant	{"command":"bin/fm-wake-drain.sh","description":"Drain wake queue at Stop hook feedback"}	
+user	stale: fixture-rapid drained	
+assistant	null	
+assistant	ACK	
+system		
+system		

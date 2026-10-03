@@ -1,0 +1,50 @@
+
+ ▐▛███▛█   Claude Code v2.1.288
+▝▜██████▀  Haiku 4.5 · Claude Max
+ ▝▝   ▝▝   /tmp/fm-labproj.52m3dd/fm · /rc
+
+⚠ AGENTS.md is over the 40.0k-char limit (48.0k chars) · /memory to free up context
+
+❯ After reading the complete session-start digest, reply with exactly CYCLE0 and stop. Whenever a Stop hook feedback message wakes you, run exactly bin/fm-wake-drain.sh once with Bash, then reply
+  with exactly ACK and stop. Never run bin/fm-watch-arm.sh or any other arm command, and never use any other tool.
+
+  Thought for 2s
+
+● [05:13:31] CYCLE0
+
+✻ Baked for 2s · done 5:13 AM
+
+● Stop hook feedback
+
+  Thought for 2s, ran 1 shell command
+
+● [05:13:34] ACK
+
+● Ran 5 stop hooks
+  ⎿  Stop hook error: [[ -z "${GROK_AGENT:-}${GROK_HOOK_EVENT:-}" ] || exit 0; exec "$CLAUDE_PROJECT_DIR"/bin/fm-turnend-guard.sh --claude]:
+  ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ●  TURN WOULD END BLIND - SUPERVISION IS OFF
+  ●  1 task(s) in flight, but no live watcher holds this home lock (last beat: 3s ago).
+  ●  The Stop-owned auto-arm did not claim this home either, so recovery is NOT already under way.
+  ●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+  ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+  Thought for 3s, ran 1 shell command
+
+● [05:13:39] ACK
+
+✻ Brewed for 7s · done 5:13 AM
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  fm  ⎇ HEAD  ✎ 3  Haiku 4.5  [███████░░░] 72% left  🕐 05:13                                                                                                                     Clawd lv41  (-.-)
+  ● b8fb488 no-mistakes(review): Widen remaining herdr and …
+  <account-redacted>  5h [█░░░░░░░░░] 15% ↻2h6m  7d [░░░░░░░░░░] 3% ↻6d5h  Fable [░░░░░░░░░░] 0% ↻6d5h  Codex 7d [░░░░░░░░░░] 0% ↻6d7h  $0.14
+  ⏵⏵ bypass permissions on (shift+tab to cycle) · ← for agents

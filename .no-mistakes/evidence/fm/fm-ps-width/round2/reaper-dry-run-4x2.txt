@@ -1,0 +1,9 @@
+# stand-in worker pid=3075616 command: /bin/bash /tmp/fm-reapw.FrYPBH/pruned-root-with-a-long-enough-path/bin/fm-remote-job-worker.sh --serve
+# unpinned command at 4x2: '/bin'
+
+target COLUMNS=4 LINES=2 -> would reap abandoned remote job worker 3075616 (pruned code root /tmp/fm-reapw.FrYPBH/pruned-root-with-a-long-enough-path)
+target COLUMNS=1000      -> would reap abandoned remote job worker 3075616 (pruned code root /tmp/fm-reapw.FrYPBH/pruned-root-with-a-long-enough-path)
+base   COLUMNS=4 LINES=2 -> (no candidate reported)
+base   COLUMNS=1000      -> would reap abandoned remote job worker 3075616 (pruned code root /tmp/fm-reapw.FrYPBH/pruned-root-with-a-long-enough-path)
+
+# stand-in worker still alive after every dry run (nothing signalled)

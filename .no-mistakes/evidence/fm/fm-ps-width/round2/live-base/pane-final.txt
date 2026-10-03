@@ -1,0 +1,50 @@
+ ▝▝   ▝▝   /tmp/fm-labproj.9oOb8E/fm · /rc
+
+⚠ AGENTS.md is over the 40.0k-char limit (48.0k chars) · /memory to free up context
+
+❯ After reading the complete session-start digest, reply with exactly CYCLE0 and stop. Whenever a Stop hook feedback message wakes you, run exactly bin/fm-wake-drain.sh once with Bash, then reply
+  with exactly ACK and stop. Never run bin/fm-watch-arm.sh or any other arm command, and never use any other tool.
+
+  Thought for 4s
+
+● [05:37:17] CYCLE0
+
+● Ran 5 stop hooks
+  ⎿  Stop hook error: [[ -z "${GROK_AGENT:-}${GROK_HOOK_EVENT:-}" ] || exit 0; exec "$CLAUDE_PROJECT_DIR"/bin/fm-turnend-guard.sh --claude]:
+  ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ●  TURN WOULD END BLIND - SUPERVISION IS OFF
+  ●  1 task(s) in flight, but no live watcher holds this home lock (last beat: never).
+  ●  The Stop-owned auto-arm did not claim this home either, so recovery is NOT already under way.
+  ●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+  ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+  Thought for 7s, ran 1 shell command
+
+● [05:37:26] ACK
+
+● Ran 5 stop hooks
+  ⎿  Stop hook error: [[ -z "${GROK_AGENT:-}${GROK_HOOK_EVENT:-}" ] || exit 0; exec "$CLAUDE_PROJECT_DIR"/bin/fm-turnend-guard.sh --claude]:
+  ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ●  TURN WOULD END BLIND - SUPERVISION IS OFF
+  ●  1 task(s) in flight, but no live watcher holds this home lock (last beat: never).
+  ●  The Stop-owned auto-arm did not claim this home either, so recovery is NOT already under way.
+  ●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+  ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+  Thought for 3s, ran 1 shell command
+
+● [05:37:31] ACK
+
+✻ Baked for 19s · done 5:37 AM
+cache: hit 99% | last miss 05:37 first request | misses 1 of 5 requests                                                                                                                              [-]
+no agb seat | detached HEAD, main checkout | CI 0 of 6 runners busy | context 24% used
+                                                                                                  tmux focus-events off · add 'set -g focus-events on' to ~/.tmux.conf and reattach for focus tracking
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  fm  ⎇ HEAD  ✎ 3  Haiku 4.5  [████████░░] 76% left  🕐 05:37                                                                                                                Clawd lv41  done (^o^)♥
+  ● 72ec8e0 fix(bin): drop the worker-to-firstmate agb wake
+  screamyx@gmail.com  5h [█░░░░░░░░░] 17% ↻1h42m  7d [░░░░░░░░░░] 4% ↻6d5h  Fable [░░░░░░░░░░] 0% ↻6d5h  Codex 7d [░░░░░░░░░░] 0% ↻6d6h  $0.10
+  ⏵⏵ bypass permissions on (shift+tab to cycle) · ← for agents

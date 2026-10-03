@@ -1,0 +1,13 @@
+[05:14:31] variant=target project=/tmp/fm-labproj.UUfsOn/fm head=b8fb488 FM_HOME=/tmp/fm-lab.lfjNCj
+[05:14:31] claude started on private socket fm-lab
+[05:14:32] accepted the folder trust dialog
+[05:14:36] session start complete=yes lock=1742463
+lock owner: 1742463 1742462 claude          /home/user/.local/state/claude-wrapper/claude --tools Agent,Artifact,ArtifactCheck,ArtifactComments,ArtifactData,Bash,Edit,Glob,
+[05:14:37] pane resized to 200x50
+[05:14:38] prompt sent at 200x50
+[05:19:44] wait finished: drains=2 transcript=/home/user/.claude/projects/-tmp-fm-labproj-UUfsOn-fm/f6c12269-761a-4934-a6b2-f3c7c1fd08ad.jsonl
+Stop hook feedback mentions: 10
+TURN WOULD END BLIND mentions: 3
+rewake reason:       3 stale: fixture-rapid-1
+[05:19:46] evidence written to /home/user/.no-mistakes/evidence/01M41QQYPP1ZP31YCVAQEYH82V/live-target-wide-control
+[05:19:47] teardown done: lab and project removed

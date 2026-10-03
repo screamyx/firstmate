@@ -1,0 +1,25 @@
+# tests/fm-ps-width.test.sh (from b8fb488) run against bin/ at base 72ec8e0, each case isolated in a subshell
+ok - ps width: an unpinned comm read is cut short under a 4x2 width on this host
+not ok - fm-harness.sh ancestry under a 4x2 width: expected 'comm claude', got ''
+not ok (case failed) - test_harness_ancestry_names_claude_by_comm
+not ok - fm-harness.sh ancestry under a 4x2 width: expected 'args claude', got ''
+not ok (case failed) - test_harness_ancestry_names_claude_by_interpreter_args
+not ok - fm_harness_pid_alive read a live claude process as not a harness under a 4x2 width
+not ok (case failed) - test_session_lock_sees_a_live_harness
+not ok - fm_harness_ancestry_pids under a 4x2 width did not start at the claude parent: 2176933
+not ok (case failed) - test_session_lock_ancestry_finds_the_harness
+ok - ps width: recorded process identities are byte-identical under a 4x2 width
+not ok - a herdr pane with a live background claude read 'stale-agent' rather than 'live' under a 4x2 width
+not ok (case failed) - test_herdr_pane_sees_a_background_harness
+not ok - fm_remote_job_process_command varied with width (narrow '/tmp', wide '/tmp/fm-ps-width.baCFnN/bin/node /tmp/fm-ps-width.baCFnN/install/claude/cli.js')
+not ok (case failed) - test_remote_job_command_identity_is_width_invariant
+
+# same test at target b8fb488
+ok - ps width: an unpinned comm read is cut short under a 4x2 width on this host
+ok - ps width: harness ancestry names a claude process by its executable under a 4x2 width
+ok - ps width: harness ancestry names an interpreter-run claude by its script path under a 4x2 width
+ok - ps width: the session lock recognises a live harness owner under a 4x2 width
+ok - ps width: the session-lock ancestry walk finds its harness parent under a 4x2 width
+ok - ps width: recorded process identities are byte-identical under a 4x2 width
+ok - ps width: a herdr pane's background harness keeps its registration live under a 4x2 width
+ok - ps width: the remote job worker command identity is byte-identical under a 4x2 width
