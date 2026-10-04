@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Perform the approved local merge for a local-only ship task: fast-forward the
-# project's default branch to the crewmate's immutable ship branch recorded in
+# task's base branch to the crewmate's immutable ship branch recorded in
 # state/<task-id>.meta ("fm/<id>" for records created before that field existed).
+# The base branch is the record's base= (bin/fm-spawn.sh records the project's
+# registered base there) and otherwise the project's default branch.
 #
 # This is firstmate's merge gate-action (the captain's merge authority applied
 # locally instead of via a GitHub PR). It is the one sanctioned exception to hard
@@ -102,12 +104,23 @@ if ! git check-ref-format --branch "$BRANCH" >/dev/null 2>&1; then
 fi
 git -C "$PROJ" rev-parse --verify --quiet "refs/heads/$BRANCH" >/dev/null || { echo "error: branch $BRANCH does not exist in $PROJ" >&2; exit 1; }
 
-DEFAULT=$(default_branch) || { echo "error: cannot determine default branch for $PROJ; expected origin/HEAD, main, or master" >&2; exit 1; }
+BASE_BRANCH=$(grep '^base=' "$META" | cut -d= -f2- || true)
+if [ -n "$BASE_BRANCH" ]; then
+  if ! git check-ref-format --branch "$BASE_BRANCH" >/dev/null 2>&1; then
+    echo "error: task $ID has an invalid recorded base branch '$BASE_BRANCH'" >&2
+    exit 1
+  fi
+  DEFAULT=$BASE_BRANCH
+  DEFAULT_LABEL="base branch"
+else
+  DEFAULT=$(default_branch) || { echo "error: cannot determine default branch for $PROJ; expected origin/HEAD, main, or master" >&2; exit 1; }
+  DEFAULT_LABEL="default branch"
+fi
 
-# The project's main checkout must be on its default branch and clean, so the
+# The project's main checkout must be on that branch and clean, so the
 # fast-forward lands predictably (firstmate never writes here otherwise).
 cur=$(git -C "$PROJ" symbolic-ref --short HEAD 2>/dev/null || echo "")
-[ "$cur" = "$DEFAULT" ] || { echo "error: $PROJ is on '$cur', expected default branch '$DEFAULT'; cannot merge safely" >&2; exit 1; }
+[ "$cur" = "$DEFAULT" ] || { echo "error: $PROJ is on '$cur', expected $DEFAULT_LABEL '$DEFAULT'; cannot merge safely" >&2; exit 1; }
 if [ -n "$(git -C "$PROJ" status --porcelain 2>/dev/null | head -1)" ]; then
   echo "error: $PROJ has a dirty working tree; refusing to merge into it" >&2
   exit 1

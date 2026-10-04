@@ -35,7 +35,7 @@ Do not overwrite or repurpose an existing path.
 
 ## Delivery posture
 
-The registry records the project's standing delivery posture and optional ship-branch prefix, which are the captain's defaults rather than any task's answer.
+The registry records the project's standing delivery posture and optional ship-branch prefix, which are the captain's defaults rather than any task's answer, plus optional project facts: its forge, base branch, and worktree pool location.
 `AGENTS.md` section 7 owns how each task's concrete mode, yolo, and branch prefix are resolved at intake and passed explicitly to the brief, the spawn, and any promotion.
 Choose that posture when adding or creating the project:
 
@@ -60,6 +60,12 @@ Never register the binding from detection alone, and never re-derive it later fr
 A forge composes with `no-mistakes`, `direct-PR`, and `no-mistakes-prod-only`, and the registry refuses it on `local-only`, which publishes nothing; a Gerrit-hosted project kept local registers `local-only` with no forge token.
 `yolo` is inactive on a `forge=gerrit` project, so never propose `+yolo` alongside it.
 `bin/fm-project-mode.sh`'s header owns the binding and `bin/fm-dod-lib.sh` owns what it changes for a worker.
+
+The optional `base=<branch>` token records the branch the project integrates on when it is not origin's default branch, for example a long-lived release line while the default branch is frozen.
+Register it when the captain says so or when the project's own instructions say where work lands, and confirm it with the captain rather than inferring it from branch names.
+Every ship and scout task is then cut from that branch and every PR targets it; `AGENTS.md` section 7 owns passing it to each brief.
+The optional `worktree-root=<absolute path>` token records where that project's task copies must live when its own instructions require a location, and it must be an existing directory.
+`bin/fm-project-mode.sh`'s header owns both tokens.
 
 ## Add or clone an existing project
 

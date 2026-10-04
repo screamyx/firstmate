@@ -375,6 +375,10 @@ Firstmate passes the binding unchanged to `bin/fm-brief.sh --forge` and never in
 `bin/fm-forge-detect.sh` only proposes a binding at project-add intake; nothing re-derives one from a clone at use time.
 `bin/fm-project-mode.sh` remains the one registry parser for the mechanical consumers that have no task in hand: fleet sync's `local-only` skip and home seeding's refusal and no-mistakes initialization.
 The registry's optional `branch=<prefix>` annotation overrides a project's ship-branch prefix (default `fm/`) the same way: firstmate resolves it via `bin/fm-project-mode.sh --branch-prefix` at intake and passes it explicitly to `bin/fm-brief.sh --branch-prefix`, which never reads the registry itself; each script's own header owns its side of that contract.
+The optional `base=<branch>` token is a project fact like the forge: it names the branch a project integrates on when that is not origin's default branch.
+Firstmate passes it to every ship and scout brief as `bin/fm-brief.sh --base`, the spawn refuses a brief that disagrees with the registry, cuts the task copy from that branch, and records it as the task's `base=`, and cleanup's landed check, the local merge, the review diff, and promotion read that record rather than the registry, so a later registry edit never retargets a task already cut.
+The optional `worktree-root=<path>` token places a project's Treehouse pool through `treehouse get --root`, without writing anything into the clone.
+`bin/fm-project-mode.sh`'s header owns both tokens.
 When a selected delivery path calls for a diff, `bin/fm-review-diff.sh` refreshes the authoritative base and, when task meta records a GitHub pull-request `pr=`, always fetches and compares against `refs/pull/<n>/head` by default (recorded `pr_head=` is only an offline fallback) before falling back to the local branch with a warning.
 A GitLab merge request and a Gerrit change expose no such ref, so a task recording one of those diffs the local branch under that same warning, which is its current content.
 Where a no-mistakes pipeline stores evidence in the repo, it publishes that PR-viewable validation evidence to an orphan evidence branch that shares no history with code branches, so it never enters the crew branch or the default branch.
@@ -480,6 +484,7 @@ Invoked in a primary home, `/stow` then cascades the same sweep to every registe
 The locked session-start deferred network stage, PR-based teardown, and merged-PR wake handling refresh remote-backed project clones when the clone is safe to move.
 Wake-time refreshes can target a single clone by project name, so the primary home also catches up when a secondmate reports a merge from its own home.
 Clean default-branch clones fast-forward to `origin/<default>`, and a clean detached HEAD that holds no unique commits is re-attached to the default branch before the same fast-forward path runs.
+A project that registers a base branch is kept on that branch instead, and a clean clone still on origin's default branch with nothing origin lacks is switched onto it, so the clone firstmate reads holds the code its tasks are cut from.
 Dirty clones, non-default branches, detached HEADs with unique commits, diverged defaults, and default branches checked out in another worktree are reported as `STUCK:` with their behind count and left untouched.
 Fetches blocked by an orphaned `.git/packed-refs.lock` use bounded retries and remove the lock only when the shared staleness proof can prove it abandoned; [configuration.md](configuration.md#toolchain) owns the recovery details and tuning knobs.
 Local-only projects, clones without an origin remote, and fetch failures remain benign skips.

@@ -1123,6 +1123,90 @@ SH
   pass "worktree whose content already landed in the default branch is torn down (content fallback)"
 }
 
+# Cut the case's task copy from a v2 line on origin that the default branch does
+# not have, the way a spawn for a project registering base=v2 does.
+cut_task_from_origin_v2() {  # <case-dir>
+  local case_dir=$1 tmp="$1/_v2"
+  git clone -q "$case_dir/origin.git" "$tmp"
+  git -C "$tmp" checkout -q -b v2
+  printf 'v2 line\n' > "$tmp/v2.txt"
+  git -C "$tmp" add v2.txt
+  git -C "$tmp" -c user.email=t@t -c user.name=t commit -q -m "v2 line"
+  git -C "$tmp" push -q origin v2
+  rm -rf "$tmp"
+  git -C "$case_dir/wt" fetch -q origin
+  git -C "$case_dir/wt" reset -q --hard origin/v2
+}
+
+land_on_origin_v2() {  # <case-dir> <file> <content>
+  local case_dir=$1 file=$2 content=$3 tmp="$1/_land-v2"
+  git clone -q -b v2 "$case_dir/origin.git" "$tmp"
+  printf '%s\n' "$content" > "$tmp/$file"
+  git -C "$tmp" add -- "$file"
+  git -C "$tmp" -c user.email=t@t -c user.name=t commit -q -m "squash $file onto v2"
+  git -C "$tmp" push -q origin HEAD:v2
+  rm -rf "$tmp"
+}
+
+# A task cut from a registered base lands on that base, so cleanup's content
+# check must read the base its record kept: the same squash-landed change is
+# landed with base=v2 recorded and unlanded without it, because it never
+# reached the default branch.
+test_content_in_recorded_base_allows() {
+  local case_dir rc with_base
+  for with_base in yes no; do
+    case_dir=$(make_case "content-landed-base-$with_base")
+    write_meta "$case_dir" no-mistakes ship
+    [ "$with_base" = no ] || printf 'base=v2\n' >> "$case_dir/state/task-x1.meta"
+    cut_task_from_origin_v2 "$case_dir"
+    wt_commit_file "$case_dir" feature.txt hello "add feature"
+    land_on_origin_v2 "$case_dir" feature.txt hello
+
+    set +e
+    run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr"
+    rc=$?
+    set -e
+    if [ "$with_base" = yes ]; then
+      expect_code 0 "$rc" "content-landed-base: teardown should succeed when the content is in the recorded base"$'\n'"$(cat "$case_dir/stderr")"
+      assert_absent "$case_dir/state/task-x1.meta" "content-landed-base: teardown left the task record behind"
+    else
+      [ "$rc" -ne 0 ] || fail "content-landed-base: without a recorded base the change is not on the default branch and must not count as landed"
+      grep -q 'REFUSED: worktree .* has work not on any remote and not landed' "$case_dir/stderr" \
+        || fail "content-landed-base: the refusal did not name unlanded work"
+    fi
+  done
+  pass "cleanup's content check reads the task's recorded base branch, and only that record makes base-landed work count"
+}
+
+# A local-only task cut from a base lands by fast-forwarding local <base>, so the
+# local-only landed test must look there rather than at the default branch.
+test_local_only_landed_on_recorded_base_allows() {
+  local case_dir rc with_base head
+  for with_base in yes no; do
+    case_dir=$(make_case "local-only-base-$with_base")
+    write_meta "$case_dir" local-only ship
+    [ "$with_base" = no ] || printf 'base=v2\n' >> "$case_dir/state/task-x1.meta"
+    git -C "$case_dir/project" branch v2 main
+    git -C "$case_dir/wt" reset -q --hard v2
+    wt_commit_file "$case_dir" feature.txt hello "add feature"
+    head=$(git -C "$case_dir/wt" rev-parse HEAD)
+    git -C "$case_dir/project" branch -f v2 "$head"
+
+    set +e
+    run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr"
+    rc=$?
+    set -e
+    if [ "$with_base" = yes ]; then
+      expect_code 0 "$rc" "local-only-base: work merged into the recorded base should clean up"$'\n'"$(cat "$case_dir/stderr")"
+    else
+      [ "$rc" -ne 0 ] || fail "local-only-base: without a recorded base, work only on v2 must not count as merged"
+      grep -q 'has work not yet merged into main' "$case_dir/stderr" \
+        || fail "local-only-base: the refusal did not name the default branch it checked"
+    fi
+  done
+  pass "a local-only task's landed check reads its recorded base branch"
+}
+
 test_content_fallback_refreshes_stale_origin_ref() {
   local case_dir rc
   case_dir=$(make_case content-stale-ref)
@@ -4098,6 +4182,8 @@ test_squash_merged_stale_local_refuses_when_forge_unreachable
 test_pr_check_does_not_refresh_stale_pr_head
 test_pr_check_records_remote_head_when_local_lags
 test_content_in_default_fallback_allows
+test_content_in_recorded_base_allows
+test_local_only_landed_on_recorded_base_allows
 test_content_fallback_refreshes_stale_origin_ref
 test_dirty_worktree_refuses
 test_gh_error_and_content_absent_refuses

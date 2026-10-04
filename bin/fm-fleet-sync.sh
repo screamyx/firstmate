@@ -15,6 +15,14 @@
 # and fetch failures. A project whose registry entry bin/fm-project-mode.sh
 # refuses is skipped too, naming that command so its refusal is readable, rather
 # than synced under a guessed posture.
+# A project registering a base branch (bin/fm-project-mode.sh's base= token) is
+# kept on that branch instead: <default> above reads as the registered base, so
+# the clone firstmate reads holds the code tasks are cut from. The registration
+# itself adds one more safe drift: a clean clone still on origin's default
+# branch, holding no commits origin lacks, is switched onto the base (creating
+# the local branch to track origin/<base> when absent) and reported
+# "recovered:". The reverse - a clone left on a base the registry has since
+# dropped - is an off-default named branch like any other and reports STUCK.
 # A candidate under projects/ must be the root of its own work tree: git discovery
 # walks up, so a plain nested directory would otherwise resolve to the enclosing
 # repository (the firstmate checkout) and be synced under that directory's label.
@@ -335,6 +343,10 @@ sync_project() {
     echo "$label: skipped: local-only project"
     return 0
   fi
+  if ! REGISTERED_BASE=$("$FM_ROOT/bin/fm-project-mode.sh" --base "$label" 2>/dev/null); then
+    echo "$label: skipped: registry base branch does not resolve (run bin/fm-project-mode.sh --base $label for the refusal)"
+    return 0
+  fi
   if ! git -C "$PROJ" remote get-url origin >/dev/null 2>&1; then
     echo "$label: skipped: no origin remote"
     return 0
@@ -351,10 +363,11 @@ sync_project() {
 
   prune_gone_branches || true
 
-  DEFAULT=$(default_branch) || {
+  ORIGIN_DEFAULT=$(default_branch) || {
     echo "$label: skipped: cannot determine default branch"
     return 0
   }
+  DEFAULT=${REGISTERED_BASE:-$ORIGIN_DEFAULT}
   BASE="origin/$DEFAULT"
   if ! git -C "$PROJ" rev-parse --verify --quiet "$BASE^{commit}" >/dev/null; then
     echo "$label: skipped: $BASE does not exist"
@@ -365,6 +378,7 @@ sync_project() {
   dirty=no
   [ -z "$(git -C "$PROJ" status --porcelain 2>/dev/null | head -1)" ] || dirty=yes
   recovered=no
+  recovered_from=
 
   if [ "$cur" != "$DEFAULT" ]; then
     # Off the default branch. Auto-recover only the one unambiguously safe drift:
@@ -384,6 +398,26 @@ sync_project() {
         return 0
       fi
       recovered=yes
+      cur=$DEFAULT
+    elif [ "$DEFAULT" != "$ORIGIN_DEFAULT" ] && [ "$cur" = "$ORIGIN_DEFAULT" ] \
+        && [ "$dirty" = no ] \
+        && git -C "$PROJ" merge-base --is-ancestor "$cur" "origin/$cur" 2>/dev/null \
+        && ! default_checked_out_elsewhere \
+        && local_default_safe_for_recovery; then
+      # The registered base differs from origin's default branch and the clone
+      # still sits, clean and fully published, on that default branch - where
+      # every clone starts. Switching strands nothing, so move it onto the base.
+      if git -C "$PROJ" rev-parse --verify --quiet "refs/heads/$DEFAULT" >/dev/null; then
+        switch_args=(checkout --quiet "$DEFAULT")
+      else
+        switch_args=(checkout --quiet -b "$DEFAULT" --track "$BASE")
+      fi
+      if ! git -C "$PROJ" "${switch_args[@]}" >/dev/null 2>&1; then
+        report_stuck "$(stuck_state)"
+        return 0
+      fi
+      recovered=yes
+      recovered_from=$cur
       cur=$DEFAULT
     else
       report_stuck "$(stuck_state)"
@@ -408,9 +442,14 @@ sync_project() {
     echo "$label: skipped: cannot read $BASE"
     return 0
   }
+  if [ -n "$recovered_from" ]; then
+    recovered_what="switched from $recovered_from to registered base $DEFAULT"
+  else
+    recovered_what="re-attached $DEFAULT"
+  fi
   if [ "$local_rev" = "$remote_rev" ]; then
     if [ "$recovered" = yes ]; then
-      echo "$label: recovered: re-attached $DEFAULT (already current)"
+      echo "$label: recovered: $recovered_what (already current)"
     else
       echo "$label: already current"
     fi
@@ -438,7 +477,7 @@ sync_project() {
     return 0
   }
   if [ "$recovered" = yes ]; then
-    echo "$label: recovered: re-attached $DEFAULT, synced $before..$after"
+    echo "$label: recovered: $recovered_what, synced $before..$after"
   else
     echo "$label: synced $before..$after"
   fi
