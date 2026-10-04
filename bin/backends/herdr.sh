@@ -1370,7 +1370,7 @@ fm_backend_herdr_death_close_pane() {  # <session> <pane-id> <shell-pid> [guard-
 # login dash exactly like the idle-shell proof's argv0 normalization.
 fm_backend_herdr_pid_is_bare_shell() {  # <ps-bin> <pid>
   local comm
-  comm=$("$1" -p "$2" -o comm= 2>/dev/null) || return 1
+  comm=$("$1" -ww -p "$2" -o comm= 2>/dev/null) || return 1
   comm=$(printf '%s' "$comm" | tr -d '[:space:]')
   comm=${comm#-}
   comm=${comm##*/}
@@ -2173,12 +2173,12 @@ fm_backend_herdr_pane_process_state_sample() {  # <session> <pane_id>
   [ "$others" -eq 0 ] || { printf 'other'; return 0; }
   ps_bin=${FM_HERDR_PS_BIN:-ps}
   command -v "$ps_bin" >/dev/null 2>&1 || { printf 'unreadable'; return 0; }
-  rows=$(LC_ALL=C "$ps_bin" -axo pid=,ppid=,comm= 2>/dev/null) || { printf 'unreadable'; return 0; }
+  rows=$(LC_ALL=C "$ps_bin" -ww -axo pid=,ppid=,comm= 2>/dev/null) || { printf 'unreadable'; return 0; }
   printf '%s\n' "$rows" | awk -v shell="$shell_pid" '$1 == shell { found = 1 } END { exit(found ? 0 : 1) }' \
     || { printf 'unreadable'; return 0; }
   while IFS=$'\t' read -r pid name; do
     [ -n "$pid" ] || continue
-    args=$(LC_ALL=C "$ps_bin" -p "$pid" -o args= 2>/dev/null) || continue
+    args=$(LC_ALL=C "$ps_bin" -ww -p "$pid" -o args= 2>/dev/null) || continue
     args=${args#"${args%%[![:space:]]*}"}
     argv0=${args%%[[:space:]]*}
     if [ "$(fm_agent_process_classify "$name" "$argv0" "$args" "$pid")" = agent ]; then

@@ -111,7 +111,7 @@ fm_tmux_composer_identity() {  # <target>
           pi|pi-signed|pi-launcher|Pi) found=1 ;;
         esac
       done <<EOF
-$(LC_ALL=C ps -t "${tty#/dev/}" -o pid=,pgid=,tpgid=,comm= 2>/dev/null)
+$(LC_ALL=C ps -ww -t "${tty#/dev/}" -o pid=,pgid=,tpgid=,comm= 2>/dev/null)
 EOF
       ;;
   esac
@@ -179,12 +179,12 @@ fm_tmux_pane_is_cursor() {  # <target>
   while read -r pid pgid tpgid comm; do
     [ -n "$comm" ] || continue
     [ "$pgid" = "$tpgid" ] || continue
-    args=$(LC_ALL=C ps -p "$pid" -o args= 2>/dev/null) || args=
+    args=$(LC_ALL=C ps -ww -p "$pid" -o args= 2>/dev/null) || args=
     args=${args#"${args%%[![:space:]]*}"}
     argv0=${args%%[[:space:]]*}
     fm_cursor_process_matches "$comm" '' "$argv0" && return 0
   done <<EOF
-$(LC_ALL=C ps -t "${tty#/dev/}" -o pid=,pgid=,tpgid=,comm= 2>/dev/null)
+$(LC_ALL=C ps -ww -t "${tty#/dev/}" -o pid=,pgid=,tpgid=,comm= 2>/dev/null)
 EOF
   return 1
 }

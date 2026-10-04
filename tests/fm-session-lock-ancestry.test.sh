@@ -535,6 +535,26 @@ test_e2e_version_named_session_claims_the_home() {
   pass "session-lock e2e: a version-named session claims the home and arms supervision"
 }
 
+# Claude Code runs Stop hooks with a 4x2 display size, so an unpinned
+# `ps -o comm=` there reads "clau" and `ps -o args=` reads "/hom" for the live
+# session. The ancestry walk then never sees the harness, reads the live lock as
+# stale, and the auto-arm exits before claiming. Both a named and a version-named
+# session must still claim their home when the hook inherits that width.
+test_e2e_session_claims_the_home_under_a_4x2_hook_width() {
+  local dir bin label
+  for label in named version-named; do
+    dir="$TMP_ROOT/e2e-4x2-$label"
+    bin=$NAMED_CLAUDE
+    [ "$label" = named ] || bin=$VERSIONED_CLAUDE
+    make_primary_home "$dir"
+    COLUMNS=4 LINES=2 run_fixture_tree "$dir" "$bin"
+    expect_code 2 "$(hook_rc "$dir")" "a $label session must claim its home and rewake under a 4x2 hook width"
+    [ -e "$dir/state/arm-ran" ] || fail "supervision never armed for a $label session under a 4x2 hook width"
+    [ "$(epoch_outcome "$dir")" = rewake ] || fail "no claim was recorded for a $label session under a 4x2 hook width, got: $(epoch_outcome "$dir")"
+  done
+  pass "session-lock e2e: a session claims the home and arms supervision under a 4x2 hook width"
+}
+
 test_e2e_daemon_parented_session_claims_the_home() {
   local dir session_pid daemon_pid lock_after
   dir="$TMP_ROOT/e2e-daemon-parented"
@@ -1101,6 +1121,7 @@ test_competing_version_named_session_is_seen_as_live
 test_same_session_id_owns_a_recycled_background_chain
 test_anchor_pid_is_the_model_loop_process_only_for_a_trusted_id
 test_e2e_version_named_session_claims_the_home
+test_e2e_session_claims_the_home_under_a_4x2_hook_width
 test_e2e_daemon_parented_session_claims_the_home
 test_e2e_daemon_parented_version_named_session_keeps_its_lock
 test_e2e_background_session_keeps_its_lock_across_a_recycled_chain
