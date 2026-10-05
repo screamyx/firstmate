@@ -775,12 +775,19 @@ fm_backend_herdr_projection_workspace_label() {  # <task-id> <projection-id>
 
 # fm_backend_herdr_presentation_session_lock_path: one machine-private lock
 # path per live named Herdr session/socket, shared across every Firstmate home
-# that uses that session.
+# of the same OS user that uses that session.
 # The path is never under any one home's state/ and secondmates never write the
 # primary home. Returns non-zero when the named session's socket cannot be
 # resolved unambiguously.
+# The namespace directory is scoped by uid (/tmp/firstmate-herdr-presentation-<uid>)
+# so another user's Firstmate on the same machine never shares or blocks it; it
+# must still be owned by the current uid with mode 700.
+# FM_BACKEND_HERDR_PRESENTATION_LOCK_ROOT replaces /tmp only for tests.
 fm_backend_herdr_presentation_lock_namespace() {
-  printf '%s' '/tmp/firstmate-herdr-presentation'
+  local uid
+  uid=$(id -u 2>/dev/null) || return 1
+  [ -n "$uid" ] || return 1
+  printf '%s/firstmate-herdr-presentation-%s' "${FM_BACKEND_HERDR_PRESENTATION_LOCK_ROOT:-/tmp}" "$uid"
 }
 
 fm_backend_herdr_presentation_lock_namespace_mode() {

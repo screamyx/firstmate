@@ -282,7 +282,7 @@ Projected children are placed in one contiguous block immediately after their ow
 - The protocol.
 - The socket.
 - `python3`.
-- The machine-private per-session lock.
+- The machine-private per-user, per-session lock.
 
 Existing legacy child labels may extend an already adjacent block read-only but are never renamed or migrated.
 A foreign, ambiguous, detached, or manually interleaved child makes ordering skip with a warning rather than rewriting the layout.

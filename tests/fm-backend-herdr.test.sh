@@ -3360,7 +3360,8 @@ SH
 
 test_presentation_session_lock_path_is_shared_across_homes() {
   local dir log resp fb path_a path_b path_other path_tmp path_private
-  dir="$TMP_ROOT/presentation-session-lock"; mkdir -p "$dir/responses" "$dir/sockdir"
+  dir="$TMP_ROOT/presentation-session-lock"; mkdir -p "$dir/responses" "$dir/sockdir" "$dir/lockroot"
+  export FM_BACKEND_HERDR_PRESENTATION_LOCK_ROOT="$dir/lockroot"
   log="$dir/log"; resp="$dir/responses"; : > "$log"
   : > "$dir/sockdir/fmtest.sock"
   printf '%s\n' "{\"sessions\":[{\"name\":\"fmtest\",\"running\":true,\"socket_path\":\"$dir/sockdir/fmtest.sock\"}]}" > "$resp/1.out"
@@ -3376,8 +3377,8 @@ test_presentation_session_lock_path_is_shared_across_homes() {
     || fail "session lock path resolution failed for home B"
   [ "$path_a" = "$path_b" ] || fail "same session/socket must resolve one shared lock path"
   case "$path_a" in
-    /tmp/firstmate-herdr-presentation/order-*.lock) ;;
-    *) fail "session lock path must use the shared machine namespace: $path_a" ;;
+    "$dir/lockroot/firstmate-herdr-presentation-$(id -u)"/order-*.lock) ;;
+    *) fail "session lock path must use this user's machine namespace: $path_a" ;;
   esac
   case "$path_a" in
     */state/*) fail "session lock path must not live under a home state directory: $path_a" ;;
@@ -3401,7 +3402,59 @@ test_presentation_session_lock_path_is_shared_across_homes() {
     [ "$path_tmp" = "$path_private" ] \
       || fail "symlink parent socket paths must resolve one lock: $path_tmp vs $path_private"
   fi
+  unset FM_BACKEND_HERDR_PRESENTATION_LOCK_ROOT
   pass "herdr presentation lock: one path per session/socket across homes"
+}
+
+# Regression: another OS user's Firstmate on the same machine once created the
+# shared lock namespace first, and its owner-and-mode check then refused every
+# lock (and so every Herdr cleanup) for this user. A non-root test cannot create
+# a directory another uid owns, so a stat shim reports a foreign owner for the
+# other user's directories where the adapter reads stat from PATH.
+test_presentation_lock_namespace_ignores_other_users_directory() {
+  local dir log resp fb root me other path ns status mode
+  dir="$TMP_ROOT/presentation-lock-foreign-owner"
+  mkdir -p "$dir/responses" "$dir/sockdir" "$dir/lockroot"
+  log="$dir/log"; resp="$dir/responses"; root="$dir/lockroot"; : > "$log"
+  me=$(id -u); other=$((me + 1))
+  : > "$dir/sockdir/fmtest.sock"
+  printf '%s\n' "{\"sessions\":[{\"name\":\"fmtest\",\"running\":true,\"socket_path\":\"$dir/sockdir/fmtest.sock\"}]}" > "$resp/1.out"
+  mkdir -m 700 "$root/firstmate-herdr-presentation" "$root/firstmate-herdr-presentation-$other"
+  : > "$root/firstmate-herdr-presentation-$other/order-foreign.lock"
+  fb=$(make_herdr_fakebin "$dir")
+  cat > "$fb/stat" <<SH
+#!/usr/bin/env bash
+for a in "\$@"; do
+  case "\$a" in
+    "$root/firstmate-herdr-presentation"|"$root/firstmate-herdr-presentation-$other")
+      case " \$* " in *' %u '*) echo $other; exit 0 ;; esac ;;
+  esac
+done
+PATH="\${PATH#$fb:}" exec stat "\$@"
+SH
+  chmod +x "$fb/stat"
+  path=$(PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" \
+    FM_BACKEND_HERDR_PRESENTATION_LOCK_ROOT="$root" \
+    bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_presentation_session_lock_path fmtest' "$ROOT" 2>&1)
+  status=$?
+  [ "$status" -eq 0 ] || fail "another user's lock namespace blocked this user's presentation lock: $path"
+  ns="$root/firstmate-herdr-presentation-$me"
+  case "$path" in
+    "$ns"/order-*.lock) ;;
+    *) fail "presentation lock must live in this uid's namespace $ns: $path" ;;
+  esac
+  if [ ! -d "$ns" ] || [ -L "$ns" ]; then fail "this uid's lock namespace was not created: $ns"; fi
+  if [ "$(uname -s)" = Darwin ]; then
+    mode=$(/usr/bin/stat -f '%Lp' "$ns")
+  else
+    mode=$(stat -c '%a' "$ns")
+  fi
+  [ "$mode" = 700 ] || fail "this uid's lock namespace must be mode 700: $mode"
+  [ -z "$(ls -A "$root/firstmate-herdr-presentation")" ] \
+    || fail "the legacy shared namespace was written"
+  [ "$(ls -A "$root/firstmate-herdr-presentation-$other")" = order-foreign.lock ] \
+    || fail "another user's lock namespace was changed"
+  pass "herdr presentation lock: another user's namespace never blocks this user"
 }
 
 test_presentation_session_lock_path_rejects_malformed_socket() {
@@ -5865,6 +5918,7 @@ test_projection_order_anchors_the_parent_by_exact_id
 test_projection_order_foreign_new_child_before_parent_is_read_only
 test_projection_order_missing_parent_is_read_only
 test_presentation_session_lock_path_is_shared_across_homes
+test_presentation_lock_namespace_ignores_other_users_directory
 test_presentation_session_lock_path_rejects_malformed_socket
 test_projection_order_rejects_malformed_socket
 test_projection_reclaim_refusal_matrix_is_non_mutating
