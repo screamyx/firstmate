@@ -1,0 +1,7 @@
+Operator Codex configuration across the whole live run (fast-mode spawns, relaunch, replays).
+$ cat codex-config-before.sha256   # taken before the lab was created
+e187d7dd618b2686c1d1b8d4a035fb2bc3a5d45e744493083a630f8fc7386bae  /home/user/.codex/config.toml
+$ sha256sum -c codex-config-before.sha256   # after teardown
+/home/user/.codex/config.toml: OK
+$ grep -n 'service_tier\|fast_mode\|fm-lab' ~/.codex/config.toml
+6:# service_tier = "fast"   # off (owner 04:05: fast eats quota twice)

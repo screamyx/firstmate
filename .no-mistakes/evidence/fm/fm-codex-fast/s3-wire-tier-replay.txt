@@ -1,0 +1,30 @@
+Wire-tier replay of the exact fast-mode pair that bin/fm-spawn.sh put on the spawned worker's argv
+(window fm-fast-on, see s1-spawn-fast-on.txt), against the installed codex-cli 0.160.0 and the machine's existing login.
+The spawned TUI worker itself stops at Codex's folder-trust dialog; answering it would write ~/.codex/config.toml, so the tier is read from a non-interactive replay instead.
+Raw trace output was never stored: stderr was piped straight through grep -o for service_tier tokens only.
+
+$ cd $LAB/scratch-fast && codex exec --skip-git-repo-check --json -c 'service_tier="fast"' -c 'features.fast_mode=true' -c 'model_reasoning_effort="low"' 'Reply with the single word ok.'
+{"type":"thread.started","thread_id":"01a10b8f-f849-7a82-b60f-06987631a50f"}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"ok"}}
+{"type":"turn.completed","usage":{"input_tokens":19128,"cached_input_tokens":12288,"cache_write_input_tokens":0,"output_tokens":5,"reasoning_output_tokens":0}}
+
+$ (same, no fast pair) codex exec --skip-git-repo-check --json -c 'model_reasoning_effort="low"' 'Reply with the single word ok.'
+{"type":"thread.started","thread_id":"01a10b90-0fb0-7a62-a0dd-9d0628e4ba1c"}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"ok"}}
+{"type":"turn.completed","usage":{"input_tokens":19132,"cached_input_tokens":12288,"cache_write_input_tokens":0,"output_tokens":5,"reasoning_output_tokens":0}}
+
+$ RUST_LOG=trace codex exec ... WITH the fast pair 2>&1 >/dev/null | grep -o service_tier tokens | sort | uniq -c
+      5 "service_tier":"auto"
+      1 "service_tier":"default"
+      2 service_tier: None
+      1 "service_tier":"priority"
+      2 service_tier="priority"
+      1 service_tier: Some("priority")
+
+$ RUST_LOG=trace codex exec ... WITHOUT the pair (control) 2>&1 >/dev/null | grep -o service_tier tokens | sort | uniq -c
+      5 "service_tier":"auto"
+      1 "service_tier":"default"
+      3 service_tier: None
+      1 "service_tier":"unset"
+
+Result: only the run carrying fm-spawn's pair shows service_tier Some("priority") / "priority" (config value fast appears on the wire as priority); the control shows "unset". The auto/default rows appear in both runs.

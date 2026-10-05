@@ -1,0 +1,30 @@
+fm-spawn --fast refusals, run from the lab primary pane (FM_HOME=/tmp/fm-lab.qgWNtJ, private tmux socket fm-lab).
+
+$ bin/fm-spawn.sh ref-claude /tmp/fm-lab.qgWNtJ/projects/demo --scout --harness claude --fast on
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /tmp/fm-lab.qgWNtJ
+error: --fast on is Codex fast mode and requires the canonical --harness codex launch; harness 'claude' would launch without it
+exit=1
+
+$ bin/fm-spawn.sh ref-raw /tmp/fm-lab.qgWNtJ/projects/demo --scout --harness codex --model gpt-6.1-sol --fast on
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /tmp/fm-lab.qgWNtJ
+error: --fast on is Codex fast mode and requires the canonical --harness codex launch; harness 'codex' would launch without it
+exit=1
+
+$ bin/fm-spawn.sh ref-bad /tmp/fm-lab.qgWNtJ/projects/demo --scout --harness codex --fast yes
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /tmp/fm-lab.qgWNtJ
+error: --fast must be on or off (got 'yes')
+exit=1
+
+$ bin/fm-spawn.sh ref-sm --secondmate --harness codex --fast on
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /tmp/fm-lab.qgWNtJ
+error: --fast on applies only to codex crewmate and scout spawns; a secondmate's profile re-resolves from config/secondmate-harness on every respawn, which has no fast token, so its fast mode could not be kept
+exit=1
+
+# tmux windows before:
+#   primary:bash
+#   primary:fm-fast-rl
+# tmux windows after:
+#   primary:bash
+#   primary:fm-fast-rl
+# state/ entries before == after: yes
+# no state/ref-*.meta, no /tmp/fm-ref-* task tmp dir: yes

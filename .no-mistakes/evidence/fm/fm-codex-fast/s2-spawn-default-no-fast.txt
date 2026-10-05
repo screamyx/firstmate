@@ -1,0 +1,29 @@
+$ bin/fm-spawn.sh fast-none "$FM_HOME/projects/demo" --scout --harness codex   # no --fast; FM_HOME=/tmp/fm-lab.qgWNtJ
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /tmp/fm-lab.qgWNtJ
+spawned fast-none harness=codex kind=scout window=primary:fm-fast-none worktree=/tmp/fm-lab.qgWNtJ/pool/.treehouse/demo-5bc1c1/2/demo
+exit=0
+
+$ cat $FM_HOME/state/fast-none.meta
+window=primary:fm-fast-none
+endpoint_task_id=fast-none
+worktree=/tmp/fm-lab.qgWNtJ/pool/.treehouse/demo-5bc1c1/2/demo
+project=/tmp/fm-lab.qgWNtJ/projects/demo
+harness=codex
+kind=scout
+tasktmp=/tmp/fm-fast-none
+model=default
+effort=default
+spawn_gen=s1791195195.2166717.882
+
+$ tr '\0' '\n' < /proc/2169112/cmdline   # native codex binary in window fm-fast-none
+/usr/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex
+--dangerously-bypass-approvals-and-sandbox
+--disable
+hooks
+-c
+notify=["bash","-c","touch '/tmp/fm-lab.qgWNtJ/state/fast-none.turn-ended'"]
+<launch brief positional elided>
+
+$ diff <(grep -v -e ^spawn_gen= -e ^window= -e ^endpoint_task_id= -e ^worktree= -e ^tasktmp= fast-none.meta) <(... fast-on.meta)
+5a6
+> fast=on

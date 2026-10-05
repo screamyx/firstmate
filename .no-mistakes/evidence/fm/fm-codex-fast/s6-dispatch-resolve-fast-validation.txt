@@ -1,0 +1,45 @@
+fm-dispatch-resolve.sh fast-profile validation, FM_HOME=/tmp/fm-lab.qgWNtJ.
+Network guard: dummy key, config/dispatch-never-send matches the brief (stops a valid file before the POST), and https_proxy points at a closed port.
+
+## valid codex fast profile passes validation (stops at never-send, nothing sent)
+$ cat config/crew-dispatch.json
+{"rules":[{"when":"speed","use":{"harness":"codex","model":"gpt-6.1-sol","fast":true}}]}
+$ TYPESAFE_API_KEY=lab-dummy-never-sent bin/fm-dispatch-resolve.sh data/fast-rl/brief.md --project demo
+dispatch-resolve: off (brief text matches $FM_HOME/config/dispatch-never-send line 1; nothing sent)
+exit=0
+
+## use array whose codex entries differ only by fast is a duplicate (review round 1 decision)
+$ cat config/crew-dispatch.json
+{"rules":[{"when":"speed","use":[{"harness":"codex","model":"gpt-6.1-sol","effort":"high"},{"harness":"codex","model":"gpt-6.1-sol","effort":"high","fast":true}]}]}
+$ TYPESAFE_API_KEY=lab-dummy-never-sent bin/fm-dispatch-resolve.sh data/fast-rl/brief.md --project demo
+error: malformed rules file: $FM_HOME/config/crew-dispatch.json - each rule use must not contain duplicate harness, model, and effort profiles
+exit=2
+
+## default array differing only by fast is a duplicate
+$ cat config/crew-dispatch.json
+{"rules":[{"when":"speed","use":{"harness":"codex"}}],"default":[{"harness":"codex","model":"gpt-6.1-sol"},{"harness":"codex","model":"gpt-6.1-sol","fast":true}]}
+$ TYPESAFE_API_KEY=lab-dummy-never-sent bin/fm-dispatch-resolve.sh data/fast-rl/brief.md --project demo
+error: malformed rules file: $FM_HOME/config/crew-dispatch.json - default must not contain duplicate harness, model, and effort profiles
+exit=2
+
+## fast true on a claude profile is refused
+$ cat config/crew-dispatch.json
+{"rules":[{"when":"speed","use":{"harness":"claude","fast":true}}]}
+$ TYPESAFE_API_KEY=lab-dummy-never-sent bin/fm-dispatch-resolve.sh data/fast-rl/brief.md --project demo
+error: malformed rules file: $FM_HOME/config/crew-dispatch.json - each use profile with fast must use the codex harness
+exit=2
+
+## fast true on a grok default profile is refused
+$ cat config/crew-dispatch.json
+{"rules":[{"when":"speed","use":{"harness":"codex"}}],"default":{"harness":"grok","fast":true}}
+$ TYPESAFE_API_KEY=lab-dummy-never-sent bin/fm-dispatch-resolve.sh data/fast-rl/brief.md --project demo
+error: malformed rules file: $FM_HOME/config/crew-dispatch.json - each default profile with fast must use the codex harness
+exit=2
+
+## non-boolean fast is refused
+$ cat config/crew-dispatch.json
+{"rules":[{"when":"speed","use":{"harness":"codex","fast":"yes"}}]}
+$ TYPESAFE_API_KEY=lab-dummy-never-sent bin/fm-dispatch-resolve.sh data/fast-rl/brief.md --project demo
+error: malformed rules file: $FM_HOME/config/crew-dispatch.json - each use profile fast must be a boolean when present
+exit=2
+

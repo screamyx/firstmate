@@ -1,0 +1,17 @@
+The literal launch scripts bin/fm-spawn.sh wrote to each task's tasktmp and typed into the lab pane (one per incarnation).
+
+# fast-on: fm-spawn.sh --scout --harness codex --fast on
+export COMPACT_ADVISER_DISABLE=1; export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0='/tmp/fm-lab.qgWNtJ/state/fast-on.git-hooks'; env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI codex -c 'service_tier="fast"' -c 'features.fast_mode=true' --dangerously-bypass-approvals-and-sandbox --disable hooks -c "notify=[\"bash\",\"-c\",\"touch '/tmp/fm-lab.qgWNtJ/state/fast-on.turn-ended'\"]" "$('/home/user/.no-mistakes/worktrees/5cf2740bfd30/01M45QRQ3GWQ7MQ982BC3M44EC/bin/fm-operational-input.sh' encode launch-brief < '/tmp/fm-lab.qgWNtJ/data/fast-on/launch-brief.md')"
+
+
+# fast-none: fm-spawn.sh --scout --harness codex (no --fast)
+export COMPACT_ADVISER_DISABLE=1; export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0='/tmp/fm-lab.qgWNtJ/state/fast-none.git-hooks'; env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI codex --dangerously-bypass-approvals-and-sandbox --disable hooks -c "notify=[\"bash\",\"-c\",\"touch '/tmp/fm-lab.qgWNtJ/state/fast-none.turn-ended'\"]" "$('/home/user/.no-mistakes/worktrees/5cf2740bfd30/01M45QRQ3GWQ7MQ982BC3M44EC/bin/fm-operational-input.sh' encode launch-brief < '/tmp/fm-lab.qgWNtJ/data/fast-none/launch-brief.md')"
+
+
+# fast-rl first incarnation: fm-spawn.sh --scout --harness codex --fast on
+export COMPACT_ADVISER_DISABLE=1; export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0='/tmp/fm-lab.qgWNtJ/state/fast-rl.git-hooks'; env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI codex -c 'service_tier="fast"' -c 'features.fast_mode=true' --dangerously-bypass-approvals-and-sandbox --disable hooks -c "notify=[\"bash\",\"-c\",\"touch '/tmp/fm-lab.qgWNtJ/state/fast-rl.turn-ended'\"]" "$('/home/user/.no-mistakes/worktrees/5cf2740bfd30/01M45QRQ3GWQ7MQ982BC3M44EC/bin/fm-operational-input.sh' encode launch-brief < '/tmp/fm-lab.qgWNtJ/data/fast-rl/launch-brief.md')"
+
+
+# fast-rl replacement: fm-control.sh fast-rl relaunch (no fast flag on the relaunch verb; recorded fast=on carried)
+unset TRACEPARENT; export COMPACT_ADVISER_DISABLE=1; export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0='/tmp/fm-lab.qgWNtJ/state/fast-rl.git-hooks'; env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI codex -c 'service_tier="fast"' -c 'features.fast_mode=true' --dangerously-bypass-approvals-and-sandbox --disable hooks -c "notify=[\"bash\",\"-c\",\"touch '/tmp/fm-lab.qgWNtJ/state/fast-rl.turn-ended'\"]" "$('/home/user/.no-mistakes/worktrees/5cf2740bfd30/01M45QRQ3GWQ7MQ982BC3M44EC/bin/fm-operational-input.sh' encode launch-brief < '/tmp/fm-lab.qgWNtJ/data/fast-rl/launch-brief.md')"
+

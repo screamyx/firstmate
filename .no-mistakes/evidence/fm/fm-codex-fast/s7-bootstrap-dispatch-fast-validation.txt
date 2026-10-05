@@ -1,0 +1,28 @@
+Session-start bootstrap validation of config/crew-dispatch.json fast profiles, FM_HOME=/tmp/fm-lab.qgWNtJ, read-only local pass.
+
+## valid codex fast profile in a quota array is accepted and surfaced as ' fast'
+$ cat config/crew-dispatch.json
+{"rules":[{"when":"speed-critical build","use":[{"harness":"claude","model":"claude-sonnet-5","effort":"high"},{"harness":"codex","model":"gpt-6.1-sol","effort":"high","fast":true}]}],"default":{"harness":"codex","fast":false}}
+$ FM_BOOTSTRAP_DETECT_ONLY=1 FM_BOOTSTRAP_NETWORK=skip FM_BOOTSTRAP_VERBOSE_FACTS=1 bin/fm-bootstrap.sh | grep -E 'CREW_DISPATCH|crew dispatch'
+BOOTSTRAP_INFO: crew dispatch active config/crew-dispatch.json
+BOOTSTRAP_INFO: crew dispatch rule: speed-critical build -> quota-balanced[claude/claude-sonnet-5/high, codex/gpt-6.1-sol/high fast]
+BOOTSTRAP_INFO: crew dispatch default: codex
+
+## fast true on a claude profile
+$ cat config/crew-dispatch.json
+{"rules":[{"when":"speed","use":[{"harness":"claude","fast":true},{"harness":"codex","fast":true}]}]}
+$ FM_BOOTSTRAP_DETECT_ONLY=1 FM_BOOTSTRAP_NETWORK=skip FM_BOOTSTRAP_VERBOSE_FACTS=1 bin/fm-bootstrap.sh | grep -E 'CREW_DISPATCH|crew dispatch'
+CREW_DISPATCH: invalid config/crew-dispatch.json - fast mode is codex-only: claude
+
+## non-boolean use profile fast
+$ cat config/crew-dispatch.json
+{"rules":[{"when":"speed","use":{"harness":"codex","fast":"yes"}}]}
+$ FM_BOOTSTRAP_DETECT_ONLY=1 FM_BOOTSTRAP_NETWORK=skip FM_BOOTSTRAP_VERBOSE_FACTS=1 bin/fm-bootstrap.sh | grep -E 'CREW_DISPATCH|crew dispatch'
+CREW_DISPATCH: invalid config/crew-dispatch.json - use profile fast must be a boolean when present
+
+## non-boolean default profile fast
+$ cat config/crew-dispatch.json
+{"default":[{"harness":"codex","fast":1}]}
+$ FM_BOOTSTRAP_DETECT_ONLY=1 FM_BOOTSTRAP_NETWORK=skip FM_BOOTSTRAP_VERBOSE_FACTS=1 bin/fm-bootstrap.sh | grep -E 'CREW_DISPATCH|crew dispatch'
+CREW_DISPATCH: invalid config/crew-dispatch.json - default profile fast must be a boolean when present
+

@@ -1,0 +1,30 @@
+$ bin/fm-spawn.sh fast-on "$FM_HOME/projects/demo" --scout --harness codex --fast on   # FM_HOME=/tmp/fm-lab.qgWNtJ, private tmux socket fm-lab
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /tmp/fm-lab.qgWNtJ
+spawned fast-on harness=codex kind=scout window=primary:fm-fast-on worktree=/tmp/fm-lab.qgWNtJ/pool/.treehouse/demo-5bc1c1/1/demo
+exit=0
+
+$ cat $FM_HOME/state/fast-on.meta
+window=primary:fm-fast-on
+endpoint_task_id=fast-on
+worktree=/tmp/fm-lab.qgWNtJ/pool/.treehouse/demo-5bc1c1/1/demo
+project=/tmp/fm-lab.qgWNtJ/projects/demo
+harness=codex
+kind=scout
+tasktmp=/tmp/fm-fast-on
+model=default
+effort=default
+fast=on
+spawn_gen=s1791195107.2130960.5015
+
+$ tr '\0' '\n' < /proc/2133152/cmdline   # native codex binary in window fm-fast-on
+/usr/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex
+-c
+service_tier="fast"
+-c
+features.fast_mode=true
+--dangerously-bypass-approvals-and-sandbox
+--disable
+hooks
+-c
+notify=["bash","-c","touch '/tmp/fm-lab.qgWNtJ/state/fast-on.turn-ended'"]
+<launch brief positional elided>
