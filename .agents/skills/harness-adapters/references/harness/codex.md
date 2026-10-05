@@ -16,6 +16,15 @@ Verified on 2026-06-11 with codex-cli 0.139.0 unless a fact gives a newer versio
 | Model discovery | Open the current interactive session's `/model` picker. |
 | Marker | None; identity comes from ancestry, and `../../../bin/fm-harness.sh` is what keeps a retained foreign `CLAUDECODE` from renaming it. Verified on 2026-09-01 with codex-cli 0.152.0: the pane process is the `node` npm shim and the native `codex` binary runs as its foreground child, so a tool subprocess reaches the native name directly while the shim itself is identified from its script path. |
 
+## Fast mode
+
+`../../../bin/fm-spawn.sh --fast on` turns Codex fast mode on for one worker launch by adding `-c 'service_tier="fast"' -c 'features.fast_mode=true'`; the machine's `~/.codex/config.toml` is never edited, so the operator's own Codex sessions keep their configured tier.
+Verified on 2026-10-05 with codex-cli 0.160.0 by running `RUST_LOG=trace codex exec --skip-git-repo-check -c 'service_tier="fast"' -c features.fast_mode=true -c model_reasoning_effort='"low"' 'reply with the word ok'` and the same command without the two settings.
+With the pair, the request carried `service_tier: Some("priority")` and the response reported `"service_tier":"priority"`; without it, the tier was unset.
+The config value `fast` therefore appears on the wire as `priority`.
+On that install `codex features list` already showed `fast_mode` as `stable` and `true`, and the pair was tested together, so this record does not claim which of the two settings is load-bearing.
+A tier the model does not advertise is not a launch failure: `service_tier="bogus"` printed "Configured service tier `bogus` is not advertised as supported for model `gpt-6.1-sol` and will be omitted from requests." and the run continued.
+
 A directory trust dialog appears on the first run for a repository root: "Do you trust the contents of this directory?"
 Accept it with Enter and verify the instructions begin processing.
 The decision persists for the repository, so later worktrees of the same project skip it.

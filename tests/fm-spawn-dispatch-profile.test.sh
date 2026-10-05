@@ -612,6 +612,115 @@ test_codex_secondmate_launch_keeps_the_hook_layer() {
   pass "a codex secondmate keeps the project hook layer its primary session runs on"
 }
 
+CODEX_FAST_FLAGS="-c 'service_tier=\"fast\"' -c 'features.fast_mode=true' "
+
+test_codex_fast_on_threads_fast_mode_into_that_launch() {
+  local rec id out status launch
+  id=profile-codex-fast-z4e
+  rec=$(make_spawn_case profile-codex-fast codex "$id")
+  read_case_record "$rec"
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --model gpt-5 --effort high --fast on)
+  status=$?
+  expect_code 0 "$status" "codex spawn with --fast on should succeed"$'\n'"$out"
+  assert_meta_profile "$HOME_DIR/state/$id.meta" codex gpt-5 high
+  assert_grep "fast=on" "$HOME_DIR/state/$id.meta" "meta missing fast=on"
+  launch=$(cat "$LAUNCH_LOG")
+  assert_contains "$launch" "codex --model 'gpt-5' -c 'model_reasoning_effort=\"high\"' ${CODEX_FAST_FLAGS}--dangerously-bypass-approvals-and-sandbox" \
+    "codex launch did not thread the fast-mode settings"
+  pass "codex --fast on adds the service tier and fast_mode settings to that one launch"
+}
+
+test_codex_fast_off_matches_the_default_launch() {
+  local rec id status launch_default launch_off meta_default meta_off
+  id=profile-codex-fastdefault-z4f
+  rec=$(make_spawn_case profile-codex-fastdefault codex "$id")
+  read_case_record "$rec"
+  run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --model gpt-5 >/dev/null 2>&1
+  status=$?
+  expect_code 0 "$status" "default codex spawn should succeed"
+  launch_default=$(sed "s|$CASE_DIR|CASE|g" "$LAUNCH_LOG")
+  meta_default=$(grep -v -e '^spawn_gen=' -e '^tasktmp=' "$HOME_DIR/state/$id.meta" | sed "s|$CASE_DIR|CASE|g")
+
+  rec=$(make_spawn_case profile-codex-fastoff codex "$id")
+  read_case_record "$rec"
+  run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --model gpt-5 --fast off >/dev/null 2>&1
+  status=$?
+  expect_code 0 "$status" "codex spawn with --fast off should succeed"
+  launch_off=$(sed "s|$CASE_DIR|CASE|g" "$LAUNCH_LOG")
+  meta_off=$(grep -v -e '^spawn_gen=' -e '^tasktmp=' "$HOME_DIR/state/$id.meta" | sed "s|$CASE_DIR|CASE|g")
+
+  assert_not_contains "$launch_off" "service_tier" "--fast off must not add the service tier"
+  assert_no_grep "fast=" "$HOME_DIR/state/$id.meta" "--fast off must not write a fast= record line"
+  [ "$launch_off" = "$launch_default" ] || fail "--fast off changed the launch"$'\n'"default: $launch_default"$'\n'"off:     $launch_off"
+  [ "$meta_off" = "$meta_default" ] || fail "--fast off changed the task record"$'\n'"default: $meta_default"$'\n'"off:     $meta_off"
+  pass "codex --fast off launches and records exactly like a spawn without the flag"
+}
+
+test_fast_on_refuses_a_non_codex_harness_before_endpoint_or_metadata() {
+  local rec id out status
+  id=profile-claude-fast-z4g
+  rec=$(make_spawn_case profile-claude-fast claude "$id")
+  read_case_record "$rec"
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --harness claude --fast on)
+  status=$?
+  expect_code 1 "$status" "--fast on with claude should refuse"
+  assert_contains "$out" "--fast on is Codex fast mode and requires the canonical --harness codex launch; harness 'claude'" \
+    "the refusal did not name Codex fast mode and the rejected harness"
+  assert_absent "$HOME_DIR/state/$id.meta" "a refused fast-mode spawn wrote task metadata"
+  [ ! -s "$LAUNCH_LOG" ] || fail "a refused fast-mode spawn typed a launch command"
+  pass "--fast on refuses a non-codex harness instead of ignoring it"
+}
+
+test_fast_on_refuses_a_raw_launch_command() {
+  local rec id out status
+  id=profile-raw-fast-z4h
+  rec=$(make_spawn_case profile-raw-fast codex "$id")
+  read_case_record "$rec"
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" "codex --some-flag" --fast on)
+  status=$?
+  expect_code 1 "$status" "--fast on with a raw launch command should refuse"
+  assert_contains "$out" "requires the canonical --harness codex launch" \
+    "the raw-launch refusal did not name the canonical codex requirement"
+  assert_absent "$HOME_DIR/state/$id.meta" "a refused raw fast-mode spawn wrote task metadata"
+  [ ! -s "$LAUNCH_LOG" ] || fail "a refused raw fast-mode spawn typed a launch command"
+  pass "--fast on refuses a raw launch command it could not thread the settings into"
+}
+
+test_fast_on_refuses_a_secondmate_spawn() {
+  local rec id sm out status
+  id=profile-codex-secondmate-fast-z4i
+  rec=$(make_spawn_case profile-codex-secondmate-fast codex "$id")
+  read_case_record "$rec"
+  sm="$CASE_DIR/secondmate-home"
+  make_seeded_secondmate_home "$sm" "$id"
+
+  out=$(run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$sm" --secondmate --fast on)
+  status=$?
+  expect_code 1 "$status" "--fast on with a secondmate spawn should refuse"
+  assert_contains "$out" "--fast on applies only to codex crewmate and scout spawns" \
+    "the secondmate refusal did not name the crewmate and scout scope"
+  assert_absent "$HOME_DIR/state/$id.meta" "a refused secondmate fast-mode spawn wrote task metadata"
+  [ ! -s "$LAUNCH_LOG" ] || fail "a refused secondmate fast-mode spawn typed a launch command"
+  pass "--fast on refuses a secondmate, whose respawn could not keep it"
+}
+
+test_fast_rejects_values_other_than_on_or_off() {
+  local rec id out status
+  id=profile-codex-fastbad-z4j
+  rec=$(make_spawn_case profile-codex-fastbad codex "$id")
+  read_case_record "$rec"
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --fast yes)
+  status=$?
+  expect_code 1 "$status" "--fast yes should refuse"
+  assert_contains "$out" "--fast must be on or off (got 'yes')" "the refusal did not name the accepted values"
+  assert_absent "$HOME_DIR/state/$id.meta" "a refused --fast value wrote task metadata"
+  pass "--fast accepts only on or off"
+}
+
 test_grok_threads_model_and_reasoning_effort() {
   local rec id out status launch
   id=profile-grok-z5
@@ -1039,6 +1148,22 @@ test_batch_forwards_shared_profile_flags() {
   assert_meta_profile "$HOME_DIR/state/$id1.meta" codex gpt-5 high
   assert_meta_profile "$HOME_DIR/state/$id2.meta" codex gpt-5 high
   pass "batch dispatch forwards shared --harness, --model, and --effort to every pair"
+}
+
+test_batch_forwards_shared_fast_mode() {
+  local rec id1 id2 out status
+  id1=profile-batch-fast-a-z9b
+  id2=profile-batch-fast-b-z10b
+  rec=$(make_spawn_case profile-batch-fast codex "$id1" "$id2")
+  read_case_record "$rec"
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" \
+    "$id1=$PROJ_DIR" "$id2=$PROJ_DIR" --harness codex --fast on)
+  status=$?
+  expect_code 0 "$status" "batch spawn with shared --fast on should succeed"$'\n'"$out"
+  assert_grep "fast=on" "$HOME_DIR/state/$id1.meta" "first batch task did not record fast mode"
+  assert_grep "fast=on" "$HOME_DIR/state/$id2.meta" "second batch task did not record fast mode"
+  pass "batch dispatch forwards shared --fast to every pair"
 }
 
 test_claude_forwards_firstmate_config_dir_when_set() {
@@ -1762,6 +1887,12 @@ test_codex_threads_model_and_max_effort
 test_codex_omits_max_effort_for_unsupported_model
 test_codex_crewmate_launch_disables_the_hook_layer
 test_codex_secondmate_launch_keeps_the_hook_layer
+test_codex_fast_on_threads_fast_mode_into_that_launch
+test_codex_fast_off_matches_the_default_launch
+test_fast_on_refuses_a_non_codex_harness_before_endpoint_or_metadata
+test_fast_on_refuses_a_raw_launch_command
+test_fast_on_refuses_a_secondmate_spawn
+test_fast_rejects_values_other_than_on_or_off
 test_grok_threads_model_and_reasoning_effort
 test_grok_omits_invalid_max_reasoning_effort
 test_grok_omits_invalid_xhigh_reasoning_effort
@@ -1781,6 +1912,7 @@ test_pi_signed_threads_shared_pi_profile_and_preserves_identity
 test_pi_signed_missing_binary_refuses_before_endpoint_or_metadata
 test_pi_signed_persistent_secondmate_uses_pi_extensions_and_identity
 test_batch_forwards_shared_profile_flags
+test_batch_forwards_shared_fast_mode
 test_claude_forwards_firstmate_config_dir_when_set
 test_lavish_server_address_is_exported_to_worker_launch
 test_lavish_absent_config_preserves_destination_ambient

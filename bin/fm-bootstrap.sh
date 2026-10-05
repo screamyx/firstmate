@@ -1088,6 +1088,8 @@ crew_dispatch_validate() {
           then (provider_id($f.provider) | not)
           else ($f | has("provider"))
           end);
+    def malformed_fast($items):
+      ($items | any(has("fast") and ((.fast | type) != "boolean")));
     def malformed_profile_floors($items):
       ($items | any(has("floor") and floor_bad(.floor; false)));
     def bad_efforts:
@@ -1097,6 +1099,13 @@ crew_dispatch_validate() {
       | map(select((.h | type) == "string" and verified(.h)))
       | map(select(. as $p | effort_ok($p.h; $p.m; $p.e) | not))
       | map("\(.h):\(.e)")
+      | unique;
+    # Fast mode is a Codex launch setting (bin/fm-spawn.sh --fast), so fast:
+    # true on any other verified harness would be refused at spawn.
+    def bad_fast:
+      configured_profiles
+      | map(select(.fast == true and (.harness | type) == "string" and verified(.harness) and .harness != "codex"))
+      | map(.harness)
       | unique;
     if type != "object" then "top-level value must be an object"
     elif has("rules") and (.rules | type) != "array" then "rules must be an array"
@@ -1110,6 +1119,7 @@ crew_dispatch_validate() {
       if $typed then "use profile model and effort must be non-empty strings, and provider must match ^[a-z0-9]+(-[a-z0-9]+)*\\z when present"
       else "use profile model and effort must be non-empty strings when present"
       end
+    elif malformed_fast([(.rules // [])[]? | profiles(.use?)[]?]) then "use profile fast must be a boolean when present"
     elif $typed and malformed_profile_floors([(.rules // [])[]? | profiles(.use?)[]?]) then "use profile floor needs scope and min_percent 0..100"
     elif $typed and ([(.rules // [])[]? | select(has("approval") and .approval != "captain")] | length > 0) then "approval must be \"captain\" when present"
     elif $typed and ([(.rules // [])[]? | select(has("floor") and floor_bad(.floor; true))] | length > 0) then "rule floor needs scope, min_percent 0..100, and provider matching ^[a-z0-9]+(-[a-z0-9]+)*\\z"
@@ -1125,6 +1135,7 @@ crew_dispatch_validate() {
       if $typed then "default profile model and effort must be non-empty strings, and provider must match ^[a-z0-9]+(-[a-z0-9]+)*\\z when present"
       else "default profile model and effort must be non-empty strings when present"
       end
+    elif has("default") and malformed_fast([profiles(.default)[]?]) then "default profile fast must be a boolean when present"
     elif $typed and has("default") and malformed_profile_floors([profiles(.default)[]?]) then "default profile floor needs scope and min_percent 0..100"
     else
       (configured_profiles
@@ -1134,6 +1145,7 @@ crew_dispatch_validate() {
         | unique) as $bad_harnesses
       | if ($bad_harnesses | length) > 0 then "unverified harness: " + ($bad_harnesses | join(", "))
         elif (bad_efforts | length) > 0 then "invalid effort: " + (bad_efforts | join(", "))
+        elif (bad_fast | length) > 0 then "fast mode is codex-only: " + (bad_fast | join(", "))
         else empty
         end
     end
@@ -1149,7 +1161,8 @@ crew_dispatch_validate() {
       + (if ($p.model? != null) then "/" + ($p.model | tostring)
          elif ($p.effort? != null) then "/default"
          else "" end)
-      + (if ($p.effort? != null) then "/" + ($p.effort | tostring) else "" end);
+      + (if ($p.effort? != null) then "/" + ($p.effort | tostring) else "" end)
+      + (if ($p.fast? == true) then " fast" else "" end);
     def profile_set($value; $selector):
       if ($value | type) == "array" then
         (($selector // "quota-balanced") + "[" + ([$value[] | profile(.)] | join(", ")) + "]")
