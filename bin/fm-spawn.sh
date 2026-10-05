@@ -90,8 +90,9 @@
 #   -c features.fast_mode=true to that one codex launch and never touches the
 #   machine's ~/.codex/config.toml, so the operator's own Codex sessions keep
 #   their configured tier. It is recorded as fast=on in task metadata only when
-#   on (an off spawn stays byte-identical) and a relaunch onto the same harness
-#   keeps it (bin/fm-control.sh). On is refused, before any endpoint or
+#   on (an off spawn stays byte-identical); fm-control relaunch onto the same
+#   harness keeps it, while a direct --relaunch drops it unless --fast on is
+#   passed again. On is refused, before any endpoint or
 #   metadata exists, for every harness other than the canonical codex launch,
 #   including a raw launch command, and for --secondmate, whose profile
 #   re-resolves from config/secondmate-harness on every respawn, which has no
