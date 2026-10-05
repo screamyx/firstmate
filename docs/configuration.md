@@ -992,7 +992,7 @@ Per-machine Cursor `cli-config.json` attribution-off is not this contract: it do
 
 `config/crew-dispatch.json` is an optional local, gitignored file containing natural-language rules that firstmate reads before dispatching a crewmate or scout.
 Firstmate chooses the best matching rule with judgment; shell scripts do not match the natural-language rules.
-Firstmate resolves the rule's profile object or array under `AGENTS.md` section 4 and `quota-array-dispatch`, then passes only concrete `--harness`, `--model`, and `--effort` flags to `fm-spawn.sh`.
+Firstmate resolves the rule's profile object or array under `AGENTS.md` section 4 and `quota-array-dispatch`, then passes only concrete `--harness`, `--model`, `--effort`, and `--fast` flags to `fm-spawn.sh`.
 
 **Spawn requirements**
 
@@ -1014,7 +1014,7 @@ This section is the single owner of the canonical schema and its per-field seman
       "min_confidence": 0.85,
       "floor": { "scope": "<quota-axi scope>", "min_percent": 20, "provider": "<quota-axi provider>" },
       "use": [
-        { "harness": "<adapter>", "model": "<optional model>", "effort": "<low|medium|high|xhigh|max|ultra, optional>", "provider": "<optional quota-axi provider>", "floor": { "scope": "<quota-axi scope>", "min_percent": 50 } }
+        { "harness": "<adapter>", "model": "<optional model>", "effort": "<low|medium|high|xhigh|max|ultra, optional>", "fast": true, "provider": "<optional quota-axi provider>", "floor": { "scope": "<quota-axi scope>", "min_percent": 50 } }
       ],
       "why": "<optional rationale that helps firstmate choose>"
     }
@@ -1033,7 +1033,7 @@ This section is the single owner of the canonical schema and its per-field seman
 | Rule `when` and `use` | Required for each rule. |
 | `use` and optional top-level `default` | Accept one profile object or a non-empty array of profile objects; the single-object form remains fully backward-compatible. |
 | Profile `harness` | Required in every profile. |
-| Profile `model` and `effort`; rule `why` | Optional. |
+| Profile `model`, `effort`, and `fast`; rule `why` | Optional. |
 
 **Fields applied only by typed resolution**
 
@@ -1077,6 +1077,7 @@ This single-provider table is separate from the frozen legacy mapping used by `f
 - `ultra` is native-only: the model-aware validation contract and launch mapping are owned by `bin/fm-harness.sh validate-native-effort` and `bin/fm-spawn.sh` respectively.
 - Codex `max` is valid when the profile selects `gpt-5.6-luna`, whose installed catalog entry supports that reasoning level.
 - An omitted model or effort means the selected harness uses its own default for that axis.
+- `fast` is a boolean that only a `codex` profile may set to `true`; firstmate then passes `--fast on`, which turns Codex fast mode on for that one launch without editing `~/.codex/config.toml` (`bin/fm-spawn.sh` owns the launch settings), and an omitted or `false` value launches without it.
 - OpenCode receives the effort as its default `build` agent's `variant`, keyed to the resolved model, inside the `OPENCODE_CONFIG_CONTENT` JSON its launch already writes (the per-model reasoning-effort field of the config schema, verified on opencode 1.18.32); with no model resolved, the effort is recorded in task metadata but omitted from the launch.
 - Every profile array is an implicit quota-aware choice resolved through `quota-array-dispatch`.
 - If no dispatch rule fits, firstmate resolves `default` through the same object-or-array path before falling back to `config/crew-harness`.
@@ -1089,7 +1090,7 @@ See [`docs/examples/crew-dispatch.json`](examples/crew-dispatch.json) for a star
 
 - When the file exists, bootstrap validates it with `jq`.
 - Valid files stay silent by default; with `FM_BOOTSTRAP_VERBOSE_FACTS=1`, bootstrap emits `BOOTSTRAP_INFO: crew dispatch active config/crew-dispatch.json`, one `BOOTSTRAP_INFO:` fact per rule, and one fact for the optional default profile set.
-- Malformed JSON, malformed rules, an empty or malformed profile array, an unverified harness, or an effort value unsupported by that harness is reported as `CREW_DISPATCH: invalid config/crew-dispatch.json - ...`.
+- Malformed JSON, malformed rules, an empty or malformed profile array, an unverified harness, an effort value unsupported by that harness, or a `fast` value that is not a boolean or is `true` on a non-`codex` profile is reported as `CREW_DISPATCH: invalid config/crew-dispatch.json - ...`.
 - While typed resolution is active, malformed `approval`, `min_confidence`, `floor`, and present `provider` declarations receive the same diagnostic; without the key those inert declarations preserve the pre-existing bootstrap behavior.
 - Missing `jq` is reported through the normal `MISSING: jq` install-consent flow.
 - While the file remains present, no crewmate or scout spawn may proceed without an explicit resolved harness; malformed configuration must be reported and corrected rather than selected around.

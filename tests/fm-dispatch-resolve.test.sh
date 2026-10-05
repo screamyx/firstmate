@@ -823,6 +823,20 @@ TYPESAFE_API_KEY=$KEY QUOTA_AXI_FIXTURE="$TMP_ROOT/schema6-default.json" run cod
 assert_contains "$out" "  profile: --harness 'codex' --model 'gpt-5.6-sol'" "native Codex falls back to the default row when codex-home is absent"
 pass "native Codex binds to codex-home before default, independently of Pi accounts and row order"
 
+jq '.rules[0].use |= map(if .harness == "codex" then .fast = true else . end)' "$LANE_RULES" > "$RULES"
+reset_log
+TYPESAFE_API_KEY=$KEY QUOTA_AXI_FIXTURE="$SCHEMA6_NATIVE" run code out err "$BRIEF"
+expect_code 0 "$code" "a codex fast profile exits 0"
+assert_contains "$out" 'candidate: codex:gpt-5.6-sol fast  provider=codex  scope=all_models  remaining=80%' "the candidate line marks Codex fast mode"
+assert_contains "$out" "  profile: --harness 'codex' --model 'gpt-5.6-sol' --fast on" "a codex fast profile renders --fast on"
+jq '.rules[0].use += [.rules[0].use[] | select(.harness == "codex") | .fast = true]' "$LANE_RULES" > "$RULES"
+reset_log
+TYPESAFE_API_KEY=$KEY QUOTA_AXI_FIXTURE="$SCHEMA6_NATIVE" run code out err "$BRIEF"
+expect_code 0 "$code" "codex profiles that differ only in fast mode are not duplicates"
+assert_not_contains "$err" 'malformed rules file' "fast mode distinguishes otherwise identical profiles"
+cp "$LANE_RULES" "$RULES"
+pass "a codex dispatch profile with fast: true resolves to --fast on"
+
 jq '.schemaVersion = 5 | .providers |= map(select(.accountKey != "openai-codex")) | del(.providers[].accountKey)' "$SCHEMA6" > "$SCHEMA5_PAIR"
 reset_log
 TYPESAFE_API_KEY=$KEY QUOTA_AXI_FIXTURE="$SCHEMA5_PAIR" run code out err "$BRIEF"
@@ -974,8 +988,12 @@ for bad in \
   '{"rules":[{"when":"x","use":{"harness":"claude","provider":" claude"}}]}|each use profile needs harness; model, effort, and floor must be well formed, and provider must match ^[a-z0-9]+(-[a-z0-9]+)*\z when present' \
   '{"rules":[{"when":"x","use":{"harness":"claude","provider":"claude\n"}}]}|each use profile needs harness; model, effort, and floor must be well formed, and provider must match ^[a-z0-9]+(-[a-z0-9]+)*\z when present' \
   '{"rules":[{"when":"x","use":{"harness":"codex","floor":{"scope":"all_models","min_percent":20,"provider":"claude"}}}]}|each use profile needs harness; model, effort, and floor must be well formed, and provider must match ^[a-z0-9]+(-[a-z0-9]+)*\z when present' \
-  '{"rules":[{"when":"x","use":[{"harness":"codex","model":"gpt-5.5","effort":"high"},{"harness":"codex","model":"gpt-5.5","effort":"high"}]}]}|each rule use must not contain duplicate harness, model, and effort profiles' \
-  '{"rules":[{"when":"x","use":{"harness":"codex"}}],"default":[{"harness":"claude","model":"opus"},{"harness":"claude","model":"opus"}]}|default must not contain duplicate harness, model, and effort profiles' \
+  '{"rules":[{"when":"x","use":[{"harness":"codex","model":"gpt-5.5","effort":"high"},{"harness":"codex","model":"gpt-5.5","effort":"high"}]}]}|each rule use must not contain duplicate harness, model, effort, and fast profiles' \
+  '{"rules":[{"when":"x","use":{"harness":"codex"}}],"default":[{"harness":"claude","model":"opus"},{"harness":"claude","model":"opus"}]}|default must not contain duplicate harness, model, effort, and fast profiles' \
+  '{"rules":[{"when":"x","use":{"harness":"codex","fast":"yes"}}]}|each use profile fast must be a boolean when present' \
+  '{"rules":[{"when":"x","use":{"harness":"codex"}}],"default":{"harness":"codex","fast":1}}|each default profile fast must be a boolean when present' \
+  '{"rules":[{"when":"x","use":{"harness":"claude","fast":true}}]}|each use profile with fast must use the codex harness' \
+  '{"rules":[{"when":"x","use":{"harness":"codex"}}],"default":{"harness":"grok","fast":true}}|each default profile with fast must use the codex harness' \
   '{"rules":[{"when":"x","use":{"harness":"spaceship"}}]}|each use profile must name a verified harness' \
   '{"rules":[{"when":"x","use":{"harness":"grok","effort":"max"}}]}|each use profile effort must be supported by its harness and model' \
   '{"rules":[{"when":"x","use":{"harness":"opencode","model":"anthropic/claude-sonnet-4-5"}}]}|use profiles whose harness lacks one authoritative provider family require provider: opencode' \

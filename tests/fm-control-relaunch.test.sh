@@ -736,6 +736,42 @@ test_same_harness_relaunch_keeps_the_profile_axes() {
   pass "fm-control relaunch: a same-harness relaunch keeps the profile axes it was running with"
 }
 
+test_same_harness_relaunch_keeps_codex_fast_mode() {
+  local dir out rc
+  dir=$(new_case keepfast rl-fast1)
+  add_ship_task "$dir" rl-fast1 codex
+  printf 'fast=on\n' >> "$dir/home/state/rl-fast1.meta"
+  printf 'codex' > "$dir/fake/command"
+  printf 'codex' > "$dir/fake/becomes"
+  out=$(run_control "$dir" rl-fast1 relaunch --note "same runtime"); rc=$?
+  expect_code 0 "$rc" "a same-harness codex relaunch should succeed"$'\n'"$out"
+  [ "$(meta_field "$dir" rl-fast1 fast)" = on ] || fail "fast mode should carry across a same-harness relaunch"
+  [ "$(grep -c '^fast=' "$dir/home/state/rl-fast1.meta")" = 1 ] \
+    || fail "the republished record should carry exactly one fast= line"
+  assert_grep "-c 'service_tier=\"fast\"' -c 'features.fast_mode=true' " "$dir/fake/literal" \
+    "the replacement codex launch should carry the fast-mode settings"
+  assert_contains "$out" "fast=on" "the outcome should report the kept fast mode"
+  [ "$(journal_field "$dir" rl-fast1 from_fast)" = on ] && [ "$(journal_field "$dir" rl-fast1 to_fast)" = on ] \
+    || fail "the journal should record fast mode on both sides"
+  pass "fm-control relaunch: a same-harness relaunch keeps codex fast mode"
+}
+
+test_harness_switch_drops_codex_fast_mode() {
+  local dir out rc
+  dir=$(new_case dropfast rl-fast2)
+  add_ship_task "$dir" rl-fast2 codex
+  printf 'fast=on\n' >> "$dir/home/state/rl-fast2.meta"
+  printf 'codex' > "$dir/fake/command"
+  printf 'claude' > "$dir/fake/becomes"
+  out=$(run_control "$dir" rl-fast2 relaunch --harness claude --note "switching runtime"); rc=$?
+  expect_code 0 "$rc" "a harness switch away from codex fast mode should succeed"$'\n'"$out"
+  [ "$(meta_field "$dir" rl-fast2 harness)" = claude ] || fail "the record should follow the switch"
+  assert_no_grep 'fast=' "$dir/home/state/rl-fast2.meta" "fast mode must not carry to a different harness"
+  assert_no_grep 'service_tier' "$dir/fake/literal" "the replacement launch must not carry codex fast-mode settings"
+  [ "$(journal_field "$dir" rl-fast2 to_fast)" = off ] || fail "the journal should record fast mode dropped"
+  pass "fm-control relaunch: a harness switch drops codex fast mode"
+}
+
 test_native_ultra_relaunch_preserves_profile_and_rejects_before_stop() {
   local dir out rc id=rl-ultra
   dir=$(new_case native-ultra "$id")
@@ -2416,6 +2452,8 @@ test_harness_switch_does_not_carry_the_old_profile_axes
 test_harness_switch_resolves_a_prefixed_recorded_harness
 test_prefixed_recorded_harness_requires_explicit_replacement
 test_same_harness_relaunch_keeps_the_profile_axes
+test_same_harness_relaunch_keeps_codex_fast_mode
+test_harness_switch_drops_codex_fast_mode
 test_native_ultra_relaunch_preserves_profile_and_rejects_before_stop
 test_signed_out_worker_account_pin_refuses_before_stop
 test_worker_account_pin_follows_the_relaunch
