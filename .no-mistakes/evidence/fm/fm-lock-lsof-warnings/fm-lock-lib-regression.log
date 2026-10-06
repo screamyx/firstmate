@@ -1,0 +1,4 @@
+ok - overlay warnings with exit 1 yield provably none
+ok - real error output yields cannot tell
+ok - non-1 failure exit yields cannot tell
+ok - listed holder yields held

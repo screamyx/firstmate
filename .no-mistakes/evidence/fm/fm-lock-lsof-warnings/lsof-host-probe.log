@@ -1,0 +1,122 @@
+lsof: WARNING: can't stat() overlay file system /data/docker/rootfs/overlayfs/ecc7368ed2c7b07a2109028f66e53a8df9e08b79a2286c1033e83e47fd3fab74
+      Output information may be incomplete.
+lsof: WARNING: can't stat() nsfs file system /run/docker/netns/b3d19ed48d7d
+      Output information may be incomplete.
+lsof: WARNING: can't stat() overlay file system /data/docker/rootfs/overlayfs/9b415fb5b0748d49a1ba1cfabcb9fa4119b9f43399b6b185c9be7d1c8650f972
+      Output information may be incomplete.
+lsof: WARNING: can't stat() overlay file system /data/docker/rootfs/overlayfs/5d25a118573f5a7e96221507e2aa48a2d1829232d9c01417218734e50a037c97
+      Output information may be incomplete.
+lsof: WARNING: can't stat() nsfs file system /run/docker/netns/95bd9b3a1c13
+      Output information may be incomplete.
+lsof: WARNING: can't stat() overlay file system /data/docker/rootfs/overlayfs/071194f6f99a997297851e5da23cf33e2e3eebaec076a210578a090dc715cfda
+      Output information may be incomplete.
+lsof: WARNING: can't stat() tracefs file system /sys/kernel/debug/tracing
+      Output information may be incomplete.
+lsof: WARNING: can't stat() overlay file system /data/docker/rootfs/overlayfs/edeac7a4a302605f29c4ce6dd165d5db47b0745a82e163c42836ca0d0a5c8524
+      Output information may be incomplete.
+lsof: WARNING: can't stat() nsfs file system /run/docker/netns/31d42bd94986
+      Output information may be incomplete.
+lsof: WARNING: can't stat() overlay file system /data/docker/rootfs/overlayfs/984cd1febf39446fb21fc233007d8ccc17a33818f526ab23fddc4af9b1688234
+      Output information may be incomplete.
+lsof: WARNING: can't stat() nsfs file system /run/docker/netns/f82f96173b41
+      Output information may be incomplete.
+lsof: WARNING: can't stat() overlay file system /data/docker/rootfs/overlayfs/8910f87d3d9db506bd21749798b766a97300259ced6467ce58dc950a7254c2c2
+      Output information may be incomplete.
+lsof: WARNING: can't stat() nsfs file system /run/docker/netns/ec2a32684afd
+      Output information may be incomplete.
+lsof: WARNING: can't stat() overlay file system /data/docker/rootfs/overlayfs/b77827491341e294329e882d5b8ed51aeebe5b06f7ddd4f285337ff80a56dfe8
+      Output information may be incomplete.
+lsof: WARNING: can't stat() nsfs file system /run/docker/netns/default
+      Output information may be incomplete.
+lsof: WARNING: can't stat() overlay file system /data/docker/rootfs/overlayfs/eb99a5d646eadce55323ade5c08ee670f581d7b4c95019a3a30e3865abaaa734
+      Output information may be incomplete.
+lsof: WARNING: can't stat() overlay file system /data/docker/rootfs/overlayfs/e4bc492ab262bd41ff607f62696b6f9550e736d69ba3ee8b7a8719008ca6f0a1
+      Output information may be incomplete.
+lsof: WARNING: can't stat() nsfs file system /run/docker/netns/3c6a3625176e
+      Output information may be incomplete.
+lsof: WARNING: can't stat() overlay file system /data/docker/rootfs/overlayfs/e0b243c25ef88406fe46a25f6d66d6e9ce4034ffeeaa156c2aeff2b8cb16a429
+      Output information may be incomplete.
+lsof: WARNING: can't stat() nsfs file system /run/docker/netns/195d74466142
+      Output information may be incomplete.
+lsof: WARNING: can't stat() nsfs file system /run/docker/netns/165d7b5d4f52
+      Output information may be incomplete.
+lsof: WARNING: can't stat() overlay file system /data/docker/rootfs/overlayfs/4b2ae8c4b6a5a0f58699803f80319a84d35cd5508e7e5bfb61d0cdec962d4ac3
+      Output information may be incomplete.
+lsof: WARNING: can't stat() nsfs file system /run/docker/netns/7cf22124b6b7
+      Output information may be incomplete.
+lsof: WARNING: can't stat() overlay file system /data/docker/rootfs/overlayfs/db9f37ab460d01a122718cf791bc98c26961b28fb7d5cc50c3eab35cac48fac7
+      Output information may be incomplete.
+lsof: WARNING: can't stat() nsfs file system /run/docker/netns/497299980ba5
+      Output information may be incomplete.
+lsof: WARNING: can't stat() overlay file system /data/docker/rootfs/overlayfs/d56372d515a07bbbec9e10f8b95dc7ab8144405f5c1fc2f0d9332a1fd74e5b74
+      Output information may be incomplete.
+lsof: WARNING: can't stat() nsfs file system /run/docker/netns/547a40add801
+      Output information may be incomplete.
+lsof: WARNING: can't stat() overlay file system /data/docker/rootfs/overlayfs/a5a30e3d154678909b9b73fa4ae6c7e671c34c7183f4fe3cce4b287ed94af4ca
+      Output information may be incomplete.
+lsof: WARNING: can't stat() overlay file system /data/docker/rootfs/overlayfs/382f9299ae8d2486984a6956a7c4f633d4d27b9e30000903a419bc98cbfc3246
+      Output information may be incomplete.
+lsof: WARNING: can't stat() nsfs file system /run/docker/netns/26bddf466883
+      Output information may be incomplete.
+lsof: WARNING: can't stat() overlay file system /data/docker/rootfs/overlayfs/8fdb5fe66477162c5a96cc5105d8d5066f261268c7ef30187071b92c1d7d480e
+      Output information may be incomplete.
+lsof: WARNING: can't stat() nsfs file system /run/docker/netns/045d2c534a7e
+      Output information may be incomplete.
+lsof: WARNING: can't stat() overlay file system /data/docker/rootfs/overlayfs/feb0f3987b0013bac3720bc0a7ff780bdb3c7ccaf7dc510902886a693f39a9f3
+      Output information may be incomplete.
+lsof: WARNING: can't stat() nsfs file system /run/docker/netns/04d86721f0e6
+      Output information may be incomplete.
+lsof: WARNING: can't stat() overlay file system /data/docker/rootfs/overlayfs/678fcd5d1535cb6d8c1e9923100164ab140cde9aa2623621aa603b591caa8a69
+      Output information may be incomplete.
+lsof: WARNING: can't stat() nsfs file system /run/docker/netns/628df4fed01c
+      Output information may be incomplete.
+lsof: WARNING: can't stat() overlay file system /data/docker/rootfs/overlayfs/0573a6f967396e8e676b7bf3a07f7b666c711539b676ebb87d48cab908c545df
+      Output information may be incomplete.
+lsof: WARNING: can't stat() overlay file system /data/docker/rootfs/overlayfs/a3a13d92b9b285ef9268f9ea34f21a909ef782b12aec27b4ae0822ffcf0c7e2f
+      Output information may be incomplete.
+lsof: WARNING: can't stat() nsfs file system /run/docker/netns/cfe235cdb838
+      Output information may be incomplete.
+lsof: WARNING: can't stat() nsfs file system /run/docker/netns/3aa4325ba334
+      Output information may be incomplete.
+lsof: WARNING: can't stat() overlay file system /data/docker/rootfs/overlayfs/d7b216f4af2792fab3789e01e15614d2100c961d790357417252441bb2763e0d
+      Output information may be incomplete.
+lsof: WARNING: can't stat() btrfs file system /root/go
+      Output information may be incomplete.
+lsof: WARNING: can't stat() nsfs file system /run/docker/netns/2c0dc94502d5
+      Output information may be incomplete.
+lsof: WARNING: can't stat() nsfs file system /run/docker/netns/104897d64e8a
+      Output information may be incomplete.
+lsof: WARNING: can't stat() nsfs file system /run/docker/netns/9e87e08bdc66
+      Output information may be incomplete.
+lsof: WARNING: can't stat() nsfs file system /run/docker/netns/60c0031d7c09
+      Output information may be incomplete.
+lsof: WARNING: can't stat() nsfs file system /run/docker/netns/e94583898be5
+      Output information may be incomplete.
+lsof: WARNING: can't stat() overlay file system /data/docker/rootfs/overlayfs/8c196b33c9c179fc0d12b5e5954b8b4574a2b5dc31de306ce143ed86f2c79ca9
+      Output information may be incomplete.
+lsof: WARNING: can't stat() nsfs file system /run/docker/netns/d3340362bffa
+      Output information may be incomplete.
+lsof: WARNING: can't stat() overlay file system /data/docker/rootfs/overlayfs/89be8e8fc3a1ac60b55ebb6b69ff8e0e5d6e1b2438a1c44fc701436c3770b710
+      Output information may be incomplete.
+lsof: WARNING: can't stat() nsfs file system /run/docker/netns/ca9a57733316
+      Output information may be incomplete.
+lsof: WARNING: can't stat() overlay file system /data/docker/rootfs/overlayfs/37e9e4761905e840bb6c0ce33e07b551cbd7bd9b5165a7a3765713fbcfb1fe5b
+      Output information may be incomplete.
+lsof: WARNING: can't stat() nsfs file system /run/docker/netns/9382a15a0349
+      Output information may be incomplete.
+lsof: WARNING: can't stat() overlay file system /data/docker/rootfs/overlayfs/1e8be43cf0d93aa446b6e51163ba80b6cee5e2c48f0ab5c8a7ffb0b90e463e5f
+      Output information may be incomplete.
+lsof: WARNING: can't stat() nsfs file system /run/docker/netns/b62c2bda7cf8
+      Output information may be incomplete.
+lsof: WARNING: can't stat() overlay file system /data/docker/rootfs/overlayfs/778d6f1384f31da4e9de145ccaeb342edef696516a4cf33c7a4d86eafb9bd75f
+      Output information may be incomplete.
+lsof: WARNING: can't stat() nsfs file system /run/docker/netns/0e1ce16f3440
+      Output information may be incomplete.
+lsof: WARNING: can't stat() overlay file system /data/docker/rootfs/overlayfs/37eb8a5803e5748ef266d677c97d89603a868c0415abe37d13a85bba57d5d932
+      Output information may be incomplete.
+lsof: WARNING: can't stat() nsfs file system /run/docker/netns/db5e8b47ec02
+      Output information may be incomplete.
+plain lsof exit=1
+quiet lsof exit=1
+lsof: status error on /home/user/.no-mistakes/worktrees/5cf2740bfd30/01M47SEFHBEVNEBNC3WZB3TY9H/.fm-test-tmp/fm-lock-probe.ujXFty/missing.lock: No such file or directory
+missing-file lsof exit=1

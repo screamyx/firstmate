@@ -1,0 +1,12 @@
+/home/user/.no-mistakes/worktrees/5cf2740bfd30/01M47SEFHBEVNEBNC3WZB3TY9H/.fm-test-tmp/fm-lab.65XwPk
+Scenario: fleet-sync recovers old unheld packed-refs.lock during real git fetch --prune
+before HEAD=ef2509ac24d631fb94a9bf72bbbc64d8cd20760a; upstream HEAD=ab89ca97e936fad7c736f4de72457cf3f4c8fd0c; old lock=/home/user/.no-mistakes/worktrees/5cf2740bfd30/01M47SEFHBEVNEBNC3WZB3TY9H/.fm-test-tmp/fm-lab.65XwPk/projects/lock-fixture/.git/packed-refs.lock
+lock-fixture: fetch blocked by packed-refs lock (/home/user/.no-mistakes/worktrees/5cf2740bfd30/01M47SEFHBEVNEBNC3WZB3TY9H/.fm-test-tmp/fm-lab.65XwPk/projects/lock-fixture/.git/packed-refs.lock); waiting 0s and retrying (1/3) (owning process may be exiting)
+lock-fixture: fetch blocked by packed-refs lock (/home/user/.no-mistakes/worktrees/5cf2740bfd30/01M47SEFHBEVNEBNC3WZB3TY9H/.fm-test-tmp/fm-lab.65XwPk/projects/lock-fixture/.git/packed-refs.lock); waiting 0s and retrying (2/3) (owning process may be exiting)
+lock-fixture: fetch blocked by packed-refs lock (/home/user/.no-mistakes/worktrees/5cf2740bfd30/01M47SEFHBEVNEBNC3WZB3TY9H/.fm-test-tmp/fm-lab.65XwPk/projects/lock-fixture/.git/packed-refs.lock); waiting 0s and retrying (3/3) (owning process may be exiting)
+lock-fixture: removed provably-stale packed-refs lock /home/user/.no-mistakes/worktrees/5cf2740bfd30/01M47SEFHBEVNEBNC3WZB3TY9H/.fm-test-tmp/fm-lab.65XwPk/projects/lock-fixture/.git/packed-refs.lock (age >= 30s, no live holder) and retrying fetch
+lock-fixture: fetch succeeded after stale packed-refs lock cleanup
+lock-fixture: recovered: removed a stale packed-refs lock (no live holder)
+lock-fixture: synced ef2509a..ab89ca9
+Persisted result: lock removed; clone HEAD=ab89ca97e936fad7c736f4de72457cf3f4c8fd0c; retired remote-tracking branch absent
+Disposable lab will be removed.

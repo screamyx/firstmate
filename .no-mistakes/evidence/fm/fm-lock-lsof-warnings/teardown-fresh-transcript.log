@@ -1,0 +1,90 @@
+/home/user/.no-mistakes/worktrees/5cf2740bfd30/01M47SEFHBEVNEBNC3WZB3TY9H/.fm-test-tmp/fm-lab.9sXYYO
+A new version of treehouse is available: v3.1.0 → v3.1.2
+Run "treehouse update" to update
+
+🌳 Setting up worktree...
+🌳 Leased worktree at ~/.no-mistakes/worktrees/5cf2740bfd30/01M47SEFHBEVNEBNC3WZB3TY9H/.fm-test-tmp/fm-lab.9sXYYO/pool/.treehouse/lock-fixture-70d118/1/lock-fixture. Run 'treehouse return ~/.no-mistakes/worktrees/5cf2740bfd30/01M47SEFHBEVNEBNC3WZB3TY9H/.fm-test-tmp/fm-lab.9sXYYO/pool/.treehouse/lock-fixture-70d118/1/lock-fixture' to release it.
+Real Treehouse lease: /home/user/.no-mistakes/worktrees/5cf2740bfd30/01M47SEFHBEVNEBNC3WZB3TY9H/.fm-test-tmp/fm-lab.9sXYYO/pool/.treehouse/lock-fixture-70d118/1/lock-fixture
+
+Scenario: fresh index.lock via real fm-teardown and Treehouse return
+lock=/home/user/.no-mistakes/worktrees/5cf2740bfd30/01M47SEFHBEVNEBNC3WZB3TY9H/.fm-test-tmp/fm-lab.9sXYYO/projects/lock-fixture/.git/worktrees/lock-fixture/index.lock; bytes=0; mtime=2026-10-06 13:07:39.965348185 +0800
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /home/user/.no-mistakes/worktrees/5cf2740bfd30/01M47SEFHBEVNEBNC3WZB3TY9H/.fm-test-tmp/fm-lab.9sXYYO
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  repair missing watcher supervision according to the session-start block for this harness; do not use shell &.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+A new version of treehouse is available: v3.1.0 → v3.1.2
+Run "treehouse update" to update
+
+failed to return worktree: git read-tree --reset -u 459b3784e920b58624d5cfc9058eb3bebc4fe646: fatal: Unable to create '/home/user/.no-mistakes/worktrees/5cf2740bfd30/01M47SEFHBEVNEBNC3WZB3TY9H/.fm-test-tmp/fm-lab.9sXYYO/projects/lock-fixture/.git/worktrees/lock-fixture/index.lock': File exists.
+
+Another git process seems to be running in this repository, e.g.
+an editor opened by 'git commit'. Please make sure all processes
+are terminated then try again. If it still fails, a git process
+may have crashed in this repository earlier:
+remove the file manually to continue.
+teardown: worktree return failed with transient git lock (/home/user/.no-mistakes/worktrees/5cf2740bfd30/01M47SEFHBEVNEBNC3WZB3TY9H/.fm-test-tmp/fm-lab.9sXYYO/projects/lock-fixture/.git/worktrees/lock-fixture/index.lock); waiting 0s and retrying (1/3)
+A new version of treehouse is available: v3.1.0 → v3.1.2
+Run "treehouse update" to update
+
+failed to return worktree: git read-tree --reset -u 459b3784e920b58624d5cfc9058eb3bebc4fe646: fatal: Unable to create '/home/user/.no-mistakes/worktrees/5cf2740bfd30/01M47SEFHBEVNEBNC3WZB3TY9H/.fm-test-tmp/fm-lab.9sXYYO/projects/lock-fixture/.git/worktrees/lock-fixture/index.lock': File exists.
+
+Another git process seems to be running in this repository, e.g.
+an editor opened by 'git commit'. Please make sure all processes
+are terminated then try again. If it still fails, a git process
+may have crashed in this repository earlier:
+remove the file manually to continue.
+teardown: worktree return failed with transient git lock (/home/user/.no-mistakes/worktrees/5cf2740bfd30/01M47SEFHBEVNEBNC3WZB3TY9H/.fm-test-tmp/fm-lab.9sXYYO/projects/lock-fixture/.git/worktrees/lock-fixture/index.lock); waiting 0s and retrying (2/3)
+A new version of treehouse is available: v3.1.0 → v3.1.2
+Run "treehouse update" to update
+
+failed to return worktree: git read-tree --reset -u 459b3784e920b58624d5cfc9058eb3bebc4fe646: fatal: Unable to create '/home/user/.no-mistakes/worktrees/5cf2740bfd30/01M47SEFHBEVNEBNC3WZB3TY9H/.fm-test-tmp/fm-lab.9sXYYO/projects/lock-fixture/.git/worktrees/lock-fixture/index.lock': File exists.
+
+Another git process seems to be running in this repository, e.g.
+an editor opened by 'git commit'. Please make sure all processes
+are terminated then try again. If it still fails, a git process
+may have crashed in this repository earlier:
+remove the file manually to continue.
+teardown: worktree return failed with transient git lock (/home/user/.no-mistakes/worktrees/5cf2740bfd30/01M47SEFHBEVNEBNC3WZB3TY9H/.fm-test-tmp/fm-lab.9sXYYO/projects/lock-fixture/.git/worktrees/lock-fixture/index.lock); waiting 0s and retrying (3/3)
+A new version of treehouse is available: v3.1.0 → v3.1.2
+Run "treehouse update" to update
+
+failed to return worktree: git read-tree --reset -u 459b3784e920b58624d5cfc9058eb3bebc4fe646: fatal: Unable to create '/home/user/.no-mistakes/worktrees/5cf2740bfd30/01M47SEFHBEVNEBNC3WZB3TY9H/.fm-test-tmp/fm-lab.9sXYYO/projects/lock-fixture/.git/worktrees/lock-fixture/index.lock': File exists.
+
+Another git process seems to be running in this repository, e.g.
+an editor opened by 'git commit'. Please make sure all processes
+are terminated then try again. If it still fails, a git process
+may have crashed in this repository earlier:
+remove the file manually to continue.
+teardown: worktree return failed: git lock /home/user/.no-mistakes/worktrees/5cf2740bfd30/01M47SEFHBEVNEBNC3WZB3TY9H/.fm-test-tmp/fm-lab.9sXYYO/projects/lock-fixture/.git/worktrees/lock-fixture/index.lock persisted across 3 retries (waiting 0s each) and is not provably stale (may belong to a live process); leaving it in place
+error: treehouse return failed for worktree /home/user/.no-mistakes/worktrees/5cf2740bfd30/01M47SEFHBEVNEBNC3WZB3TY9H/.fm-test-tmp/fm-lab.9sXYYO/pool/.treehouse/lock-fixture-70d118/1/lock-fixture; teardown aborted
+teardown exit=1
+Persisted result: lock and task metadata preserved; holder (if any) still alive; backlog follows:
+task:
+  id: lock-test
+  title: disposable lock validation
+  state: in_flight
+  blocked: no
+  blocked_by: none
+  held: no
+  hold_reason: "-"
+  hold_kind: "-"
+  hold_until: "-"
+  kind: ship
+  repo: "-"
+  priority: "-"
+  created: 2026-10-06
+  closed: "-"
+  deps: none
+  links: none
+  body: ""
+A new version of treehouse is available: v3.1.0 → v3.1.2
+Run "treehouse update" to update
+
+base  main  (repository default)
+1     leased       ~/.no-mistakes/worktrees/5cf2740bfd30/01M47SEFHBEVNEBNC3WZB3TY9H/.fm-test-tmp/fm-lab.9sXYYO/pool/.treehouse/lock-fixture-70d118/1/lock-fixture  (detached)
+
+Scenario fresh met its expected safety result; disposable lab will be removed.
