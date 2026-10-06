@@ -32,10 +32,10 @@ fm_lock_path_mtime() {
 
 # fm_lock_lsof_holder <target>: 0 a process holds it, 1 provably none, 2 lsof
 # errored (cannot tell). Diagnostics print on the error path only.
-# -w suppresses lsof's informational warnings ("can't stat() overlay file
-# system ... Output information may be incomplete", printed on every call on a
-# Docker host). Without it that text on stderr, captured below, would turn every
-# "no holder" exit 1 into "cannot tell". Real errors still print under -w.
+# Use -w so filesystem warnings (for example Docker overlay mounts) do not
+# obscure a no-holder result. Only exit 1 with empty combined output proves
+# no holder; remaining diagnostics or other failure statuses stay uncertain.
+# Regression: tests/fm-lock-lib.test.sh.
 fm_lock_lsof_holder() {
   local target=$1 output status
   if output=$(lsof -w -- "$target" 2>&1); then
