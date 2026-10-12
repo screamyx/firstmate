@@ -10,7 +10,7 @@ Start with the directory layout, then use the setting reference for the behavior
 | Firstmate's code, private files, or project location | [FM_HOME](#fm_home) and [operational home layout](#operational-home-layout-and-state) |
 | A project's delivery posture, base branch, or worktree pool location | The project registry, `data/projects.md`, whose format the header of [`bin/fm-project-mode.sh`](../bin/fm-project-mode.sh) owns |
 | Task windows and worker tools | [Runtime backend](#runtime-backend-configbackend--fm_backend) and [harness support](#harness-support) |
-| Worker permissions, accounts, or environment | [Claude permission mode](#claude-permission-mode-configclaude-permission-mode), [worker account pin](#worker-account-pin-configclaude-account-configpi-account), and [worker launch environment](#worker-launch-environment-configlaunch-env-allowlist) |
+| Worker permissions, accounts, or environment | [Claude permission mode](#claude-permission-mode-configclaude-permission-mode), [Claude worker tool scope](#claude-worker-tool-scope-configclaude-worker-no-mcp-configclaude-worker-deny), [worker account pin](#worker-account-pin-configclaude-account-configpi-account), and [worker launch environment](#worker-launch-environment-configlaunch-env-allowlist) |
 | Backlog, preferences, and memory | [Backlog backend](#backlog-backend-taskstoml--configbacklog-backend), [captain preferences](#captain-preferences-datacaptainmd--datacaptain-sharedmd), and [startup memory budget](#startup-memory-budget-configstartup-memory-budget) |
 | Supervision and presentation | [agb messaging](#agb-messaging-configagb), [Pi supervision branch](#pi-supervision-branch), [supervision host](#supervision-host-configsupervision-host), and [Calm preference](#calm-preference-configcalm) |
 | Persistent secondmates | [Secondmate routes](#secondmate-routes-datasecondmatesmd) |
@@ -832,6 +832,27 @@ The diagnostic names the accepted values; Firstmate never falls back to a permis
 The file is a captain-wide safety preference, so it is inherited into secondmate homes under the [`secondmate-provisioning`](../.agents/skills/secondmate-provisioning/SKILL.md) inherited-local-material contract; a secondmate's own Claude crewmates then launch on the same posture.
 
 The [Claude adapter reference](../.agents/skills/harness-adapters/references/harness/claude.md) records the verified shape of both launches and which once-per-machine dialog each one can meet.
+
+## Claude worker tool scope (config/claude-worker-no-mcp, config/claude-worker-deny)
+
+A home can narrow the tools its Claude ship and scout workers hold.
+Both files are optional, local, and gitignored; with neither, every launch is unchanged.
+
+| File | Format | Effect on the Claude launch |
+| --- | --- | --- |
+| `config/claude-worker-no-mcp` | Presence switch; content ignored | Adds `--strict-mcp-config`, so the worker loads no MCP server from any scope |
+| `config/claude-worker-deny` | One Claude permission rule per line; blank lines and `#` comments allowed | Adds `permissions.deny` with those rules to the inline `--settings` JSON |
+
+A rule is a tool name optionally followed by a parenthesized specifier, for example `Bash(ssh:*)`, `Bash(cs:*)`, or `Skill(name)`.
+Deny rules hold under `--dangerously-skip-permissions`, so a refused command stays refused in bypass mode.
+Rules may contain `*`, `:`, parentheses, spaces, and single quotes; the spawn escapes them for the launch line.
+
+A line that is not a rule, or a file that is not a readable regular file, refuses every spawn from that home before any endpoint, worktree, or task record exists.
+The diagnostic names the file and the accepted shape.
+
+The scope applies to Claude crewmates and scouts, on spawn and relaunch.
+It does not apply to a secondmate, to the primary session, or to any other harness, and neither file is inherited into a secondmate home, so a secondmate's own Claude workers launch unscoped unless that home carries its own files.
+`bin/fm-spawn.sh` reads both files on every launch, so a change reaches the next launch without a restart.
 
 ## Worker account pin (config/claude-account, config/pi-account)
 

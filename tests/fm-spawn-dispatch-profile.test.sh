@@ -1866,6 +1866,130 @@ test_non_claude_harness_ignores_claude_permission_mode() {
   pass "config/claude-permission-mode changes claude launches only"
 }
 
+# config/claude-worker-no-mcp and config/claude-worker-deny (bin/fm-spawn.sh
+# header): absent keeps the launch unchanged, the switch adds
+# --strict-mcp-config, the deny list lands in the inline settings JSON, a
+# malformed file refuses, and a secondmate launches unscoped.
+test_claude_worker_scope_absent_keeps_launch_unchanged() {
+  local rec id out status launch expected
+  id=toolscope-absent-z30
+  rec=$(make_spawn_case toolscope-absent claude "$id")
+  read_case_record "$rec"
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR")
+  status=$?
+  expect_code 0 "$status" "claude spawn without tool scope files should succeed"$'\n'"$out"
+  launch=$(cat "$LAUNCH_LOG")
+  expected=$(claude_expected_launch "$launch" "$HOME_DIR" "$id" --dangerously-skip-permissions)
+  [ "$launch" = "$expected" ] || fail "absent tool scope files changed the launch"$'\n'"expected: $expected"$'\n'"actual:   $launch"
+  assert_not_contains "$launch" "--strict-mcp-config" "absent switch must not add --strict-mcp-config"
+  assert_not_contains "$launch" "\"permissions\":" "absent deny file must not add a permissions block"
+  pass "absent claude worker tool scope files keep the launch unchanged"
+}
+
+test_claude_worker_scope_switch_adds_strict_mcp_config() {
+  local rec id out status launch
+  id=toolscope-switch-z31
+  rec=$(make_spawn_case toolscope-switch claude "$id")
+  read_case_record "$rec"
+  : > "$HOME_DIR/config/claude-worker-no-mcp"
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR")
+  status=$?
+  expect_code 0 "$status" "claude spawn with claude-worker-no-mcp should succeed"$'\n'"$out"
+  launch=$(cat "$LAUNCH_LOG")
+  assert_contains "$launch" "--no-chrome --strict-mcp-config --settings '{" "switch did not add --strict-mcp-config before --settings"
+  assert_not_contains "$launch" "\"permissions\":" "the switch alone must not add deny rules"
+
+  id=toolscope-switch-scout-z32
+  rec=$(make_spawn_case toolscope-switch-scout claude "$id")
+  read_case_record "$rec"
+  : > "$HOME_DIR/config/claude-worker-no-mcp"
+  out=$(run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --scout)
+  status=$?
+  expect_code 0 "$status" "claude scout spawn with claude-worker-no-mcp should succeed"$'\n'"$out"
+  assert_contains "$(cat "$LAUNCH_LOG")" "--strict-mcp-config" "scout launch did not carry --strict-mcp-config"
+  pass "config/claude-worker-no-mcp adds --strict-mcp-config to ship and scout launches"
+}
+
+test_claude_worker_scope_deny_list_lands_in_settings_json() {
+  local rec id out status launch settings
+  id=toolscope-deny-z33
+  rec=$(make_spawn_case toolscope-deny claude "$id")
+  read_case_record "$rec"
+  cat > "$HOME_DIR/config/claude-worker-deny" <<'EOF'
+# server access
+Bash(ssh:*)
+
+  Bash(scp:*)
+Bash(echo 'a b' && cat *)
+Skill(some-skill)
+EOF
+
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR")
+  status=$?
+  expect_code 0 "$status" "claude spawn with claude-worker-deny should succeed"$'\n'"$out"
+  launch=$(cat "$LAUNCH_LOG")
+  settings=$(claude_settings_json_arg "$launch") || fail "could not read the --settings argument back out of the launch"
+  [ "$(printf '%s' "$settings" | jq -c '.permissions.deny')" = '["Bash(ssh:*)","Bash(scp:*)","Bash(echo '"'"'a b'"'"' && cat *)","Skill(some-skill)"]' ] \
+    || fail "deny rules did not survive the launch line intact: $settings"
+  [ "$(printf '%s' "$settings" | jq -c '[.feedbackDrafts, .attribution]')" = '["off",{"commit":"","pr":"","sessionUrl":false}]' ] \
+    || fail "deny rules disturbed the existing settings keys: $settings"
+  assert_not_contains "$launch" "--strict-mcp-config" "the deny file alone must not add --strict-mcp-config"
+  pass "config/claude-worker-deny lands in the inline settings JSON as permissions.deny"
+}
+
+test_claude_worker_scope_malformed_deny_refuses_before_endpoint_or_metadata() {
+  local rec id out status bad
+  id=toolscope-bad-z34
+  rec=$(make_spawn_case toolscope-bad claude "$id")
+  read_case_record "$rec"
+  for bad in 'not a rule' 'Bash(' '(ssh:*)'; do
+    printf 'Bash(ssh:*)\n%s\n' "$bad" > "$HOME_DIR/config/claude-worker-deny"
+    out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR")
+    status=$?
+    expect_code 1 "$status" "a malformed claude-worker-deny line ($bad) must refuse the spawn"
+    assert_contains "$out" "config/claude-worker-deny must hold one Claude permission rule per line" "refusal must name the file and the accepted shape"
+    [ ! -s "$LAUNCH_LOG" ] || fail "a malformed deny file must launch nothing (got: $(cat "$LAUNCH_LOG"))"
+    assert_absent "$HOME_DIR/state/$id.meta" "refusal must happen before meta is written"
+  done
+  pass "a malformed config/claude-worker-deny refuses before any endpoint or metadata"
+}
+
+test_claude_worker_scope_skips_secondmate_and_other_harnesses() {
+  local rec id sm out status launch
+  id=toolscope-sm-z35
+  rec=$(make_spawn_case toolscope-sm claude "$id")
+  read_case_record "$rec"
+  : > "$HOME_DIR/config/claude-worker-no-mcp"
+  printf 'Bash(ssh:*)\n' > "$HOME_DIR/config/claude-worker-deny"
+  sm="$CASE_DIR/secondmate-home"
+  make_seeded_secondmate_home "$sm" "$id"
+
+  out=$(run_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$sm" --secondmate)
+  status=$?
+  expect_code 0 "$status" "secondmate claude spawn should succeed"$'\n'"$out"
+  launch=$(cat "$LAUNCH_LOG")
+  assert_not_contains "$launch" "--strict-mcp-config" "a secondmate must not get --strict-mcp-config"
+  assert_not_contains "$launch" "\"permissions\":" "a secondmate must not get the deny rules"
+  assert_contains "$launch" "--no-chrome --settings '{" "secondmate launch shape changed"
+  [ ! -e "$sm/config/claude-worker-no-mcp" ] && [ ! -e "$sm/config/claude-worker-deny" ] \
+    || fail "tool scope files must not be inherited into a secondmate home"
+
+  id=toolscope-codex-z36
+  rec=$(make_spawn_case toolscope-codex codex "$id")
+  read_case_record "$rec"
+  : > "$HOME_DIR/config/claude-worker-no-mcp"
+  printf 'Bash(ssh:*)\n' > "$HOME_DIR/config/claude-worker-deny"
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --harness codex)
+  status=$?
+  expect_code 0 "$status" "codex spawn under claude tool scope files should succeed"$'\n'"$out"
+  launch=$(cat "$LAUNCH_LOG")
+  assert_not_contains "$launch" "--strict-mcp-config" "the claude switch must not leak into a codex launch"
+  assert_not_contains "$launch" "ssh" "the claude deny rules must not leak into a codex launch"
+  pass "claude worker tool scope skips secondmates and other harnesses"
+}
+
 test_worker_launch_delivers_role_scope
 test_no_profile_keeps_claude_profile_defaults
 test_claude_launch_brief_publishes_record_doorbell
@@ -1923,6 +2047,11 @@ test_claude_permission_mode_auto_swaps_only_the_permission_flag
 test_claude_permission_mode_auto_reaches_scout_launch
 test_claude_permission_mode_invalid_refuses_before_endpoint_or_metadata
 test_non_claude_harness_ignores_claude_permission_mode
+test_claude_worker_scope_absent_keeps_launch_unchanged
+test_claude_worker_scope_switch_adds_strict_mcp_config
+test_claude_worker_scope_deny_list_lands_in_settings_json
+test_claude_worker_scope_malformed_deny_refuses_before_endpoint_or_metadata
+test_claude_worker_scope_skips_secondmate_and_other_harnesses
 test_non_claude_harness_ignores_config_dir
 test_claude_task_launch_carries_control_channel_authority
 test_claude_secondmate_launch_omits_task_control_channel_authority
