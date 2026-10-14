@@ -5315,19 +5315,19 @@ if { [ "$KIND" = ship ] || [ "$KIND" = scout ]; } &&
     SPAWN_TREE_AGB=$SPAWN_AGB_ID
   fi
 fi
+# A launch with no agb identity must not leave an earlier occupant's identity
+# behind: the doorbell would mail it, and a later adoption would re-tag it.
+[ -n "$SPAWN_TREE_AGB" ] || rm -f "$STATE/$ID.inbox/.agb-id" 2>/dev/null || true
 # Tag the worker's final Herdr pane for Agent Tree (docs/herdr-backend.md
 # "Agent Tree pane tags"): at_home is the LAUNCHING home's hash, so a
 # secondmate's workers nest under the secondmate. Fresh, rebind, reclaim, and
 # relaunch all reach here with T naming the pane the agent is about to start
 # in; it sits below the agb block only because at_agb, the AGB_AGENT_ID just
-# exported, is known from there. A child with no agb id carries no at_agb.
-if [ "$BACKEND" = herdr ] && fm_backend_herdr_parse_target "$T"; then
-  SPAWN_TREE_HOME=$(FM_HOME="$FM_HOME" "$FM_ROOT/bin/fm-agb.sh" home-hash 2>/dev/null) || SPAWN_TREE_HOME=
-  if [ -n "$SPAWN_TREE_HOME" ]; then
-    SPAWN_TREE_TOKENS=(--token "at_home=$SPAWN_TREE_HOME")
-    [ -z "$SPAWN_TREE_AGB" ] || SPAWN_TREE_TOKENS+=(--token "at_agb=$SPAWN_TREE_AGB")
-    fm_backend_herdr_agent_tree_report "$FM_BACKEND_HERDR_SESSION" "$FM_BACKEND_HERDR_PANE" "${SPAWN_TREE_TOKENS[@]}" || true
-  fi
+# exported, is known from there. bin/fm-herdr-agent-tree.sh bounds the tag and
+# swallows every failure, so it can delay the launch by its short budget at
+# most and never stop it.
+if [ "$BACKEND" = herdr ]; then
+  FM_HOME="$FM_HOME" "$FM_ROOT/bin/fm-herdr-agent-tree.sh" child "$T" ${SPAWN_TREE_AGB:+"$SPAWN_TREE_AGB"} || true
 fi
 # Send through the exact channel that already ships GOTMPDIR, so every backend
 # and harness - ship, scout, and secondmate - gets it before launch. Skipped

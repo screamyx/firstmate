@@ -514,13 +514,13 @@ Workspace and tab ids support verification and cleanup but are not inferred from
 
 Herdr records no parent and child links between panes.
 The Agent Tree plugin nests each worker under the coordinator that launched it by reading display-only tokens that Firstmate reports with `pane report-metadata --source firstmate`.
-Every tag is best-effort: it never carries a TTL, prints nothing, and never changes a launch, a session start, or an adoption outcome.
+Every tag goes through `bin/fm-herdr-agent-tree.sh`, which bounds it to a few seconds and is best-effort: it never carries a TTL, prints nothing, and never changes a launch, a session start, or an adoption outcome.
 
 | Token | Pane | Value |
 | --- | --- | --- |
 | `at_home_owner` | A firstmate or secondmate session's own pane | That session's home hash. |
 | `at_home` | A worker or secondmate pane | The launching home's hash. |
-| `at_agb` | A worker pane with an agb identity | The worker's `AGB_AGENT_ID`, omitted when it has none. |
+| `at_agb` | A worker pane with an agb identity | The worker's `AGB_AGENT_ID`, cleared when it has none. |
 
 The home hash is the six-character `<home-hash6>` that `bin/fm-agb.sh home-hash` prints.
 Agent Tree links by home hash rather than agb id because a restarted coordinator gets a new agb id while its workers keep running.
@@ -528,7 +528,8 @@ A secondmate's workers therefore carry the secondmate's hash, while the secondma
 
 `bin/fm-spawn.sh` tags the worker's final pane just before launch on every Herdr path: fresh, presentation projection, projection reclaim, relaunch, and rebind.
 `bin/fm-session-start.sh` runs `bin/fm-herdr-agent-tree.sh` only after it holds the home's session lock.
-On a full start and a context re-emit it tags its own pane and records it in `state/.herdr-agent-tree-owner`, first clearing `at_home_owner` on the previously recorded pane when that pane still carries this home's hash.
+On a full start and a context re-emit it tags its own pane and records it in `state/.herdr-agent-tree-owner`, first clearing `at_home_owner` on each previously recorded pane that still carries this home's hash.
+A previous pane stays in that record until it is confirmed cleared or gone, so a failed read or clear is retried at the next start.
 A rename keeps the home hash, so that same run covers a renamed or restarted coordinator.
 On a full start it also re-tags each live Herdr worker it adopts from `state/*.meta`, with the agb id recorded in its inbox.
 A lock-refused session tags nothing.

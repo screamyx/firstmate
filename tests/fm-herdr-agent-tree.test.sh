@@ -20,6 +20,10 @@ cat > "$FAKEBIN/herdr" <<'SH'
 #!/usr/bin/env bash
 # Fake herdr: logs each call's argv tab-separated, and keeps each pane's tokens
 # in $FM_FAKE_HERDR_PANES/<session>/<pane>.json. A pane exists iff its file does.
+# FM_FAKE_HERDR_FAIL fails every report, FM_FAKE_HERDR_FAIL_MATCH fails only a
+# report whose argv contains it, FM_FAKE_HERDR_HANG makes every report hang
+# (recording its pid), and FM_FAKE_HERDR_GET_FAIL makes `pane get` of that
+# pane answer with an unreadable transport error.
 set -u
 (IFS=$'\t'; printf '%s\n' "$*") >> "$FM_FAKE_HERDR_LOG"
 args=("$@")
@@ -31,10 +35,16 @@ pane=${3:-}
 file="$FM_FAKE_HERDR_PANES/$session/$pane.json"
 case "${1:-} ${2:-}" in
   "pane get")
+    [ "$pane" != "${FM_FAKE_HERDR_GET_FAIL:-}" ] || { printf 'fake herdr: socket closed\n' >&2; exit 2; }
     [ -f "$file" ] || { printf '{"error":{"code":"pane_not_found"}}\n'; exit 1; }
     jq -c --arg p "$pane" '{result: {pane: {pane_id: $p, tokens: .}}}' "$file"
     ;;
   "pane report-metadata")
+    if [ -n "${FM_FAKE_HERDR_HANG:-}" ]; then
+      printf '%s\n' "$$" >> "$FM_FAKE_HERDR_HANG"
+      sleep 30
+    fi
+    case "$*" in *"${FM_FAKE_HERDR_FAIL_MATCH:-\x01never}"*) printf 'fake herdr: refused\n' >&2; exit 7 ;; esac
     if [ -n "${FM_FAKE_HERDR_FAIL:-}" ]; then
       printf 'fake herdr stdout noise\n'
       printf 'fake herdr: server unreachable\n' >&2
@@ -182,13 +192,68 @@ test_child_carries_home_and_agb_tokens() {
   pass "an adopted worker pane is re-tagged with this home's hash and its agb id"
 }
 
-test_child_without_an_agb_id_omits_at_agb() {
+test_child_without_an_agb_id_clears_a_stale_at_agb() {
   new_case child-plain
-  add_pane lab w3:p8
+  add_pane lab w3:p8 '{"at_agb":"fm-old-home-old-task","at_home":"old000"}'
   run_tree "" "" child lab:w3:p8 >/dev/null 2>&1
-  assert_equals $'pane\treport-metadata\tw3:p8\t--source\tfirstmate\t--token\tat_home='"$HASH"$'\t--session\tlab' \
-    "$(report_calls)" "a worker with no agb id carries only at_home"
-  pass "an adopted worker with no agb id, such as a secondmate, carries no at_agb token"
+  assert_equals $'pane\treport-metadata\tw3:p8\t--source\tfirstmate\t--token\tat_home='"$HASH"$'\t--clear-token\tat_agb\t--session\tlab' \
+    "$(report_calls)" "a worker with no agb id sets at_home and clears at_agb in one report"
+  assert_equals "{\"at_home\":\"$HASH\"}" "$(pane_tokens lab w3:p8)" "a reused pane must not keep an earlier occupant's at_agb"
+  pass "a worker with no agb id carries no at_agb, even on a pane that held one before"
+}
+
+test_a_hanging_report_is_bounded_and_kills_its_process() {
+  local hang_pids out status=0 started elapsed pid
+  new_case hang
+  add_pane lab w5:p1
+  hang_pids="$TMP_ROOT/hang/pids"
+  : > "$hang_pids"
+  started=$(date +%s)
+  out=$(FM_FAKE_HERDR_HANG="$hang_pids" FM_HERDR_AGENT_TREE_TIMEOUT=1 run_tree "" "" child lab:w5:p1 fm-x 2>&1) || status=$?
+  elapsed=$(( $(date +%s) - started ))
+  expect_code 0 "$status" "a worker tag whose report hangs"
+  assert_equals "" "$out" "a hanging worker tag must print nothing"
+  [ "$elapsed" -le 5 ] || fail "a hanging worker tag took ${elapsed}s against a 1s budget"
+  [ -s "$hang_pids" ] || fail "the hang fixture never reached report-metadata"
+  sleep 1
+  while IFS= read -r pid; do
+    ! kill -0 "$pid" 2>/dev/null || fail "the hung report process $pid outlived the bound"
+  done < "$hang_pids"
+  status=0
+  started=$(date +%s)
+  FM_FAKE_HERDR_HANG="$hang_pids" FM_HERDR_AGENT_TREE_TIMEOUT=1 run_tree w5:p1 lab coordinator >/dev/null 2>&1 || status=$?
+  elapsed=$(( $(date +%s) - started ))
+  expect_code 0 "$status" "a coordinator tag whose report hangs"
+  [ "$elapsed" -le 5 ] || fail "a hanging coordinator tag took ${elapsed}s against a 1s budget"
+  pass "a hanging report returns success within the tag budget and its process group is killed"
+}
+
+test_coordinator_retries_an_old_pane_whose_clear_failed() {
+  new_case coord-clear-retry
+  add_pane lab w1:p1 "{\"at_home_owner\":\"$HASH\"}"
+  add_pane lab w2:p2
+  printf 'lab:w1:p1\n' > "$HOME_DIR/state/.herdr-agent-tree-owner"
+  FM_FAKE_HERDR_FAIL_MATCH=--clear-token run_tree w2:p2 lab coordinator >/dev/null 2>&1
+  assert_equals "{\"at_home_owner\":\"$HASH\"}" "$(pane_tokens lab w2:p2)" "a failed old clear must not stop the new pane's tag"
+  assert_equals $'lab:w2:p2\nlab:w1:p1' "$(cat "$HOME_DIR/state/.herdr-agent-tree-owner")" "an unconfirmed old pane must stay recorded"
+  run_tree w2:p2 lab coordinator >/dev/null 2>&1
+  assert_equals '{}' "$(pane_tokens lab w1:p1)" "the healthy rerun must clear the old owner tag"
+  assert_equals "lab:w2:p2" "$(cat "$HOME_DIR/state/.herdr-agent-tree-owner")" "the record drops the old pane once its clear succeeds"
+  pass "a failed old-pane clear is retried by the next start until it succeeds"
+}
+
+test_coordinator_retries_an_old_pane_whose_read_failed() {
+  new_case coord-read-retry
+  add_pane lab w1:p1 "{\"at_home_owner\":\"$HASH\"}"
+  add_pane lab w2:p2
+  printf 'lab:w1:p1\n' > "$HOME_DIR/state/.herdr-agent-tree-owner"
+  FM_FAKE_HERDR_GET_FAIL=w1:p1 run_tree w2:p2 lab coordinator >/dev/null 2>&1
+  assert_no_grep "--clear-token" "$LOG" "an unreadable old pane must not be cleared blind"
+  assert_equals $'lab:w2:p2\nlab:w1:p1' "$(cat "$HOME_DIR/state/.herdr-agent-tree-owner")" "an unreadable old pane must stay recorded"
+  run_tree w2:p2 lab coordinator >/dev/null 2>&1
+  assert_equals '{}' "$(pane_tokens lab w1:p1)" "the healthy rerun must clear the old owner tag"
+  assert_equals "lab:w2:p2" "$(cat "$HOME_DIR/state/.herdr-agent-tree-owner")" "the record drops the old pane once it is cleared"
+  pass "an unreadable old pane is kept and cleared by the next healthy start"
 }
 
 test_herdr_failures_never_surface() {
@@ -221,5 +286,8 @@ test_coordinator_skips_a_gone_previous_pane
 test_coordinator_rerun_on_the_same_pane_only_resets_the_tag
 test_coordinator_without_a_herdr_pane_is_a_no_op
 test_child_carries_home_and_agb_tokens
-test_child_without_an_agb_id_omits_at_agb
+test_child_without_an_agb_id_clears_a_stale_at_agb
+test_a_hanging_report_is_bounded_and_kills_its_process
+test_coordinator_retries_an_old_pane_whose_clear_failed
+test_coordinator_retries_an_old_pane_whose_read_failed
 test_herdr_failures_never_surface

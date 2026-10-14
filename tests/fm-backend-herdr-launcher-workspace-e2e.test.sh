@@ -209,7 +209,7 @@ Verify the worker is placed in the correct workspace.
 EOF
 }
 
-for id in uniqA uniqB dupC dupD staleF smE presU presD; do
+for id in uniqA uniqB uniqH dupC dupD staleF smE presU presD; do
   mkdir -p "$PRIMARY_HOME/data/$id" "$SM_HOME/data/$id" "$PRES_HOME/data/$id"
   write_ship_brief "$PRIMARY_HOME/data/$id/brief.md" "$id"
   write_ship_brief "$SM_HOME/data/$id/brief.md" "$id"
@@ -264,6 +264,36 @@ UNIQB_PANE=$(grep '^herdr_pane_id=' "$UNIQB_META" | cut -d= -f2-)
 [ "$(workspace_of_pane "$UNIQB_PANE")" = "$WS_PRIMARY" ] \
   || fail "a crewmate launched from the 'firstmate' workspace must stay in it"
 pass "real herdr E2E: the normal unique-label path is unchanged when the launcher's own pane identifies the workspace"
+
+# --- 2a. a hung Agent Tree tag never stops the launch ----------------------
+# Only `pane report-metadata` hangs; every other call reaches real Herdr. The
+# spawn must still launch the worker, bounded by the short tag budget.
+HANG_BIN="$TMP_ROOT/hang-bin"
+mkdir -p "$HANG_BIN"
+cat > "$HANG_BIN/herdr" <<HANG
+#!/usr/bin/env bash
+if [ "\${1:-} \${2:-}" = "pane report-metadata" ]; then
+  printf '%s\\n' "\$\$" >> "$TMP_ROOT/hang-calls"
+  sleep 600
+fi
+exec "$(command -v herdr)" "\$@"
+HANG
+chmod +x "$HANG_BIN/herdr"
+HANG_STARTED=$(date +%s)
+PATH="$HANG_BIN:$PATH" FM_HERDR_AGENT_TREE_TIMEOUT=1 \
+  spawn_from_launcher "$LAUNCH_PRIMARY_PANE" "$PRIMARY_HOME" uniqH "$PROJ" --mode no-mistakes --yolo off
+HANG_ELAPSED=$(( $(date +%s) - HANG_STARTED ))
+[ "$SPAWN_RC" -eq 0 ] || fail "a spawn whose Agent Tree tag hangs must still launch"$'\n'"$(cat "$SPAWN_ERR")"
+UNIQH_META="$PRIMARY_HOME/state/uniqH.meta"
+record_worktree "$UNIQH_META"
+[ -s "$TMP_ROOT/hang-calls" ] || fail "the hang fixture never saw the spawn's pane report-metadata call"
+[ "$HANG_ELAPSED" -lt 120 ] || fail "a hung Agent Tree tag held the spawn for ${HANG_ELAPSED}s"
+while IFS= read -r HANG_PID; do
+  ! kill -0 "$HANG_PID" 2>/dev/null || fail "the hung report-metadata process $HANG_PID outlived the tag budget"
+done < "$TMP_ROOT/hang-calls"
+UNIQH_PANE=$(grep '^herdr_pane_id=' "$UNIQH_META" | cut -d= -f2-)
+lab pane get "$UNIQH_PANE" >/dev/null 2>&1 || fail "the worker launched past a hung tag has no live pane"
+pass "real herdr E2E: a spawn whose Agent Tree tag hangs still launches within the tag budget and leaves no hung process"
 
 # --- 2b. presentation spaces ON: the projected child is created and bound
 #         UNDER the launcher's exact workspace, not collapsed into it ---------
@@ -485,6 +515,14 @@ case "$UNIQA_AGB" in
   *) fail "at_home and the hash inside at_agb disagree for uniqA: $UNIQA_AGB" ;;
 esac
 
+# A later relaunch onto the same pane with no agb identity must drop the
+# previous occupant's at_agb and its inbox identity.
+relaunch_task uniqA "sh -c 'echo agent-tree-noagb-ok'" FM_AGB=off \
+  || fail "relaunching uniqA without an agb identity failed"$'\n'"$(cat "$TMP_ROOT/uniqA-relaunch.err")"
+assert_agent_tree_child "$UNIQA_PANE" "$PRIMARY_HOME" "" "relaunch without an agb id onto a pane that had one"
+[ ! -e "$PRIMARY_HOME/state/uniqA.inbox/.agb-id" ] \
+  || fail "a relaunch with no agb identity left the previous inbox identity behind"
+
 lab pane close "$UNIQA_PANE" >/dev/null 2>&1 || fail "could not close uniqA's pane to force a rebind"
 relaunch_task uniqA "sh -c 'echo agent-tree-rebind-ok'" \
   || fail "rebinding uniqA onto a fresh pane failed"$'\n'"$(cat "$TMP_ROOT/uniqA-relaunch.err")"
@@ -492,7 +530,7 @@ UNIQA_REBOUND_PANE=$(grep '^herdr_pane_id=' "$UNIQA_META" | tail -1 | cut -d= -f
 [ -n "$UNIQA_REBOUND_PANE" ] && [ "$UNIQA_REBOUND_PANE" != "$UNIQA_PANE" ] \
   || fail "the rebind did not record a fresh pane for uniqA (got '${UNIQA_REBOUND_PANE:-<empty>}')"
 assert_agent_tree_child "$UNIQA_REBOUND_PANE" "$PRIMARY_HOME" "" "rebind onto a fresh pane"
-pass "real herdr E2E: relaunch tags the adopted pane with home and agb id, and rebind tags the fresh pane it records"
+pass "real herdr E2E: relaunch tags the adopted pane with home and agb id, drops a stale agb id, and rebind tags the fresh pane it records"
 
 # --- 8. teardown closes only the worker's own pane --------------------------
 

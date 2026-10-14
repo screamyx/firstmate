@@ -1488,8 +1488,8 @@ test_agent_tree_locked_start_tags_coordinator_and_adopted_workers() {
     "a locked start did not tag its own coordinator pane"
   assert_contains "$reports" $'pane\treport-metadata\tw2:p4\t--source\tfirstmate\t--token\tat_home='"$AT_HASH"$'\t--token\tat_agb=fm-abc123-task-agb\t--session\tlab' \
     "an adopted live worker was not re-tagged with its recorded agb id"
-  assert_contains "$reports" $'pane\treport-metadata\tw3:p5\t--source\tfirstmate\t--token\tat_home='"$AT_HASH"$'\t--session\tlab' \
-    "an adopted secondmate was not re-tagged with at_home only"
+  assert_contains "$reports" $'pane\treport-metadata\tw3:p5\t--source\tfirstmate\t--token\tat_home='"$AT_HASH"$'\t--clear-token\tat_agb\t--session\tlab' \
+    "an adopted secondmate was not re-tagged with at_home and no at_agb"
   assert_not_contains "$reports" "w9:p9" "a dead worker endpoint was tagged"
   assert_not_contains "$reports" "--ttl-ms" "an Agent Tree tag carried a TTL"
   assert_equals 3 "$(printf '%s\n' "$reports" | grep -c .)" "a locked start sends exactly three Agent Tree tags here"
