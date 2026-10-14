@@ -144,6 +144,17 @@ spawn_from_launcher() {
   return 0
 }
 
+# assert_agent_tree_child <pane> <launching-home> <agb-id|""> <case>: the
+# exact Agent Tree tokens a worker pane carries (docs/herdr-backend.md "Agent
+# Tree pane tags"), read back from real Herdr rather than from a call log.
+assert_agent_tree_child() {
+  local pane=$1 home=$2 agb=$3 label=$4 hash want got
+  hash=$(FM_HOME="$home" "$ROOT/bin/fm-agb.sh" home-hash) || fail "$label: could not compute the home hash"
+  want=$(jq -cnS --arg h "$hash" --arg a "$agb" '{at_home: $h} + (if $a == "" then {} else {at_agb: $a} end)')
+  got=$(lab pane get "$pane" 2>/dev/null | jq -cS '.result.pane.tokens // {}' 2>/dev/null)
+  [ "$got" = "$want" ] || fail "$label: Agent Tree tokens on pane $pane were '${got:-<unreadable>}', want '$want'"
+}
+
 record_worktree() {  # <meta>
   local wt
   wt=$(grep '^worktree=' "$1" 2>/dev/null | cut -d= -f2-)
@@ -198,7 +209,7 @@ Verify the worker is placed in the correct workspace.
 EOF
 }
 
-for id in uniqA uniqB dupC dupD staleF smE presU presD; do
+for id in uniqA uniqB uniqH dupC dupD staleF smE presU presD; do
   mkdir -p "$PRIMARY_HOME/data/$id" "$SM_HOME/data/$id" "$PRES_HOME/data/$id"
   write_ship_brief "$PRIMARY_HOME/data/$id/brief.md" "$id"
   write_ship_brief "$SM_HOME/data/$id/brief.md" "$id"
@@ -234,6 +245,7 @@ WS_PRIMARY=$(workspace_of_pane "$UNIQA_PANE")
 [ -n "$WS_PRIMARY" ] || fail "could not read uniqA's workspace"
 [ "$(label_of_workspace "$WS_PRIMARY")" = firstmate ] || fail "uniqA did not land in a 'firstmate' workspace"
 [ "$(focused_workspace)" = "$WS_OTHER" ] || fail "the spawn stole focus from the captain's workspace"
+assert_agent_tree_child "$UNIQA_PANE" "$PRIMARY_HOME" "" "fresh flat spawn"
 pass "real herdr E2E: with one 'firstmate' workspace and no herdr parent, a crewmate still lands in this home's own workspace without stealing focus"
 
 # --- 2. unique label, WITH a launcher pane: same workspace, now by identity --
@@ -252,6 +264,36 @@ UNIQB_PANE=$(grep '^herdr_pane_id=' "$UNIQB_META" | cut -d= -f2-)
 [ "$(workspace_of_pane "$UNIQB_PANE")" = "$WS_PRIMARY" ] \
   || fail "a crewmate launched from the 'firstmate' workspace must stay in it"
 pass "real herdr E2E: the normal unique-label path is unchanged when the launcher's own pane identifies the workspace"
+
+# --- 2a. a hung Agent Tree tag never stops the launch ----------------------
+# Only `pane report-metadata` hangs; every other call reaches real Herdr. The
+# spawn must still launch the worker, bounded by the short tag budget.
+HANG_BIN="$TMP_ROOT/hang-bin"
+mkdir -p "$HANG_BIN"
+cat > "$HANG_BIN/herdr" <<HANG
+#!/usr/bin/env bash
+if [ "\${1:-} \${2:-}" = "pane report-metadata" ]; then
+  printf '%s\\n' "\$\$" >> "$TMP_ROOT/hang-calls"
+  sleep 600
+fi
+exec "$(command -v herdr)" "\$@"
+HANG
+chmod +x "$HANG_BIN/herdr"
+HANG_STARTED=$(date +%s)
+PATH="$HANG_BIN:$PATH" FM_HERDR_AGENT_TREE_TIMEOUT=1 \
+  spawn_from_launcher "$LAUNCH_PRIMARY_PANE" "$PRIMARY_HOME" uniqH "$PROJ" --mode no-mistakes --yolo off
+HANG_ELAPSED=$(( $(date +%s) - HANG_STARTED ))
+[ "$SPAWN_RC" -eq 0 ] || fail "a spawn whose Agent Tree tag hangs must still launch"$'\n'"$(cat "$SPAWN_ERR")"
+UNIQH_META="$PRIMARY_HOME/state/uniqH.meta"
+record_worktree "$UNIQH_META"
+[ -s "$TMP_ROOT/hang-calls" ] || fail "the hang fixture never saw the spawn's pane report-metadata call"
+[ "$HANG_ELAPSED" -lt 120 ] || fail "a hung Agent Tree tag held the spawn for ${HANG_ELAPSED}s"
+while IFS= read -r HANG_PID; do
+  ! kill -0 "$HANG_PID" 2>/dev/null || fail "the hung report-metadata process $HANG_PID outlived the tag budget"
+done < "$TMP_ROOT/hang-calls"
+UNIQH_PANE=$(grep '^herdr_pane_id=' "$UNIQH_META" | cut -d= -f2-)
+lab pane get "$UNIQH_PANE" >/dev/null 2>&1 || fail "the worker launched past a hung tag has no live pane"
+pass "real herdr E2E: a spawn whose Agent Tree tag hangs still launches within the tag budget and leaves no hung process"
 
 # --- 2b. presentation spaces ON: the projected child is created and bound
 #         UNDER the launcher's exact workspace, not collapsed into it ---------
@@ -278,6 +320,7 @@ PRESU_JOURNAL="$PRES_HOME/state/presU.herdr-presentation"
 [ "$(journal_field "$PRESU_JOURNAL" workspace_id)" = "$PRESU_WS" ] \
   || fail "the projection journal does not name its own workspace"
 [ "$(focused_workspace)" = "$WS_OTHER" ] || fail "a projected spawn stole focus from the captain's workspace"
+assert_agent_tree_child "$PRESU_PANE" "$PRES_HOME" "" "fresh projected spawn"
 pass "real herdr E2E: presentation spaces still create the isolated child workspace and bind it under the launcher's exact parent, without stealing focus"
 
 # --- 3. duplicate label, launcher in the NON-first match, driven from a real
@@ -412,6 +455,9 @@ SME_WS=$(workspace_of_pane "$SME_PANE")
   || fail "a secondmate's own worker must land in the secondmate's exact workspace ($WS_SM_LAUNCH), got '$SME_WS'"
 [ "$(tab_labels_of_workspace "$WS_SM_DECOY")" = "$WS_SM_DECOY_TABS_BEFORE" ] \
   || fail "the duplicate secondmate-labeled workspace was mutated"
+assert_agent_tree_child "$SME_PANE" "$SM_HOME" "" "secondmate-owned worker"
+[ "$(FM_HOME="$SM_HOME" "$ROOT/bin/fm-agb.sh" home-hash)" != "$(FM_HOME="$PRIMARY_HOME" "$ROOT/bin/fm-agb.sh" home-hash)" ] \
+  || fail "the secondmate and primary homes must hash apart for the worker tag to tell them apart"
 pass "real herdr E2E: a secondmate launching its own worker gets the same exact-workspace guarantee, and its same-labeled sibling is untouched"
 
 # --- 7. a --secondmate launch is NOT collapsed into the launcher's workspace -
@@ -425,7 +471,66 @@ SM2_WS=$(workspace_of_pane "$SM2_PANE")
   || fail "a --secondmate launch must stand up the secondmate's own workspace, not join the launcher's"
 [ "$(label_of_workspace "$SM2_WS")" = "2ndmate-$SM2_ID" ] \
   || fail "a --secondmate launch should land in '2ndmate-$SM2_ID', got '$(label_of_workspace "$SM2_WS")'"
+assert_agent_tree_child "$SM2_PANE" "$PRIMARY_HOME" "" "--secondmate launch"
 pass "real herdr E2E: a --secondmate launch still stands up that secondmate's own workspace instead of inheriting the launcher's"
+pass "real herdr E2E: fresh flat, fresh projected, and secondmate launches tag the final pane with the launching home's hash and no agb id"
+
+# --- 7b. relaunch and rebind re-tag the task's final pane --------------------
+# Both replace an exited agent through bin/fm-spawn.sh --relaunch. A relaunch
+# adopts the recorded pane; once that pane is gone, the same verb rebinds the
+# task onto one fresh pane. The adopt case runs an opencode-named raw probe
+# with a stub agb on PATH, so the worker gets an agb identity without
+# touching the shared broker, and at_agb must name exactly that identity.
+
+AGB_STUB_DIR="$TMP_ROOT/agb-stub"
+mkdir -p "$AGB_STUB_DIR"
+printf '#!/bin/sh\nexit 0\n' > "$AGB_STUB_DIR/agb"
+chmod +x "$AGB_STUB_DIR/agb"
+printf '#!/bin/sh\necho agent-tree-probe-ok\n' > "$TMP_ROOT/opencode-tree-probe"
+chmod +x "$TMP_ROOT/opencode-tree-probe"
+# The launcher is uniqA's own parent pane: the home label is duplicated by now,
+# so a rebind must place the fresh pane by that exact identity.
+relaunch_task() {  # <id> <raw-launch-command> [extra env...]
+  local id=$1 launch=$2
+  shift 2
+  env HERDR_ENV=1 HERDR_PANE_ID="$LAUNCH_PRIMARY_PANE" HERDR_SESSION="$HERDR_LAB_SESSION" \
+    HERDR_SOCKET_PATH="$LAB_SOCKET" \
+    FM_SPAWN_NO_GUARD=1 FM_HOME="$PRIMARY_HOME" FM_ROOT_OVERRIDE="$ROOT" "$@" \
+    "$ROOT/bin/fm-spawn.sh" "$id" --relaunch --harness "$launch" \
+    >"$TMP_ROOT/$id-relaunch.out" 2>"$TMP_ROOT/$id-relaunch.err"
+}
+
+lab pane report-metadata "$UNIQA_PANE" --source firstmate --clear-token at_home >/dev/null 2>&1 \
+  || fail "could not clear uniqA's worker tag before the relaunch"
+relaunch_task uniqA "$TMP_ROOT/opencode-tree-probe --agent-tree" FM_AGB=on PATH="$AGB_STUB_DIR:$PATH" \
+  || fail "relaunching uniqA onto its recorded pane failed"$'\n'"$(cat "$TMP_ROOT/uniqA-relaunch.err")"
+[ "$(grep '^herdr_pane_id=' "$UNIQA_META" | tail -1 | cut -d= -f2-)" = "$UNIQA_PANE" ] \
+  || fail "the relaunch did not adopt uniqA's recorded pane"
+UNIQA_AGB=$(FM_HOME="$PRIMARY_HOME" "$ROOT/bin/fm-agb.sh" worker-id uniqA)
+[ "$(cat "$PRIMARY_HOME/state/uniqA.inbox/.agb-id" 2>/dev/null)" = "$UNIQA_AGB" ] \
+  || fail "the relaunched worker did not get its agb identity"
+assert_agent_tree_child "$UNIQA_PANE" "$PRIMARY_HOME" "$UNIQA_AGB" "relaunch onto the recorded pane"
+case "$UNIQA_AGB" in
+  "fm-$(FM_HOME="$PRIMARY_HOME" "$ROOT/bin/fm-agb.sh" home-hash)-"*) : ;;
+  *) fail "at_home and the hash inside at_agb disagree for uniqA: $UNIQA_AGB" ;;
+esac
+
+# A later relaunch onto the same pane with no agb identity must drop the
+# previous occupant's at_agb and its inbox identity.
+relaunch_task uniqA "sh -c 'echo agent-tree-noagb-ok'" FM_AGB=off \
+  || fail "relaunching uniqA without an agb identity failed"$'\n'"$(cat "$TMP_ROOT/uniqA-relaunch.err")"
+assert_agent_tree_child "$UNIQA_PANE" "$PRIMARY_HOME" "" "relaunch without an agb id onto a pane that had one"
+[ ! -e "$PRIMARY_HOME/state/uniqA.inbox/.agb-id" ] \
+  || fail "a relaunch with no agb identity left the previous inbox identity behind"
+
+lab pane close "$UNIQA_PANE" >/dev/null 2>&1 || fail "could not close uniqA's pane to force a rebind"
+relaunch_task uniqA "sh -c 'echo agent-tree-rebind-ok'" \
+  || fail "rebinding uniqA onto a fresh pane failed"$'\n'"$(cat "$TMP_ROOT/uniqA-relaunch.err")"
+UNIQA_REBOUND_PANE=$(grep '^herdr_pane_id=' "$UNIQA_META" | tail -1 | cut -d= -f2-)
+[ -n "$UNIQA_REBOUND_PANE" ] && [ "$UNIQA_REBOUND_PANE" != "$UNIQA_PANE" ] \
+  || fail "the rebind did not record a fresh pane for uniqA (got '${UNIQA_REBOUND_PANE:-<empty>}')"
+assert_agent_tree_child "$UNIQA_REBOUND_PANE" "$PRIMARY_HOME" "" "rebind onto a fresh pane"
+pass "real herdr E2E: relaunch tags the adopted pane with home and agb id, drops a stale agb id, and rebind tags the fresh pane it records"
 
 # --- 8. teardown closes only the worker's own pane --------------------------
 

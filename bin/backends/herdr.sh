@@ -2058,6 +2058,38 @@ fm_backend_herdr_pane_presence_state() {  # <session> <pane_id>
   [ "$pid" = "$pane_id" ] && printf 'present' || printf 'unknown'
 }
 
+# fm_backend_herdr_agent_tree_report: report Agent Tree display-only pane
+# tokens (docs/herdr-backend.md "Agent Tree pane tags") as `pane
+# report-metadata <pane> --source firstmate <args...>` in the pane's own
+# session, never with a TTL and printing nothing. It returns herdr's own
+# status so a caller can tell a confirmed write from a failed one; it applies
+# no deadline, so call it only through bin/fm-herdr-agent-tree.sh, which bounds
+# every tag and swallows every failure.
+fm_backend_herdr_agent_tree_report() {  # <session> <pane_id> <report-metadata-args...>
+  local session=$1 pane_id=$2
+  shift 2
+  [ -n "$session" ] && [ -n "$pane_id" ] || return 1
+  fm_backend_herdr_cli "$session" pane report-metadata "$pane_id" --source firstmate "$@" >/dev/null 2>&1
+}
+
+# fm_backend_herdr_pane_token_state: read one display-only token on an exact
+# pane. Prints `value <token>` when the pane answers and carries the token,
+# `absent` when the pane answers without it or herdr reports the pane gone,
+# and `unknown` for any other read, so a caller never mistakes a failed read
+# for a missing token.
+fm_backend_herdr_pane_token_state() {  # <session> <pane_id> <token-name>
+  local out verdict
+  out=$(fm_backend_herdr_cli "$1" pane get "$2" 2>/dev/null)
+  verdict=$(printf '%s' "$out" | jq -r --arg pane "$2" --arg name "$3" '
+    if .error.code == "pane_not_found" then "absent"
+    elif .result.pane.pane_id == $pane then
+      (.result.pane.tokens[$name] // null) as $v
+      | if ($v | type) == "string" then "value \($v)" else "absent" end
+    else "unknown" end
+  ' 2>/dev/null) || verdict=
+  printf '%s' "${verdict:-unknown}"
+}
+
 fm_backend_herdr_workspace_presence_state() {  # <session> <workspace_id>
   local session=$1 workspace_id=$2 out matches
   out=$(fm_backend_herdr_cli "$session" workspace list 2>&1)
