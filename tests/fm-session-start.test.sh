@@ -565,11 +565,11 @@ SH
 run_session_start() {
   local home=$1 root=$2 path=$3 pi_harness=${4:-}
   if [ -n "$pi_harness" ]; then
-    env -u CLAUDECODE -u GROK_AGENT PI_CODING_AGENT=true FM_PI_HARNESS="$pi_harness" \
+    env -u CLAUDECODE -u GROK_AGENT -u HERDR_PANE_ID -u HERDR_SESSION PI_CODING_AGENT=true FM_PI_HARNESS="$pi_harness" \
       FM_HOME="$home" FM_ROOT_OVERRIDE="$root" PATH="$path" \
       "$SESSION_START"
   else
-    env -u CLAUDECODE -u PI_CODING_AGENT -u FM_PI_HARNESS -u GROK_AGENT \
+    env -u CLAUDECODE -u PI_CODING_AGENT -u FM_PI_HARNESS -u GROK_AGENT -u HERDR_PANE_ID -u HERDR_SESSION \
       FM_HOME="$home" FM_ROOT_OVERRIDE="$root" PATH="$path" \
       "$SESSION_START"
   fi
@@ -578,7 +578,7 @@ run_session_start() {
 run_pi_session_start() {  # <home> <root> <path> [fm-session-start args...]
   local home=$1 root=$2 path=$3
   shift 3
-  env -u CLAUDECODE -u GROK_AGENT PI_CODING_AGENT=true FM_PI_HARNESS=pi \
+  env -u CLAUDECODE -u GROK_AGENT -u HERDR_PANE_ID -u HERDR_SESSION PI_CODING_AGENT=true FM_PI_HARNESS=pi \
     FM_FAKE_HARNESS_PID="$SESSION_START_TEST_HARNESS_PID" \
     FM_HOME="$home" FM_ROOT_OVERRIDE="$root" PATH="$path" \
     "$SESSION_START" "$@"
@@ -1422,6 +1422,107 @@ EOF
     "a probe exiting 4 was mislabelled as a failed read"
 
   pass "herdr endpoint liveness is reported per task: alive, dead for exit 1, dead for any other probe status"
+}
+
+# make_fake_herdr_agent_tree <fakebin> <log> <live-pane>...: every call is
+# logged tab-separated; `pane get` answers only for the live panes and
+# `pane report-metadata` always succeeds, so a test reads exactly which Agent
+# Tree tags a session start sent (docs/herdr-backend.md "Agent Tree pane tags").
+make_fake_herdr_agent_tree() {
+  local fakebin=$1 log=$2
+  shift 2
+  {
+    printf '#!/usr/bin/env bash\nset -u\n'
+    printf 'log=%q\nlive=(%s)\n' "$log" "$*"
+    cat <<'SH'
+(IFS=$'\t'; printf '%s\n' "$*") >> "$log"
+if [ "${1:-} ${2:-}" = "pane get" ]; then
+  for pane in "${live[@]}"; do
+    [ "${3:-}" = "$pane" ] && { printf '{"result":{"pane":{"pane_id":"%s","tokens":{}}}}\n' "$pane"; exit 0; }
+  done
+  printf '{"error":{"code":"pane_not_found"}}\n'
+  exit 1
+fi
+[ "${1:-} ${2:-}" = "pane report-metadata" ] && exit 0
+exit 1
+SH
+  } > "$fakebin/herdr"
+  chmod +x "$fakebin/herdr"
+}
+
+agent_tree_world() {  # <name>: sets AT_ROOT AT_HOME AT_FAKEBIN AT_LOG AT_HASH
+  local rec
+  rec=$(new_world "$1")
+  IFS='|' read -r AT_ROOT AT_HOME AT_FAKEBIN <<EOF
+$rec
+EOF
+  AT_LOG="${AT_HOME%/home}/herdr.log"
+  : > "$AT_LOG"
+  make_fake_toolchain "$AT_FAKEBIN"
+  make_fake_ps_claude "$AT_FAKEBIN"
+  make_fake_herdr_agent_tree "$AT_FAKEBIN" "$AT_LOG" w1:p1 w2:p4 w3:p5
+  printf 'window=lab:w2:p4\nkind=ship\nbackend=herdr\nherdr_session=lab\nherdr_pane_id=w2:p4\n' > "$AT_HOME/state/task-agb.meta"
+  mkdir -p "$AT_HOME/state/task-agb.inbox"
+  printf 'fm-abc123-task-agb\n' > "$AT_HOME/state/task-agb.inbox/.agb-id"
+  printf 'window=lab:w3:p5\nkind=secondmate\nbackend=herdr\nherdr_session=lab\nherdr_pane_id=w3:p5\n' > "$AT_HOME/state/sm-plain.meta"
+  printf 'window=lab:w9:p9\nkind=ship\nbackend=herdr\n' > "$AT_HOME/state/task-dead.meta"
+  AT_HASH=$(FM_HOME="$AT_HOME" "$ROOT/bin/fm-agb.sh" home-hash)
+}
+
+agent_tree_session_start() {  # [fm-session-start args...]
+  env -u CLAUDECODE -u PI_CODING_AGENT -u FM_PI_HARNESS -u GROK_AGENT \
+    HERDR_PANE_ID=w1:p1 HERDR_SESSION=lab \
+    FM_HOME="$AT_HOME" FM_ROOT_OVERRIDE="$AT_ROOT" PATH="$AT_FAKEBIN:$BASE_PATH" \
+    "$SESSION_START" "$@"
+}
+
+agent_tree_reports() { grep $'^pane\treport-metadata' "$AT_LOG" || true; }
+
+test_agent_tree_locked_start_tags_coordinator_and_adopted_workers() {
+  local out reports
+  agent_tree_world agent-tree-start
+  out=$(agent_tree_session_start)
+  assert_contains "$out" "endpoint: alive (backend=herdr window=lab:w2:p4)" "the live worker was not adopted as alive"
+  reports=$(agent_tree_reports)
+  assert_contains "$reports" $'pane\treport-metadata\tw1:p1\t--source\tfirstmate\t--token\tat_home_owner='"$AT_HASH"$'\t--session\tlab' \
+    "a locked start did not tag its own coordinator pane"
+  assert_contains "$reports" $'pane\treport-metadata\tw2:p4\t--source\tfirstmate\t--token\tat_home='"$AT_HASH"$'\t--token\tat_agb=fm-abc123-task-agb\t--session\tlab' \
+    "an adopted live worker was not re-tagged with its recorded agb id"
+  assert_contains "$reports" $'pane\treport-metadata\tw3:p5\t--source\tfirstmate\t--token\tat_home='"$AT_HASH"$'\t--session\tlab' \
+    "an adopted secondmate was not re-tagged with at_home only"
+  assert_not_contains "$reports" "w9:p9" "a dead worker endpoint was tagged"
+  assert_not_contains "$reports" "--ttl-ms" "an Agent Tree tag carried a TTL"
+  assert_equals 3 "$(printf '%s\n' "$reports" | grep -c .)" "a locked start sends exactly three Agent Tree tags here"
+  assert_equals "lab:w1:p1" "$(cat "$AT_HOME/state/.herdr-agent-tree-owner")" "the coordinator pane record"
+  pass "a locked session start tags its own Herdr pane and re-tags each adopted live worker pane"
+}
+
+test_agent_tree_reemit_retags_the_coordinator_but_not_workers() {
+  local reports
+  agent_tree_world agent-tree-reemit
+  FM_FAKE_HARNESS_PID=$$ agent_tree_session_start >/dev/null
+  : > "$AT_LOG"
+  FM_FAKE_HARNESS_PID=$$ agent_tree_session_start --reemit >/dev/null
+  reports=$(agent_tree_reports)
+  assert_equals $'pane\treport-metadata\tw1:p1\t--source\tfirstmate\t--token\tat_home_owner='"$AT_HASH"$'\t--session\tlab' \
+    "$reports" "a context re-emit re-tags only the coordinator pane"
+  pass "a context re-emit re-tags its own coordinator pane and repeats no worker adoption"
+}
+
+test_agent_tree_lock_refused_session_tags_nothing() {
+  local out holder_pid status=0
+  agent_tree_world agent-tree-refused
+  sleep 300 &
+  holder_pid=$!
+  printf '%s\n' "$holder_pid" > "$AT_HOME/state/.lock"
+  out=$(agent_tree_session_start) || status=$?
+  kill "$holder_pid" 2>/dev/null || true
+  wait "$holder_pid" 2>/dev/null || true
+  expect_code 0 "$status" "a lock-refused session start"
+  assert_contains "$out" "READ-ONLY SESSION" "the fixture did not refuse the lock"
+  assert_equals "" "$(agent_tree_reports)" "a lock-refused session must send no Agent Tree tag"
+  assert_absent "$AT_HOME/state/.herdr-agent-tree-owner" "a lock-refused session must not record a coordinator pane"
+  pass "a lock-refused session start tags no pane and records no coordinator"
 }
 
 test_endpoint_read_death_is_isolated_and_reported() {
@@ -2371,7 +2472,7 @@ EOF
 
   append_wake "$home/state" signal task-r "done: queued after the re-emit too" || fail "seed second wake failed"
   reemit=$(FM_HOME="$home" FM_ROOT_OVERRIDE="$root" FM_FAKE_HARNESS_PID=$$ PATH="$fakebin:$BASE_PATH" \
-    env -u CLAUDECODE -u PI_CODING_AGENT -u FM_PI_HARNESS -u GROK_AGENT \
+    env -u CLAUDECODE -u PI_CODING_AGENT -u FM_PI_HARNESS -u GROK_AGENT -u HERDR_PANE_ID -u HERDR_SESSION \
     "$SESSION_START" --reemit)
 
   assert_contains "$reemit" "SESSION START (CONTEXT RE-EMIT) - $home" "--reemit did not label itself"
@@ -2590,7 +2691,7 @@ EOF
   git -C "$root" checkout -q -B fm/reemit-tangle
 
   reemit=$(FM_HOME="$home" FM_ROOT_OVERRIDE="$root" PATH="$fakebin:$BASE_PATH" \
-    env -u CLAUDECODE -u PI_CODING_AGENT -u FM_PI_HARNESS -u GROK_AGENT \
+    env -u CLAUDECODE -u PI_CODING_AGENT -u FM_PI_HARNESS -u GROK_AGENT -u HERDR_PANE_ID -u HERDR_SESSION \
     "$SESSION_START" --reemit)
 
   # A re-emit skips the sweeps because it ALREADY ran them, not because it lacks
@@ -2605,7 +2706,7 @@ EOF
   holder_pid=$!
   printf '%s\n' "$holder_pid" > "$home/state/.lock"
   readonly_out=$(FM_HOME="$home" FM_ROOT_OVERRIDE="$root" PATH="$fakebin:$BASE_PATH" \
-    env -u CLAUDECODE -u PI_CODING_AGENT -u FM_PI_HARNESS -u GROK_AGENT \
+    env -u CLAUDECODE -u PI_CODING_AGENT -u FM_PI_HARNESS -u GROK_AGENT -u HERDR_PANE_ID -u HERDR_SESSION \
     "$SESSION_START" --reemit)
   kill "$holder_pid" 2>/dev/null || true
   wait "$holder_pid" 2>/dev/null || true
@@ -2972,6 +3073,9 @@ test_status_tail_line_cap
 test_orphan_status_logs_are_printed
 test_endpoint_liveness_tmux
 test_endpoint_liveness_herdr
+test_agent_tree_locked_start_tags_coordinator_and_adopted_workers
+test_agent_tree_reemit_retags_the_coordinator_but_not_workers
+test_agent_tree_lock_refused_session_tags_nothing
 test_endpoint_read_death_is_isolated_and_reported
 test_endpoint_read_hang_is_bounded_and_reported
 test_endpoint_bound_rejects_padded_zero

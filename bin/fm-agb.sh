@@ -24,6 +24,10 @@
 #            registration is verified for claude, while a codex or opencode
 #            worker without an agb hook stays unregistered and keeps the
 #            typed doorbell.
+#   home     the same <home-hash6>, printed by `home-hash` whether or not agb
+#            is enabled. Herdr's Agent Tree links a worker pane to its
+#            coordinator pane by this hash (docs/herdr-backend.md "Agent Tree
+#            pane tags"), because a restarted coordinator gets a new agb id.
 #
 # Direction: firstmate -> worker only.
 #   `ring`   the doorbell line goes as agb mail when the task's inbox carries a .agb-id and agb reports that identity live;
@@ -41,6 +45,7 @@
 # Usage:
 #   fm-agb.sh enabled                         exit 0 when agb is usable here
 #   fm-agb.sh worker-id <task-id>             print the worker identity
+#   fm-agb.sh home-hash                       print this home's <home-hash6>
 #   fm-agb.sh runtime <harness>               print claude|codex|opencode, else exit 1
 #   fm-agb.sh ring <record-path> <line>       exit 0 rang by agb, 1 caller must type
 #   fm-agb.sh forget <task-id>                drop a finished worker identity (best-effort)
@@ -133,6 +138,7 @@ fm_agb_main() {
   [ $# -gt 0 ] && shift
   case "$cmd" in
     enabled) fm_agb_enabled ;;
+    home-hash) [ $# -eq 0 ] || { echo "usage: fm-agb.sh home-hash" >&2; return 2; }; fm_agb_home_hash ;;
     worker-id) [ $# -eq 1 ] || { echo "usage: fm-agb.sh worker-id <task-id>" >&2; return 2; }; fm_agb_worker_id "$1" ;;
     runtime) fm_agb_runtime "${1-}" ;;
     ring)

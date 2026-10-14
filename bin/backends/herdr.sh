@@ -2058,6 +2058,29 @@ fm_backend_herdr_pane_presence_state() {  # <session> <pane_id>
   [ "$pid" = "$pane_id" ] && printf 'present' || printf 'unknown'
 }
 
+# fm_backend_herdr_agent_tree_report: report Agent Tree display-only pane
+# tokens (docs/herdr-backend.md "Agent Tree pane tags") as `pane
+# report-metadata <pane> --source firstmate <args...>` in the pane's own
+# session. Best-effort by contract: never a TTL, nothing printed, and success
+# whatever herdr answers, so no caller's launch, start, or adoption outcome can
+# change with it.
+fm_backend_herdr_agent_tree_report() {  # <session> <pane_id> <report-metadata-args...>
+  local session=$1 pane_id=$2
+  shift 2
+  [ -n "$session" ] && [ -n "$pane_id" ] || return 0
+  fm_backend_herdr_cli "$session" pane report-metadata "$pane_id" --source firstmate "$@" >/dev/null 2>&1 || true
+  return 0
+}
+
+# fm_backend_herdr_pane_token: one display-only token's value on an exact pane,
+# or empty when the pane, the token, or the read is missing.
+fm_backend_herdr_pane_token() {  # <session> <pane_id> <token-name>
+  fm_backend_herdr_cli "$1" pane get "$2" 2>/dev/null \
+    | jq -r --arg pane "$2" --arg name "$3" '
+      select(.result.pane.pane_id == $pane) | .result.pane.tokens[$name] // empty
+    ' 2>/dev/null || true
+}
+
 fm_backend_herdr_workspace_presence_state() {  # <session> <workspace_id>
   local session=$1 workspace_id=$2 out matches
   out=$(fm_backend_herdr_cli "$session" workspace list 2>&1)

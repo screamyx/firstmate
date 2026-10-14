@@ -310,6 +310,16 @@ lab() {
   PATH="$HERDR_ORIGINAL_PATH" "$HERDR_LAB_HELPER" run "$HERDR_LAB_SESSION" "$@"
 }
 
+# assert_agent_tree_child <pane> <launching-home> <case>: these raw-command
+# workers have no agb identity, so their pane carries exactly the launching
+# home's at_home token (docs/herdr-backend.md "Agent Tree pane tags").
+assert_agent_tree_child() {
+  local pane=$1 home=$2 label=$3 want got
+  want=$(jq -cn --arg h "$(FM_HOME="$home" "$ROOT/bin/fm-agb.sh" home-hash)" '{at_home: $h}')
+  got=$(lab pane get "$pane" 2>/dev/null | jq -cS '.result.pane.tokens // {}' 2>/dev/null)
+  [ "$got" = "$want" ] || fail "$label: Agent Tree tokens on pane $pane were '${got:-<unreadable>}', want '$want'"
+}
+
 focus_snapshot() {
   local list row workspace tab tabs
   list=$(lab workspace list) || fail "could not read the active workspace for focus instrumentation"
@@ -651,6 +661,7 @@ TOKEN=$(grep '^projection_id=' "$JOURNAL" | cut -d= -f2-)
 PROJECTED_WSID=$(grep '^herdr_workspace_id=' "$ON_META" | cut -d= -f2-)
 PROJECTED_TAB=$(grep '^herdr_tab_id=' "$ON_META" | cut -d= -f2-)
 PROJECTED_PANE=$(grep '^herdr_pane_id=' "$ON_META" | cut -d= -f2-)
+assert_agent_tree_child "$PROJECTED_PANE" "$HOME_DIR" "projected spawn"
 PROJECTED_INFO=$(lab workspace get "$PROJECTED_WSID") || fail "could not inspect the projected workspace"
 PROJECTED_LABEL=$(printf '%s' "$PROJECTED_INFO" | jq -r '.result.workspace.label // empty')
 [ "$PROJECTED_LABEL" = "└ shape · p:$TOKEN" ] \
@@ -1228,6 +1239,7 @@ for RESTART_ID in fm-hibit-resume-r1 wheelhouse-healing-r1; do
   [ "$(grep '^pane_id=' "$HOME_DIR/state/$RESTART_ID.herdr-presentation" | cut -d= -f2-)" = "$NEW_RESTART_PANE" ] \
     || fail "$RESTART_ID reclaim did not advance the exact journal binding"
   assert_focus_is "$RECLAIM_FOCUS" "$RESTART_ID same-identity reclaim"
+  assert_agent_tree_child "$NEW_RESTART_PANE" "$HOME_DIR" "$RESTART_ID projection reclaim"
 
   if [ "$RESTART_ID" = fm-hibit-resume-r1 ]; then
     PATH="$HERDR_ORIGINAL_PATH" "$HERDR_LAB_HELPER" stop "$HERDR_LAB_SESSION" >/dev/null \
@@ -1288,6 +1300,7 @@ CROSS_NEW_PANE=$(grep '^herdr_pane_id=' "$CROSS_RESTART_META" | cut -d= -f2-)
   || fail "cross-home reclaim did not replace one pane inside the same secondmate child workspace"
 [ "$(lab workspace get "$CROSS_NEW_WSID" | jq -r '.result.workspace.label')" = "$CROSS_OLD_LABEL" ] \
   || fail "cross-home reclaim changed the secondmate child's presentation label"
+assert_agent_tree_child "$CROSS_NEW_PANE" "$SECOND_HOME_A" "cross-home projection reclaim"
 teardown_task "$CROSS_RESTART_ID" "$SECOND_HOME_A" > "$TMP_ROOT/cross-restart-teardown.out" 2> "$TMP_ROOT/cross-restart-teardown.err" \
   || fail "cross-home reclaimed teardown failed: $(cat "$TMP_ROOT/cross-restart-teardown.err")"
 "$REAL_TREEHOUSE" return --force "$CROSS_OLD_WT" >/dev/null 2>&1 || true

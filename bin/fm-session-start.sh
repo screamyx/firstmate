@@ -703,6 +703,14 @@ if [ "$READ_ONLY" -eq 0 ]; then
     rm -f "$COMPLETION_FILE" 2>/dev/null || true
   fi
   fm_trace_context_session_start "$CONFIG" "$STATE/.trace-context-effective"
+  # Agent Tree coordinator tag (docs/herdr-backend.md "Agent Tree pane tags"):
+  # only a session that holds the lock claims this home's Herdr pane, on a full
+  # start and a context re-emit alike. A rename keeps the home hash, so this
+  # rerun is all a renamed or restarted coordinator needs. Bounded and
+  # best-effort, so it never changes the session-start result.
+  if [ -n "${HERDR_PANE_ID:-}" ]; then
+    fm_run_timed "$ENDPOINT_TIMEOUT" "$SCRIPT_DIR/fm-herdr-agent-tree.sh" coordinator >/dev/null 2>&1 || true
+  fi
   # A full locked start publishes this home's current structured summary.
   # Publication is side-band and best-effort, so it can never change the
   # session-start result. A context re-emit is not another session start.
@@ -899,6 +907,14 @@ for meta in "$STATE"/*.meta; do
     # is the probe's own verdict that the endpoint is gone.
     if [ "$endpoint_rc" -eq 0 ]; then
       printf 'endpoint: alive (backend=%s window=%s)\n' "$backend" "$window"
+      # Re-adopting a live Herdr worker re-tags its pane for Agent Tree, in
+      # case the tag is missing. Locked full starts only: a re-emit repeats
+      # no startup sweep, and the tag is best-effort and prints nothing.
+      if [ "$backend" = herdr ] && [ "$READ_ONLY" -eq 0 ] && [ "$REEMIT" -eq 0 ]; then
+        agb_id=
+        [ -f "$STATE/$id.inbox/.agb-id" ] && agb_id=$(awk 'NF { print $1; exit }' "$STATE/$id.inbox/.agb-id" 2>/dev/null)
+        fm_run_timed "$ENDPOINT_TIMEOUT" "$SCRIPT_DIR/fm-herdr-agent-tree.sh" child "${target:-$window}" ${agb_id:+"$agb_id"} >/dev/null 2>&1 || true
+      fi
     elif [ "$endpoint_rc" -eq 124 ] || [ "$endpoint_rc" -ge 128 ]; then
       printf 'endpoint: error (backend=%s window=%s - the endpoint read died or hit its %ss bound; the digest continued past it)\n' \
         "$backend" "$window" "$ENDPOINT_TIMEOUT"

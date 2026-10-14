@@ -21,6 +21,7 @@ Herdr provides the terminal session while Treehouse continues to provide task wo
 | The one-task workspaces, their setting, and their cleanup | [Presentation spaces](#presentation-spaces) |
 | Why a seeded default tab is or is not closed | [Default-tab prune safety](#default-tab-prune-safety) |
 | What task metadata records for a Herdr endpoint | [Endpoint metadata](#endpoint-metadata) |
+| Which display tokens let Agent Tree nest workers under their coordinator | [Agent Tree pane tags](#agent-tree-pane-tags) |
 | How text and keys reach a worker and how delivery is confirmed | [Current transport behavior](#current-transport-behavior) and [Composer and injection safety](#composer-and-injection-safety) |
 | What happens after a Herdr server restart and how liveness is judged | [Restart and liveness behavior](#restart-and-liveness-behavior) |
 | How blocked transitions arrive and what happens without protocol 16 | [Push events and polling fallback](#push-events-and-polling-fallback) |
@@ -509,6 +510,30 @@ A Herdr pane id contains a colon, so the adapter splits `window=` on the first c
 The recorded pane is the operational fast path.
 Workspace and tab ids support verification and cleanup but are not inferred from mutable labels during normal operation.
 
+## Agent Tree pane tags
+
+Herdr records no parent and child links between panes.
+The Agent Tree plugin nests each worker under the coordinator that launched it by reading display-only tokens that Firstmate reports with `pane report-metadata --source firstmate`.
+Every tag is best-effort: it never carries a TTL, prints nothing, and never changes a launch, a session start, or an adoption outcome.
+
+| Token | Pane | Value |
+| --- | --- | --- |
+| `at_home_owner` | A firstmate or secondmate session's own pane | That session's home hash. |
+| `at_home` | A worker or secondmate pane | The launching home's hash. |
+| `at_agb` | A worker pane with an agb identity | The worker's `AGB_AGENT_ID`, omitted when it has none. |
+
+The home hash is the six-character `<home-hash6>` that `bin/fm-agb.sh home-hash` prints.
+Agent Tree links by home hash rather than agb id because a restarted coordinator gets a new agb id while its workers keep running.
+A secondmate's workers therefore carry the secondmate's hash, while the secondmate's own pane carries its parent home's `at_home` and its own `at_home_owner`.
+
+`bin/fm-spawn.sh` tags the worker's final pane just before launch on every Herdr path: fresh, presentation projection, projection reclaim, relaunch, and rebind.
+`bin/fm-session-start.sh` runs `bin/fm-herdr-agent-tree.sh` only after it holds the home's session lock.
+On a full start and a context re-emit it tags its own pane and records it in `state/.herdr-agent-tree-owner`, first clearing `at_home_owner` on the previously recorded pane when that pane still carries this home's hash.
+A rename keeps the home hash, so that same run covers a renamed or restarted coordinator.
+On a full start it also re-tags each live Herdr worker it adopts from `state/*.meta`, with the agb id recorded in its inbox.
+A lock-refused session tags nothing.
+A remote secondmate's pane lives on another host and is not tagged.
+
 ## Current transport behavior
 
 ### Named server and session routing
@@ -849,6 +874,7 @@ tests/fm-backend-herdr-eventwait-smoke.test.sh
 tests/fm-control-herdr-smoke.test.sh
 tests/fm-herdr-session-cleanup.test.sh
 tests/fm-herdr-session-cleanup-e2e.test.sh
+tests/fm-herdr-agent-tree.test.sh
 tests/fm-herdr-attached-viewer-live-e2e.test.sh
 tests/fm-afk-inject-herdr-e2e.test.sh
 tests/fm-afk-pi-herdr-return-e2e.test.sh

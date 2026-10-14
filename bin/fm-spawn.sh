@@ -5302,6 +5302,7 @@ fi
 # inbox's .agb-id tells the doorbell which identity to mail. bin/fm-agb.sh owns
 # the identity scheme and every agb call; all of it is best-effort and a
 # missing or disabled agb leaves the launch exactly as before.
+SPAWN_TREE_AGB=
 if { [ "$KIND" = ship ] || [ "$KIND" = scout ]; } &&
   "$FM_ROOT/bin/fm-agb.sh" enabled &&
   SPAWN_AGB_RUNTIME=$("$FM_ROOT/bin/fm-agb.sh" runtime "$HARNESS"); then
@@ -5311,6 +5312,21 @@ if { [ "$KIND" = ship ] || [ "$KIND" = scout ]; } &&
   if mkdir -p "$STATE/$ID.inbox/handled" 2>/dev/null &&
     printf '%s\n' "$SPAWN_AGB_ID" >"$STATE/$ID.inbox/.agb-id"; then
     spawn_send_text_line "$T" "export AGB_AGENT_ID=$SPAWN_AGB_ID AGB_RUNTIME=$SPAWN_AGB_RUNTIME AGB_AGENT_RECAP=$(shell_quote "$SPAWN_AGB_RECAP")"
+    SPAWN_TREE_AGB=$SPAWN_AGB_ID
+  fi
+fi
+# Tag the worker's final Herdr pane for Agent Tree (docs/herdr-backend.md
+# "Agent Tree pane tags"): at_home is the LAUNCHING home's hash, so a
+# secondmate's workers nest under the secondmate. Fresh, rebind, reclaim, and
+# relaunch all reach here with T naming the pane the agent is about to start
+# in; it sits below the agb block only because at_agb, the AGB_AGENT_ID just
+# exported, is known from there. A child with no agb id carries no at_agb.
+if [ "$BACKEND" = herdr ] && fm_backend_herdr_parse_target "$T"; then
+  SPAWN_TREE_HOME=$(FM_HOME="$FM_HOME" "$FM_ROOT/bin/fm-agb.sh" home-hash 2>/dev/null) || SPAWN_TREE_HOME=
+  if [ -n "$SPAWN_TREE_HOME" ]; then
+    SPAWN_TREE_TOKENS=(--token "at_home=$SPAWN_TREE_HOME")
+    [ -z "$SPAWN_TREE_AGB" ] || SPAWN_TREE_TOKENS+=(--token "at_agb=$SPAWN_TREE_AGB")
+    fm_backend_herdr_agent_tree_report "$FM_BACKEND_HERDR_SESSION" "$FM_BACKEND_HERDR_PANE" "${SPAWN_TREE_TOKENS[@]}" || true
   fi
 fi
 # Send through the exact channel that already ships GOTMPDIR, so every backend
