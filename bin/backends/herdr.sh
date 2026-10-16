@@ -3115,12 +3115,16 @@ fm_backend_herdr_normalize_key() {  # <key>
 }
 
 # fm_backend_herdr_send_key: one named special key. Mirrors fm-send.sh's --key
-# path (tmux's `send-keys -t T key`).
+# path (tmux's `send-keys -t T key`). A failed send replays the transport's
+# stderr, as fm_backend_herdr_send_literal does, so a caller that logs a
+# failed Enter can name its cause.
 fm_backend_herdr_send_key() {  # <target> <key>
   fm_backend_herdr_target_ready "$1" || return 1
-  local key
+  local key err rc=0
   key=$(fm_backend_herdr_normalize_key "$2")
-  fm_backend_herdr_cli "$FM_BACKEND_HERDR_SESSION" pane send-keys "$FM_BACKEND_HERDR_PANE" "$key" >/dev/null 2>&1
+  err=$(fm_backend_herdr_cli "$FM_BACKEND_HERDR_SESSION" pane send-keys "$FM_BACKEND_HERDR_PANE" "$key" 2>&1 >/dev/null) || rc=$?
+  [ "$rc" -eq 0 ] || [ -z "$err" ] || printf '%s\n' "$err" >&2
+  return "$rc"
 }
 
 # fm_backend_herdr_capture: bounded plain-text pane capture. Mirrors
@@ -3258,7 +3262,10 @@ fm_backend_herdr_rendered_busy_state() {  # <target> [harness] -> busy|idle|unkn
 # A missing read, a shorter suffix, or a paste placeholder followed by a
 # literal remainder does not press Enter: the composer is cleared back to
 # empty and the verdict is send-failed, or unknown when the clear cannot be
-# verified. Other harnesses skip this proof. Verified hazard
+# verified. A failed send-text call that left text behind, and a proven payload
+# whose Enter could never be sent, are cleared the same way, so a Claude send
+# never returns send-failed while its own text sits in the composer.
+# Other harnesses skip this proof. Verified hazard
 # (herdr-verification-p2.md "slash/$ autocomplete popup"): a `/`- or
 # `$`-prefixed send opens a completion popup within ~0.1s, exactly like tmux's
 # claude/codex popups, so the caller's <settle> before the first Enter matters
@@ -3426,16 +3433,35 @@ fm_backend_herdr_composer_payload_shown() {  # <text> <after>
 # wrapped screen row per press, so a single-line leftover can need several
 # presses. The press count comes from fm_backend_herdr_proof_lines, which
 # sizes it from the payload length, not from the viewport read.
-# 0 only when the composer is verified empty again.
+# 0 only when the composer is verified empty again, by two reads that both
+# say empty across FM_BACKEND_HERDR_CLEAR_SETTLE seconds. One read right after
+# a press is not proof: the 2026-10-17 away-mode stall left the first row of a
+# two-row doorbell in a live Claude composer after a clear that reported
+# success, and every later injection then deferred on that leftover for three
+# hours. A read that turns pending again earns another bounded press.
 fm_backend_herdr_composer_clear() {  # <target> <text>
   local target=$1 text=$2 presses i=0
   presses=$(fm_backend_herdr_proof_lines "$text")
   while [ "$i" -lt "$presses" ]; do
     fm_backend_herdr_send_key "$target" C-u || return 1
     i=$((i + 1))
+    [ "$(fm_backend_herdr_composer_state "$target")" = empty ] || continue
+    sleep "${FM_BACKEND_HERDR_CLEAR_SETTLE:-0.3}"
     [ "$(fm_backend_herdr_composer_state "$target")" = empty ] && return 0
   done
   return 1
+}
+
+# fm_backend_herdr_send_failed_cleanup: the verdict for a Claude send that
+# fails after typing began. The composer was proven empty before the send, so
+# anything it holds now is this send's own text: clear it so no later send is
+# refused on it, and report send-failed only when the clear is verified.
+fm_backend_herdr_send_failed_cleanup() {  # <target> <text>
+  if fm_backend_herdr_composer_clear "$1" "$2"; then
+    printf 'send-failed'
+  else
+    printf 'unknown'
+  fi
 }
 
 fm_backend_herdr_send_text_submit() {  # <target> <text> <retries> <enter-sleep> <settle>
@@ -3453,16 +3479,20 @@ fm_backend_herdr_send_text_submit() {  # <target> <text> <retries> <enter-sleep>
       || { printf 'send-failed'; return 0; }
     [ -z "${content//[$' \t\r\n\v\f']/}" ] || { printf 'send-failed'; return 0; }
   fi
-  fm_backend_herdr_send_literal "$target" "$text" || { printf 'send-failed'; return 0; }
+  if ! fm_backend_herdr_send_literal "$target" "$text"; then
+    # A failed send-text call can still have typed the text.
+    if [ "$proof" = 1 ] && [ "$(fm_backend_herdr_composer_state "$target")" != empty ]; then
+      fm_backend_herdr_send_failed_cleanup "$target" "$text"
+    else
+      printf 'send-failed'
+    fi
+    return 0
+  fi
   sleep "$settle"
   if [ "$proof" = 1 ]; then
     if ! content=$(fm_backend_herdr_composer_content "$target") \
       || ! fm_backend_herdr_composer_payload_shown "$text" "$content"; then
-      if fm_backend_herdr_composer_clear "$target" "$text"; then
-        printf 'send-failed'
-      else
-        printf 'unknown'
-      fi
+      fm_backend_herdr_send_failed_cleanup "$target" "$text"
       return 0
     fi
   fi
@@ -3482,7 +3512,12 @@ fm_backend_herdr_send_text_submit() {  # <target> <text> <retries> <enter-sleep>
     elif [ "$enter_sent" -eq 0 ]; then
       i=$((i + 1))
       if [ "$i" -ge "$retries" ]; then
-        printf 'send-failed'
+        # No Enter ever landed, so a proven Claude payload is still typed.
+        if [ "$proof" = 1 ]; then
+          fm_backend_herdr_send_failed_cleanup "$target" "$text"
+        else
+          printf 'send-failed'
+        fi
         return 0
       fi
       sleep "$sleep_s"

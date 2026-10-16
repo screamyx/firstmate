@@ -3029,12 +3029,96 @@ test_inject_msg_herdr_composer_guard_defers() {
     fm_backend_target_exists() { return 0; }
     pane_is_busy() { return 1; }
     fm_backend_composer_state() { [ "$1" = herdr ] && [ "$2" = "default:w1:p2" ] || fail "unexpected composer_state args: $1 $2"; printf 'pending'; }
+    fm_backend_composer_reclaim_content() { printf 'half-typed captain text'; }
+    fm_backend_composer_reclaim_clear() { fail "a composer holding someone else's text must never be cleared"; }
     fm_backend_send_text_submit() { fail "send_text_submit should not run when the composer-guard defers"; }
     if FM_SUPERVISOR_BACKEND=herdr FM_SUPERVISOR_TARGET="default:w1:p2" inject_msg "hello" "$state"; then
       fail "inject_msg should defer when the herdr composer has pending input"
     fi
   ) || fail "herdr composer-guard inject_msg subshell failed"
   pass "inject_msg: herdr composer-guard defers before ever attempting a submit"
+}
+
+# The 2026-10-17 stall: a failed submit left the daemon's own doorbell in the
+# supervisor composer, and every later injection deferred on it for three
+# hours. The daemon reclaims that leftover (and only that) before injecting.
+supercase_own_leftover() {  # <state> -> leftover text: this home's doorbell, cut after its record name
+  local doorbell
+  fm_operational_record_write "$1" away-supervisor "old digest" doorbell || fail "could not write a test record"
+  printf '%s' "${doorbell%%.msg*}.msg'"
+}
+
+test_inject_msg_reclaims_its_own_stranded_doorbell() {
+  local dir state leftover
+  dir=$(make_supercase inject-herdr-reclaim)
+  state="$dir/state"
+  afk_enter "$state"
+  leftover=$(supercase_own_leftover "$state")
+  (
+    fm_backend_target_exists() { return 0; }
+    pane_is_busy() { return 1; }
+    fm_backend_composer_state() {
+      if [ -e "$dir/cleared" ]; then printf 'empty'; else printf 'pending'; fi
+    }
+    fm_backend_composer_reclaim_content() { [ "$1" = herdr ] || fail "unexpected backend $1"; printf '%s' "$leftover"; }
+    fm_backend_composer_reclaim_clear() {
+      [ "$3" = "$leftover" ] || fail "the clear was not sized from the leftover"
+      : > "$dir/cleared"
+    }
+    fm_backend_send_text_submit() { printf '%s\n' "$3" > "$dir/sent.log"; printf 'empty'; }
+    LOG="$dir/daemon.log" FM_SUPERVISOR_BACKEND=herdr FM_SUPERVISOR_TARGET="default:w1:p2" inject_msg "hello" "$state" \
+      || fail "inject_msg should deliver after reclaiming its own stranded doorbell"
+  ) || fail "own-leftover reclaim inject_msg subshell failed"
+  [ -e "$dir/cleared" ] || fail "the stranded doorbell was not cleared"
+  delivered_digest "$dir/sent.log" | grep -F 'hello' >/dev/null \
+    || fail "the fresh digest was not submitted after the reclaim: $(cat "$dir/sent.log" 2>/dev/null)"
+  grep -F 'reclaimed own unsent doorbell' "$dir/daemon.log" >/dev/null \
+    || fail "the reclaim was not logged"
+  pass "inject_msg: a stranded doorbell of this home's own is cleared and the fresh digest is delivered"
+}
+
+test_inject_msg_keeps_deferring_when_reclaim_is_unverified() {
+  local dir state leftover
+  dir=$(make_supercase inject-herdr-reclaim-unverified)
+  state="$dir/state"
+  afk_enter "$state"
+  leftover=$(supercase_own_leftover "$state")
+  (
+    fm_backend_target_exists() { return 0; }
+    pane_is_busy() { return 1; }
+    fm_backend_composer_state() { printf 'pending'; }
+    fm_backend_composer_reclaim_content() { printf '%s' "$leftover"; }
+    fm_backend_composer_reclaim_clear() { return 0; }
+    fm_backend_send_text_submit() { fail "nothing may be typed while the leftover is not proven cleared"; }
+    if LOG="$dir/daemon.log" FM_SUPERVISOR_BACKEND=herdr FM_SUPERVISOR_TARGET="default:w1:p2" inject_msg "hello" "$state"; then
+      fail "inject_msg must defer when the reclaim is not followed by an empty composer"
+    fi
+  ) || fail "unverified reclaim inject_msg subshell failed"
+  grep -F 'clear was not verified' "$dir/daemon.log" >/dev/null \
+    || fail "the unverified reclaim was not logged"
+  pass "inject_msg: an own leftover whose clear is not proven by a fresh empty verdict keeps the deferral"
+}
+
+test_inject_msg_does_not_reclaim_another_homes_doorbell() {
+  local dir state other leftover
+  dir=$(make_supercase inject-herdr-reclaim-foreign)
+  state="$dir/state"
+  other="$dir/other-state"
+  mkdir -p "$other"
+  afk_enter "$state"
+  leftover=$(supercase_own_leftover "$other")
+  (
+    fm_backend_target_exists() { return 0; }
+    pane_is_busy() { return 1; }
+    fm_backend_composer_state() { printf 'pending'; }
+    fm_backend_composer_reclaim_content() { printf '%s' "$leftover"; }
+    fm_backend_composer_reclaim_clear() { fail "another home's doorbell must never be cleared"; }
+    fm_backend_send_text_submit() { fail "send_text_submit should not run when the composer-guard defers"; }
+    if FM_SUPERVISOR_BACKEND=herdr FM_SUPERVISOR_TARGET="default:w1:p2" inject_msg "hello" "$state"; then
+      fail "inject_msg should defer on another home's doorbell"
+    fi
+  ) || fail "foreign-doorbell inject_msg subshell failed"
+  pass "inject_msg: a doorbell naming another home's record is not reclaimed"
 }
 
 test_inject_msg_herdr_pane_gone_defers() {
@@ -3246,6 +3330,9 @@ test_pane_is_busy_defaults_to_tmux_when_backend_omitted
 test_pane_input_pending_herdr_dispatch
 test_inject_msg_herdr_busy_guard_defers
 test_inject_msg_herdr_composer_guard_defers
+test_inject_msg_reclaims_its_own_stranded_doorbell
+test_inject_msg_keeps_deferring_when_reclaim_is_unverified
+test_inject_msg_does_not_reclaim_another_homes_doorbell
 test_inject_msg_herdr_pane_gone_defers
 test_inject_msg_herdr_submits_through_backend_dispatch
 test_inject_msg_defers_on_dead_shell_unknown
