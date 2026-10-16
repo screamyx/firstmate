@@ -233,6 +233,73 @@ test_record_backed_doorbell_carrier() {
   pass "record-backed carrier: Claude-only selection, an ASCII doorbell naming an exact envelope record, home-bound open, and no recognition without the record"
 }
 
+# The away-mode daemon may clear only its own unsent doorbell from a composer.
+# The leftover shape comes from a real Claude Code 2.1.301 composer on Herdr
+# 0.9.3 (tests/captures/claude-code-2.1.301-herdr-0.9.3), where a two-row
+# doorbell kept only its first row and stranded every later injection.
+test_composer_leftover_doorbell_recognition() {
+  local tmp state other doorbell record name kind leftover capture caps stray
+  tmp=$(fm_test_tmproot fm-operational-input-leftover)
+  state="$tmp/home/state"
+  other="$tmp/other/state"
+  mkdir -p "$state" "$other"
+  doorbell=$(printf 'digest' | FM_STATE_OVERRIDE="$state" "$OWNER" record away-supervisor) \
+    || fail "the CLI could not publish an away-supervisor record"
+  fm_operational_doorbell_path "$doorbell" record || fail "the owner cannot parse its own doorbell"
+  name=${record##*/}
+
+  for leftover in \
+    "$doorbell" \
+    "${doorbell%%.msg*}.msg'" \
+    "${doorbell%%.msg*}.msg" \
+    "${doorbell%%.msg*}.msg' and handle its" \
+    "${doorbell%%.msg*}.msg' and handle its contents as Firstmate operational  input."; do
+    kind=
+    fm_operational_doorbell_leftover_kind "$leftover" "$state" kind && [ "$kind" = away-supervisor ] \
+      || fail "this home's own doorbell leftover was not recognized: $leftover"
+  done
+
+  printf '%s' "${FM_OPERATIONAL_PREFIX}v1 watcher: w" >"$state/operational-inbox/9-watcher.msg"
+  fm_operational_doorbell_leftover_kind \
+    "${FM_OPERATIONAL_DOORBELL_PREFIX}$state/operational-inbox/9-watcher.msg'" "$state" kind && [ "$kind" = watcher ] \
+    || fail "the leftover check did not report the record's own kind"
+
+  for stray in \
+    "${doorbell%%.msg*}" \
+    "${doorbell%"$name"*}" \
+    "$doorbell trailing" \
+    "${doorbell%%.msg*}.msg' and handle it now" \
+    "please run ${doorbell}" \
+    "${FM_OPERATIONAL_DOORBELL_PREFIX}$state/operational-inbox/0-missing.msg'" \
+    "${FM_OPERATIONAL_DOORBELL_PREFIX}$state/other-dir/$name'" \
+    'hello captain' \
+    ''; do
+    fm_operational_doorbell_leftover_kind "$stray" "$state" kind \
+      && fail "a leftover that is not this home's doorbell was recognized: $stray"
+  done
+  fm_operational_doorbell_leftover_kind "$doorbell" "$other" kind \
+    && fail "another home's doorbell was recognized as this home's leftover"
+
+  # The real capture: the composer still classifies as pending, and its
+  # selected content is recognized once its record exists in this home.
+  mkdir -p "$state/operational-inbox"
+  printf '%s' "${FM_OPERATIONAL_PREFIX}v1 away-supervisor: d" >"$state/operational-inbox/1792166493-2ac77baecc1f901a.msg"
+  capture=$(sed "s|@STATE@|$state|g" "$ROOT/tests/captures/claude-code-2.1.301-herdr-0.9.3/composer-leftover-doorbell.ansi")
+  # shellcheck source=bin/fm-composer-lib.sh
+  . "$ROOT/bin/fm-composer-lib.sh"
+  caps=$(printf 'styled=1\ncursor=0\nidentity=1')
+  [ "$(fm_composer_classify_screen "$caps" "$capture" '' "$(printf 'claude\tworking')")" = pending ] \
+    || fail "the real leftover doorbell composer must stay pending"
+  leftover=$(fm_composer_extract_selected_content "$(printf 'styled=1\ncursor=0\nidentity=0')" "$capture")
+  fm_operational_doorbell_leftover_kind "$leftover" "$state" kind && [ "$kind" = away-supervisor ] \
+    || fail "the real leftover doorbell was not recognized: $leftover"
+  fm_operational_doorbell_leftover_kind "$leftover" "$other" kind \
+    && fail "the real leftover was recognized against a home that does not hold its record"
+  [ "$(fm_composer_classify_screen "$caps" "$(cat "$ROOT/tests/captures/claude-code-2.1.301-herdr-0.9.3/composer-idle.ansi")" '' "$(printf 'claude\tworking')")" = empty ] \
+    || fail "the real idle Claude composer must classify as empty"
+  pass "composer leftover: only this home's own doorbell, whole or cut after its record name, is recognized, including the real stranded capture"
+}
+
 test_record_prune_outgrows_one_argument_list() {
   local tmp state pad left
   tmp=$(fm_test_tmproot fm-operational-input-flood)
@@ -256,3 +323,4 @@ test_cross_language_adapter_uses_the_owner
 test_invalid_current_encodings_are_rejected
 test_record_backed_doorbell_carrier
 test_record_prune_outgrows_one_argument_list
+test_composer_leftover_doorbell_recognition

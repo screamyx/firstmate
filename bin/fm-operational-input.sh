@@ -35,6 +35,8 @@
 # the named record, which presentation-only consumers mirror (the Claude Code
 # Calm mod), while fm_operational_doorbell_kind also requires the record to sit in
 # the given home's own operational inbox, which the away-mode return check uses.
+# fm_operational_doorbell_leftover_kind applies that home-bound check to an unsent
+# composer leftover, so the away-mode daemon can reclaim only its own doorbell.
 #
 # CLI:
 #   fm-operational-input.sh encode <kind>  # body on stdin, encoded input stdout
@@ -328,6 +330,33 @@ fm_operational_doorbell_kind() {  # <message> <state-dir> <result-var>
   have=$(cd -P "${named_record%/*}" 2>/dev/null && pwd -P) || return 1
   [ "$want" = "$have" ] || return 1
   fm_operational_record_kind "$named_record" "$result_var"
+}
+
+# A composer leftover that is this home's doorbell, whole or cut short after
+# its record name, as a wrapped composer leaves it when trailing rows are
+# deleted. Whitespace is ignored after the record name because a composer read
+# joins wrapped rows with a space. The reconstructed doorbell must pass
+# fm_operational_doorbell_kind, so only a record that really sits in this
+# home's inbox qualifies; a leftover cut inside the record name never does.
+fm_operational_doorbell_leftover_kind() {  # <content> <state-dir> <result-var>
+  local content=${1-} state=${2-} result_var=${3-} rest record tail suffix
+  local LC_ALL=C
+  [ -n "$state" ] && [ -n "$result_var" ] || return 2
+  case "$content" in
+    "$FM_OPERATIONAL_DOORBELL_PREFIX"/*.msg*) ;;
+    *) return 1 ;;
+  esac
+  rest=${content#"$FM_OPERATIONAL_DOORBELL_PREFIX"}
+  record=${rest%%.msg*}.msg
+  tail=${rest#"$record"}
+  tail=${tail//[$' \t\r\n\v\f']/}
+  suffix=${FM_OPERATIONAL_DOORBELL_SUFFIX//[$' \t\r\n\v\f']/}
+  case "$suffix" in
+    "$tail"*) ;;
+    *) return 1 ;;
+  esac
+  fm_operational_doorbell_kind \
+    "$FM_OPERATIONAL_DOORBELL_PREFIX$record$FM_OPERATIONAL_DOORBELL_SUFFIX" "$state" "$result_var"
 }
 
 fm_operational_home_state() {

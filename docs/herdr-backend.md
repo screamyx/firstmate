@@ -575,9 +575,11 @@ That comparison ignores whitespace and U+2063, the invisible mark that starts op
 It ignores U+2063 because Claude's Herdr read-back never shows it.
 
 A composer that holds a shorter suffix, or a placeholder plus a literal remainder, does not receive Enter.
+A failed send-text call that still left text in the composer, and a proven payload whose Enter can never be sent, get the same treatment.
 Instead:
 
-1. The adapter presses Ctrl+U until the shared classifier reads the composer as empty.
+1. The adapter presses Ctrl+U until the shared classifier reads the composer as empty on two reads taken `FM_BACKEND_HERDR_CLEAR_SETTLE` seconds apart (default 0.3).
+   One read right after a press is not proof, and a second read that shows text again earns another bounded press.
 2. It then reports `send-failed`, so a resend starts from a clean composer.
 
 Ctrl+C is not used for this, because Claude documents it as interrupting a running operation.

@@ -133,7 +133,8 @@ backend (tmux or herdr; see "Auto-discovered supervisor pane" below):
   `pane_input_pending` is the tested fail-closed predicate for callers that need to know whether the composer is unsafe: it treats every result except exact `empty` as pending.
 
 A busy primary pane, or any composer verdict other than `empty`, defers the injection; the buffered escalation survives in `state/.subsuper-escalations` and is retried on the next housekeeping tick.
-In afk mode the composer guard is belt-and-suspenders (no human is typing), but it protects against the race window between the captain returning and their message landing, a dead shell, and the daemon's own previous injection sitting unsent.
+The one exception is the daemon's own unsent doorbell: `reclaim_own_leftover` clears a pending composer only when its text is a doorbell for an away-supervisor record in this home's own inbox, only on a backend with a verified clear (Herdr today), and only when a fresh read then says `empty`; anything else keeps the deferral.
+In afk mode the composer guard is belt-and-suspenders (no human is typing), but it protects against the race window between the captain returning and their message landing, a dead shell, and a previous injection sitting unsent that it cannot prove is its own reclaimable doorbell.
 
 **Max-defer escape (the daemon must never silently wedge).**
 If anything stays buffered past `FM_MAX_DEFER_SECS` (default 300), the daemon

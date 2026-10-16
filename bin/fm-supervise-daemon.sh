@@ -1408,7 +1408,31 @@ window_for_task() {  # <task-key> [state]
 #   - COMPOSER GUARD before typing: if the cursor line already has real content
 #     after dim/faint ghost text and borders are ignored (a human's half-typed
 #     line, or a previous injection's unsent text), defer entirely - injecting
-#     would merge with the human's text.
+#     would merge with the human's text. The one exception is this home's own
+#     unsent doorbell, which reclaim_own_leftover clears first.
+# reclaim_own_leftover: clear the daemon's OWN unsent doorbell from a pending
+# supervisor composer. A failed submit can leave it there, and the composer
+# guard then correctly refuses every later injection: on 2026-10-17 one
+# leftover held every away-mode escalation back for three hours. Only a
+# leftover that fm_operational_doorbell_leftover_kind ties to an away-supervisor
+# record in this home's own inbox qualifies; anything else, a backend with no
+# verified clear, or a clear that is not proven by a fresh empty verdict keeps
+# the deferral. The buffered escalations are not lost by the clear: the next
+# injection carries them in a fresh record.
+reclaim_own_leftover() {  # <backend> <target> <state>
+  local backend=$1 target=$2 state=$3 content kind
+  content=$(fm_backend_composer_reclaim_content "$backend" "$target" 2>/dev/null) || return 1
+  fm_operational_doorbell_leftover_kind "$content" "$state" kind || return 1
+  [ "$kind" = away-supervisor ] || return 1
+  if ! fm_backend_composer_reclaim_clear "$backend" "$target" "$content" 2>/dev/null \
+    || [ "$(fm_backend_composer_state "$backend" "$target" 2>/dev/null)" != empty ]; then
+    log "inject: own unsent doorbell found in the supervisor composer but its clear was not verified; deferring"
+    return 1
+  fi
+  log "inject: reclaimed own unsent doorbell from the supervisor composer"
+  return 0
+}
+
 inject_msg() {  # <message> [state]
   local msg=$1 state target backend retries sleep_s verdict composer encoded bytes errf err='' body
   state="${2:-$(_state_root)}"
@@ -1452,6 +1476,9 @@ inject_msg() {  # <message> [state]
   #      on anything that is not affirmatively 'empty'. A deferred escalation
   #      stays buffered for the next cycle or the catch-up flush.
   composer=$(fm_backend_composer_state "$backend" "$target" 2>/dev/null)
+  if [ "$composer" = pending ] && reclaim_own_leftover "$backend" "$target" "$state"; then
+    composer=empty
+  fi
   if [ "$composer" != empty ]; then
     INJECT_LAST_FAILURE="deferred: supervisor composer not confirmed-empty (state=${composer:-unknown}: pending input, dead-shell prompt, or unreadable pane)"
     log "inject $INJECT_LAST_FAILURE"

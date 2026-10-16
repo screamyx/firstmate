@@ -914,6 +914,32 @@ fm_backend_composer_state() {  # <backend> <target> [expected-label] -> empty|pe
   esac
 }
 
+# fm_backend_composer_reclaim_content and fm_backend_composer_reclaim_clear:
+# the read and the verified clear a caller needs to remove its OWN unsent text
+# from a composer (the away-mode daemon's leftover doorbell). The caller owns
+# recognizing the text as its own; these only read and clear. Only herdr has a
+# verified clear today (Ctrl+U, verified on live Claude), so every other backend
+# returns 1 and the caller keeps deferring, as before.
+fm_backend_composer_reclaim_content() {  # <backend> <target> -> composer text
+  local backend=$1
+  shift
+  fm_backend_source "$backend" || return 1
+  case "$backend" in
+    herdr) fm_backend_herdr_composer_content "$@" ;;
+    *) return 1 ;;
+  esac
+}
+
+fm_backend_composer_reclaim_clear() {  # <backend> <target> <text>
+  local backend=$1
+  shift
+  fm_backend_source "$backend" || return 1
+  case "$backend" in
+    herdr) fm_backend_herdr_composer_clear "$@" ;;
+    *) return 1 ;;
+  esac
+}
+
 # fm_backend_target_exists: cheap, READ-ONLY existence check - does the
 # recorded TARGET endpoint still exist on BACKEND? Never starts a server or
 # session: for herdr this deliberately queries the pane directly instead of

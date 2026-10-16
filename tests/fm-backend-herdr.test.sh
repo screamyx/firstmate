@@ -4447,6 +4447,111 @@ test_send_text_submit_replays_literal_send_stderr() {
   pass "fm_backend_herdr_send_text_submit: a failed literal send reports send-failed and replays the transport's stderr"
 }
 
+test_send_key_replays_transport_stderr() {
+  local dir log resp fb err rc=0
+  dir="$TMP_ROOT/send-key-stderr"; mkdir -p "$dir/responses"; log="$dir/log"; resp="$dir/responses"; : > "$log"
+  err="$dir/stderr"
+  printf 'herdr: pane w1:p2 is not accepting input\n' > "$resp/1.err"
+  printf '1\n' > "$resp/1.exit"
+  fb=$(make_herdr_fakebin "$dir")
+  PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" \
+    bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_send_key default:w1:p2 Enter' "$ROOT" 2>"$err" || rc=$?
+  [ "$rc" -ne 0 ] || fail "a failed send-keys call must fail the key send"
+  grep -F 'is not accepting input' "$err" >/dev/null \
+    || fail "the send-keys stderr was not replayed to the caller: $(cat "$err")"
+  pass "fm_backend_herdr_send_key: a failed key send fails and replays the transport's stderr"
+}
+
+# The 2026-10-17 away-mode stall: a Claude send that failed after typing left
+# its own text in the composer, and the composer guard then refused every later
+# injection. A Claude send never returns send-failed with its own text left.
+test_send_text_submit_claude_failed_literal_send_clears_text_that_landed() {
+  local dir log resp fb out
+  dir="$TMP_ROOT/submit-claude-literal-fail-landed"; mkdir -p "$dir/responses"; log="$dir/log"; resp="$dir/responses"; : > "$log"
+  printf '{"result":{"agent":{"agent":"claude","agent_status":"idle"}}}\n' > "$resp/1.out"
+  printf '  \xe2\x9d\xaf\n' > "$resp/2.out"
+  printf '1\n' > "$resp/3.exit"
+  printf '  \xe2\x9d\xaf hello captain\n' > "$resp/4.out"
+  printf '  \xe2\x9d\xaf\n' > "$resp/6.out"
+  printf '  \xe2\x9d\xaf\n' > "$resp/7.out"
+  fb=$(make_herdr_fakebin "$dir")
+  out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" FM_BACKEND_HERDR_SUBMIT_POLLS=1 FM_BACKEND_HERDR_CLEAR_SETTLE=0 \
+    bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_send_text_submit default:w1:p2 "hello captain" 3 0.01 0.01' "$ROOT" )
+  [ "$out" = send-failed ] || fail "a failed literal send whose text landed, then cleared, should report send-failed, got '$out'"
+  [ "$(herdr_ctrl_u_count "$log")" -eq 1 ] || fail "the landed text should be cleared, sent $(herdr_ctrl_u_count "$log") Ctrl+U"
+  [ "$(grep -c $'\x1f''pane'$'\x1f''send-keys'$'\x1f''w1:p2'$'\x1f''enter' "$log")" -eq 0 ] || fail "no Enter may follow a failed literal send"
+  pass "fm_backend_herdr_send_text_submit: a failed Claude literal send whose text still landed is cleared before send-failed"
+}
+
+test_send_text_submit_claude_failed_literal_send_with_empty_composer_types_nothing_more() {
+  local dir log resp fb out
+  dir="$TMP_ROOT/submit-claude-literal-fail-empty"; mkdir -p "$dir/responses"; log="$dir/log"; resp="$dir/responses"; : > "$log"
+  printf '{"result":{"agent":{"agent":"claude","agent_status":"idle"}}}\n' > "$resp/1.out"
+  printf '  \xe2\x9d\xaf\n' > "$resp/2.out"
+  printf '1\n' > "$resp/3.exit"
+  printf '  \xe2\x9d\xaf\n' > "$resp/4.out"
+  fb=$(make_herdr_fakebin "$dir")
+  out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" FM_BACKEND_HERDR_SUBMIT_POLLS=1 \
+    bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_send_text_submit default:w1:p2 "hello captain" 3 0.01 0.01' "$ROOT" )
+  [ "$out" = send-failed ] || fail "a failed literal send that typed nothing should report send-failed, got '$out'"
+  [ "$(grep -c $'\x1f''pane'$'\x1f''send-keys' "$log")" -eq 0 ] || fail "an empty composer after a failed send needs no key at all"
+  pass "fm_backend_herdr_send_text_submit: a failed Claude literal send that typed nothing sends no clear"
+}
+
+test_send_text_submit_claude_enter_never_sent_clears_the_proven_payload() {
+  local dir log resp fb out
+  dir="$TMP_ROOT/submit-claude-enter-never-sent"; mkdir -p "$dir/responses"; log="$dir/log"; resp="$dir/responses"; : > "$log"
+  # 1 identity, 2 empty composer, 3 send-text, 4 composer holds the payload,
+  # 5 baseline agent status, 6-8 every Enter fails, 9 Ctrl+U, 10-11 settled empty.
+  herdr_submit_claude_prefix "$resp" "hello captain"
+  printf '{"result":{"agent":{"agent_status":"idle"}}}\n' > "$resp/5.out"
+  for n in 6 7 8; do printf '1\n' > "$resp/$n.exit"; done
+  printf '  \xe2\x9d\xaf\n' > "$resp/10.out"
+  printf '  \xe2\x9d\xaf\n' > "$resp/11.out"
+  fb=$(make_herdr_fakebin "$dir")
+  out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" FM_BACKEND_HERDR_SUBMIT_POLLS=1 FM_BACKEND_HERDR_CLEAR_SETTLE=0 \
+    bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_send_text_submit default:w1:p2 "hello captain" 3 0.01 0.01' "$ROOT" )
+  [ "$out" = send-failed ] || fail "a proven payload whose Enter never landed, then cleared, should report send-failed, got '$out'"
+  [ "$(herdr_ctrl_u_count "$log")" -eq 1 ] || fail "the stranded payload should be cleared, sent $(herdr_ctrl_u_count "$log") Ctrl+U"
+  pass "fm_backend_herdr_send_text_submit: a proven Claude payload whose Enter can never be sent is cleared, not left in the composer"
+}
+
+test_send_text_submit_claude_enter_never_sent_unclearable_is_unknown() {
+  local dir log resp fb out n
+  dir="$TMP_ROOT/submit-claude-enter-never-sent-stuck"; mkdir -p "$dir/responses"; log="$dir/log"; resp="$dir/responses"; : > "$log"
+  herdr_submit_claude_prefix "$resp" "hello captain"
+  printf '{"result":{"agent":{"agent_status":"idle"}}}\n' > "$resp/5.out"
+  for n in 6 7 8; do printf '1\n' > "$resp/$n.exit"; done
+  printf '1\n' > "$resp/9.exit"
+  fb=$(make_herdr_fakebin "$dir")
+  out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" FM_BACKEND_HERDR_SUBMIT_POLLS=1 \
+    bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_send_text_submit default:w1:p2 "hello captain" 3 0.01 0.01' "$ROOT" )
+  [ "$out" = unknown ] || fail "a stranded payload whose clear cannot be sent must not claim nothing is typed, got '$out'"
+  pass "fm_backend_herdr_send_text_submit: a stranded Claude payload that cannot be cleared reports unknown, not send-failed"
+}
+
+# A single empty read right after Ctrl+U is not proof the composer is clear:
+# the stall's leftover was the first row of a two-row doorbell that a clear had
+# already reported cleared. A read that turns pending again earns another press.
+test_send_text_submit_clear_requires_a_settled_empty_read() {
+  local dir log resp fb out text suffix
+  dir="$TMP_ROOT/submit-clear-transient-empty"; mkdir -p "$dir/responses"; log="$dir/log"; resp="$dir/responses"; : > "$log"
+  text=$(herdr_long_payload 1492)
+  suffix=${text: -480}
+  herdr_submit_claude_prefix "$resp" "$text"
+  printf '  \xe2\x9d\xaf %s\n' "$suffix" > "$resp/4.out"
+  printf '  \xe2\x9d\xaf\n' > "$resp/6.out"
+  printf '  \xe2\x9d\xaf %s\n' "${suffix:0:96}" > "$resp/7.out"
+  printf '  \xe2\x9d\xaf\n' > "$resp/9.out"
+  printf '  \xe2\x9d\xaf\n' > "$resp/10.out"
+  fb=$(make_herdr_fakebin "$dir")
+  out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" FM_BACKEND_HERDR_SUBMIT_POLLS=1 FM_BACKEND_HERDR_CLEAR_SETTLE=0 \
+    bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_send_text_submit default:w1:p2 "$1" 3 0.01 0.01' "$ROOT" "$text" )
+  [ "$out" = send-failed ] || fail "a clear that settles empty on the second press should report send-failed, got '$out'"
+  [ "$(herdr_ctrl_u_count "$log")" -eq 2 ] || fail "a transient empty read must not end the clear: want 2 Ctrl+U, sent $(herdr_ctrl_u_count "$log")"
+  pass "fm_backend_herdr_composer_clear: a transient empty read after Ctrl+U is re-checked, and a returned leftover earns another press"
+}
+
 # Regression coverage for the 2026-07-03 incident using the NEW mechanism: a
 # slash command's first Enter can close a completion popup and fill an
 # argument-hint placeholder WITHOUT submitting. In the idle-baseline path,
@@ -4891,7 +4996,8 @@ test_send_text_submit_refuses_enter_when_composer_holds_only_the_suffix() {
   herdr_submit_claude_prefix "$resp" "$text"
   printf '  \xe2\x9d\xaf %s\n' "$suffix" > "$resp/4.out"
   printf '  \xe2\x9d\xaf\n' > "$resp/6.out"
-  printf '{"result":{"agent":{"agent_status":"working"}}}\n' > "$resp/7.out"
+  printf '  \xe2\x9d\xaf\n' > "$resp/7.out"
+  printf '{"result":{"agent":{"agent_status":"working"}}}\n' > "$resp/8.out"
   fb=$(make_herdr_fakebin "$dir")
   out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" FM_BACKEND_HERDR_SUBMIT_POLLS=1 \
     bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_send_text_submit default:w1:p2 "$1" 3 0.01 0.01' "$ROOT" "$text" )
@@ -4933,6 +5039,7 @@ test_send_text_submit_clears_a_wrapped_suffix_one_row_per_press() {
   for drop in 0 1 2 3 4 5; do
     herdr_wrapped_composer "$suffix" 96 "$drop" > "$resp/$((4 + 2 * drop)).out"
   done
+  herdr_wrapped_composer "$suffix" 96 5 > "$resp/15.out"
   fb=$(make_herdr_fakebin "$dir")
   out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" FM_BACKEND_HERDR_SUBMIT_POLLS=1 \
     bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_send_text_submit default:w1:p2 "$1" 3 0.01 0.01' "$ROOT" "$text" )
@@ -4951,11 +5058,12 @@ test_send_text_submit_refused_suffix_then_clean_retry_submits_only_the_message()
   herdr_submit_claude_prefix "$resp" "$text"
   printf '  \xe2\x9d\xaf %s\n' "$suffix" > "$resp/4.out"
   printf '  \xe2\x9d\xaf\n' > "$resp/6.out"
-  printf '{"result":{"agent":{"agent":"claude","agent_status":"idle"}}}\n' > "$resp/7.out"
-  printf '  \xe2\x9d\xaf\n' > "$resp/8.out"
-  printf '  \xe2\x9d\xaf %s\n' "$text" > "$resp/10.out"
-  printf '{"result":{"agent":{"agent_status":"idle"}}}\n' > "$resp/11.out"
-  printf '{"result":{"agent":{"agent_status":"working"}}}\n' > "$resp/13.out"
+  printf '  \xe2\x9d\xaf\n' > "$resp/7.out"
+  printf '{"result":{"agent":{"agent":"claude","agent_status":"idle"}}}\n' > "$resp/8.out"
+  printf '  \xe2\x9d\xaf\n' > "$resp/9.out"
+  printf '  \xe2\x9d\xaf %s\n' "$text" > "$resp/11.out"
+  printf '{"result":{"agent":{"agent_status":"idle"}}}\n' > "$resp/12.out"
+  printf '{"result":{"agent":{"agent_status":"working"}}}\n' > "$resp/14.out"
   fb=$(make_herdr_fakebin "$dir")
   out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" FM_BACKEND_HERDR_SUBMIT_POLLS=1 \
     bash -c '. "$0/bin/backends/herdr.sh"
@@ -4995,6 +5103,7 @@ test_send_text_submit_refuses_suffix_when_transcript_still_shows_the_head() {
     printf '  \xe2\x9d\xaf %s\n' "$suffix"
   } > "$resp/4.out"
   printf '  \xe2\x9d\xaf\n' > "$resp/6.out"
+  printf '  \xe2\x9d\xaf\n' > "$resp/7.out"
   fb=$(make_herdr_fakebin "$dir")
   out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" FM_BACKEND_HERDR_SUBMIT_POLLS=1 \
     bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_send_text_submit default:w1:p2 "$1" 3 0.01 0.01' "$ROOT" "$text" )
@@ -5044,6 +5153,7 @@ test_send_text_submit_refuses_marked_digest_missing_its_head() {
   herdr_submit_claude_prefix "$resp" "$text"
   printf '  \xe2\x9d\xaf\xc2\xa0%s\n' "${shown: -480}" > "$resp/4.out"
   printf '  \xe2\x9d\xaf\n' > "$resp/6.out"
+  printf '  \xe2\x9d\xaf\n' > "$resp/7.out"
   fb=$(make_herdr_fakebin "$dir")
   out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" FM_BACKEND_HERDR_SUBMIT_POLLS=1 \
     bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_send_text_submit default:w1:p2 "$1" 3 0.01 0.01' "$ROOT" "$text" )
@@ -5140,6 +5250,7 @@ test_send_text_submit_refuses_placeholder_followed_by_a_literal_remainder() {
   herdr_submit_claude_prefix "$resp" "$text"
   printf '  \xe2\x9d\xaf [Pasted text #1]%s\n' "$suffix" > "$resp/4.out"
   printf '  \xe2\x9d\xaf\n' > "$resp/6.out"
+  printf '  \xe2\x9d\xaf\n' > "$resp/7.out"
   fb=$(make_herdr_fakebin "$dir")
   out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" FM_BACKEND_HERDR_SUBMIT_POLLS=1 \
     bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_send_text_submit default:w1:p2 "$1" 3 0.01 0.01' "$ROOT" "$text" )
@@ -5970,6 +6081,12 @@ test_wait_for_working_treats_blocked_as_submit_active
 test_send_text_submit_detects_landed_send
 test_send_text_submit_detects_swallowed_enter
 test_send_text_submit_replays_literal_send_stderr
+test_send_key_replays_transport_stderr
+test_send_text_submit_claude_failed_literal_send_clears_text_that_landed
+test_send_text_submit_claude_failed_literal_send_with_empty_composer_types_nothing_more
+test_send_text_submit_claude_enter_never_sent_clears_the_proven_payload
+test_send_text_submit_claude_enter_never_sent_unclearable_is_unknown
+test_send_text_submit_clear_requires_a_settled_empty_read
 test_send_text_submit_popup_autocomplete_requires_second_enter
 test_send_text_submit_confirms_blocked_after_enter
 test_send_text_submit_preexisting_working_pending_is_queued_enter
