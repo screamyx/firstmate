@@ -285,6 +285,10 @@
       "audience": "agent-runtime"
     },
     {
+      "path": ".claude/rules/owner-rules.md",
+      "audience": "agent-runtime"
+    },
+    {
       "path": ".greptile/rules.md",
       "audience": "maintainer-architecture"
     },
