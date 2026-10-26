@@ -811,7 +811,10 @@ test_codex_fast_off_matches_the_default_launch() {
   run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR" --model gpt-5 >/dev/null 2>&1
   status=$?
   expect_code 0 "$status" "default codex spawn should succeed"
+  # Each launch carries its own per-spawn Git configuration file path, so that
+  # prefix is masked before the two launches are compared.
   launch_default=$(sed "s|$CASE_DIR|CASE|g" "$LAUNCH_LOG")
+  launch_default=${launch_default/"$(fm_test_launch_git_prefix "$launch_default")"/GITPREFIX }
   meta_default=$(grep -v -e '^spawn_gen=' -e '^tasktmp=' "$HOME_DIR/state/$id.meta" | sed "s|$CASE_DIR|CASE|g")
 
   rec=$(make_spawn_case profile-codex-fastoff codex "$id")
@@ -820,6 +823,7 @@ test_codex_fast_off_matches_the_default_launch() {
   status=$?
   expect_code 0 "$status" "codex spawn with --fast off should succeed"
   launch_off=$(sed "s|$CASE_DIR|CASE|g" "$LAUNCH_LOG")
+  launch_off=${launch_off/"$(fm_test_launch_git_prefix "$launch_off")"/GITPREFIX }
   meta_off=$(grep -v -e '^spawn_gen=' -e '^tasktmp=' "$HOME_DIR/state/$id.meta" | sed "s|$CASE_DIR|CASE|g")
 
   assert_not_contains "$launch_off" "service_tier" "--fast off must not add the service tier"

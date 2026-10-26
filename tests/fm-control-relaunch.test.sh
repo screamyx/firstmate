@@ -1639,13 +1639,13 @@ test_spawn_relaunch_keeps_the_recorded_base() {
   local dir out
   dir=$(new_case relaunchbase rl43)
   add_ship_task "$dir" rl43 claude
-  printf 'base=v2\n' >> "$dir/home/state/rl43.meta"
+  printf 'base_branch=v2\n' >> "$dir/home/state/rl43.meta"
   printf 'zsh' > "$dir/fake/command"
   out=$(run_spawn "$dir" rl43 --relaunch)
   assert_contains "$out" "spawned rl43" "the relaunch should complete on the recorded base"
   assert_not_contains "$out" "base branch mismatch" "a relaunch must not re-check the base against its brief"
-  [ "$(meta_field "$dir" rl43 base)" = v2 ] || fail "the recorded base must survive the relaunch"
-  [ "$(grep -c '^base=' "$dir/home/state/rl43.meta")" = 1 ] || fail "the relaunch duplicated the base= line"
+  [ "$(meta_field "$dir" rl43 base_branch)" = v2 ] || fail "the recorded base must survive the relaunch"
+  [ "$(grep -c '^base_branch=' "$dir/home/state/rl43.meta")" = 1 ] || fail "the relaunch duplicated the base_branch= line"
   pass "fm-spawn --relaunch: the task's recorded base branch survives exactly once"
 }
 
