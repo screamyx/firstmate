@@ -5785,10 +5785,12 @@ test_send_text_submit_claude_2_1_291_popup_still_refuses_a_partial_payload() {
     dir="$TMP_ROOT/submit-claude-2-1-291-popup-refuse-$name"; mkdir -p "$dir/responses"; log="$dir/log"; resp="$dir/responses"; : > "$log"
     herdr_submit_claude_prefix "$resp" "$text"
     herdr_popup_capture_with_composer "$capture" "$composer" > "$resp/4.out"
+    # 5 Ctrl+U, then 6-7 the two settled-empty reads the composer clear needs.
     printf '  \xe2\x9d\xaf\n' > "$resp/6.out"
-    printf '{"result":{"agent":{"agent_status":"working"}}}\n' > "$resp/7.out"
+    printf '  \xe2\x9d\xaf\n' > "$resp/7.out"
+    printf '{"result":{"agent":{"agent_status":"working"}}}\n' > "$resp/8.out"
     fb=$(make_herdr_fakebin "$dir")
-    out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" FM_BACKEND_HERDR_SUBMIT_POLLS=1 \
+    out=$( PATH="$fb:$PATH" FM_HERDR_LOG="$log" FM_HERDR_RESPONSES="$resp" FM_BACKEND_HERDR_SUBMIT_POLLS=1 FM_BACKEND_HERDR_CLEAR_SETTLE=0 \
       bash -c '. "$0/bin/backends/herdr.sh"; fm_backend_herdr_send_text_submit default:w1:p2 "$1" 3 0.01 0.01' "$ROOT" "$text" )
     [ "$out" = send-failed ] || fail "$name: a partial payload ('$composer') under the popup must report send-failed, got '$out'"
     enter_count=$(grep -c $'\x1f''pane'$'\x1f''send-keys'$'\x1f''w1:p2'$'\x1f''enter' "$log")

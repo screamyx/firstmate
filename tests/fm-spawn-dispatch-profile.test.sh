@@ -2973,7 +2973,7 @@ test_claude_worker_scope_absent_keeps_launch_unchanged() {
   out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR")
   status=$?
   expect_code 0 "$status" "claude spawn without tool scope files should succeed"$'\n'"$out"
-  launch=$(cat "$LAUNCH_LOG")
+  launch=$(fm_test_launch_unframe "$(cat "$LAUNCH_LOG")")
   expected=$(claude_expected_launch "$launch" "$HOME_DIR" "$id" --dangerously-skip-permissions)
   [ "$launch" = "$expected" ] || fail "absent tool scope files changed the launch"$'\n'"expected: $expected"$'\n'"actual:   $launch"
   assert_not_contains "$launch" "--strict-mcp-config" "absent switch must not add --strict-mcp-config"
