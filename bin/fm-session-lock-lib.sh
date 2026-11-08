@@ -453,7 +453,7 @@ _fm_ps_exec_denied() {
 fm_proc_info() {  # <pid>
   local pid=$1 rc=0 out comm args ppid
   FM_PROC_COMM='' FM_PROC_ARGS='' FM_PROC_PPID=''
-  out=$(ps -ww -o comm= -p "$pid" 2>/dev/null) || rc=$?
+  out=$(ps -o comm= -p "$pid" -ww 2>/dev/null) || rc=$?
   case $rc in
     0) ;;
     1)
@@ -541,7 +541,7 @@ fm_proc_info() {  # <pid>
   # empty and the matcher below rejects it, exactly as it rejects a
   # comm it does not recognise.
   comm=$out
-  args=$(ps -ww -o args= -p "$pid" 2>/dev/null) || return 1
+  args=$(ps -o args= -p "$pid" -ww 2>/dev/null) || return 1
   # The ppid is a walk input, not an identity field. The identity the
   # matcher reads is comm and args, and both of those are fail-closed
   # above; a ppid that cannot be read only ends the ancestry walk one
