@@ -15,6 +15,8 @@
 # --worktree-root prints the project's registered Treehouse worktree root, or an
 # empty line under the same three conditions; empty means Treehouse's own
 # default pool location.
+# With --pr it prints one word: the project's registered PR-text posture,
+# auto|manual, "auto" when the project registers none.
 #
 # MECHANICAL CONSUMERS ONLY. This answers "what posture did the captain register
 # for this project", never "how does this task ship". A task's delivery mode,
@@ -28,7 +30,9 @@
 # bin/fm-promote.sh, which takes the forge binding from here because it is a
 # project fact rather than a task choice. --base is read by bin/fm-spawn.sh for
 # every ship and scout spawn and by bin/fm-fleet-sync.sh, and --worktree-root by
-# bin/fm-spawn.sh's Treehouse acquisition; both are project facts too.
+# bin/fm-spawn.sh's Treehouse acquisition; both are project facts too. --pr is
+# read the same way by bin/fm-spawn.sh's PR-text agreement and by
+# bin/fm-promote.sh.
 #
 # Registry line format (data/projects.md):
 #   - <name> - <desc> (added <date>)                                 -> no-mistakes off fm/  (legacy default)
@@ -38,14 +42,16 @@
 #   - <name> [<mode> forge=gerrit] - <desc> (added <date>)           -> <mode> off, --forge gerrit
 #   - <name> [<mode> forge=forgejo] - <desc> (added <date>)          -> <mode> <yolo>, --forge forgejo
 #   - <name> [direct-PR forge=external] - <desc> (added <date>)      -> direct-PR off, --forge external
+#   - <name> [no-mistakes pr=manual] - <desc> (added <date>)         -> no-mistakes off, --pr manual
 #   - <name> [<mode> base=v2 worktree-root=/store/wt] - <desc> (added <date>)
 #                                                     -> <mode> off, --base v2, --worktree-root /store/wt
 #   <name> may contain spaces; it ends at the literal " [" or " - " that follows it.
 #   Bracket tokens are order-independent: +yolo, branch=<prefix>, forge=<value>,
-#   base=<branch>, and worktree-root=<path> are recognized by their own shape
-#   wherever they appear, and whichever token is left over is the mode. No token
-#   value may contain a space. An empty prefix override ("branch=") resolves to ""
-#   for a bare "<task-id>" ship branch instead of the legacy "fm/<task-id>".
+#   pr=<value>, base=<branch>, and worktree-root=<path> are recognized by their
+#   own shape wherever they appear, and whichever token is left over is the mode.
+#   No token value may contain a space. An empty prefix override ("branch=")
+#   resolves to "" for a bare "<task-id>" ship branch instead of the legacy
+#   "fm/<task-id>".
 #
 # Registered modes:
 #   no-mistakes            full pipeline -> PR -> configured merge authority (default)
@@ -112,7 +118,22 @@
 #   from the repository root, which would put the pool inside the clone.
 #
 # --base and --worktree-root answer only their own token, and the default,
-# --raw, --branch-prefix, and --forge forms never refuse on either.
+# --raw, --branch-prefix, --forge, and --pr forms never refuse on either.
+#
+# pr (orthogonal) = who writes the pull request's title and body. Absent means
+#   `auto`, today's behavior: the no-mistakes pipeline's pr step writes and
+#   refreshes them. `manual` is for a project whose PR text a person writes
+#   and a maintainer reads: the worker owns the text and the pipeline's pr step
+#   is skipped (bin/fm-dod-lib.sh owns what that changes for a worker). It is
+#   the thin registry form of no-mistakes' own keep-text option
+#   (kunchenguid/no-mistakes#1648) and maps onto it once that exists. Only a
+#   no-mistakes ship takes it, because direct-PR already leaves the text to the
+#   worker and local-only opens no PR, and only a project with no forge binding,
+#   because the manual brief carries no PR commands for another forge. A
+#   registered pr=manual on any other mode or forge, and a malformed binding (an
+#   empty or unknown value), are REFUSED in the default and --pr output forms:
+#   nothing on stdout, exit status 3, the token named. --branch-prefix,
+#   --forge, --base, and --worktree-root do not make these checks.
 #
 # A registered `forge=gerrit` project reports yolo=off with an explicit stderr
 # refusal, on the captain's decision of 2026-09-15: a Gerrit Code-Review+2 is a
@@ -129,7 +150,7 @@
 # "fm/" under --branch-prefix) and warns to stderr, so a typo never silently
 # drops the gate. Other annotation tokens are ignored, as they always were, keyed
 # ones included: a `<key>=<value>` token whose key is none of exactly `forge`,
-# `branch`, `base`, or `worktree-root` resolves as it did before the forge
+# `branch`, `pr`, `base`, or `worktree-root` resolves as it did before the forge
 # existed, and in the mode slot it is read as an unknown mode. A key one or two edits from `forge` (such as
 # `forg=` or `Forge=`) is still ignored, with one stderr warning naming the token
 # and the forge=gerrit, forge=forgejo, and forge=external spellings. The one
@@ -143,7 +164,7 @@
 # to the forge binding, so it prints even when the forge token is malformed;
 # every path that reads the forge binding (default, --forge, and spawn's
 # forge-agreement check) still refuses.
-# Usage: fm-project-mode.sh [--raw|--branch-prefix|--forge|--base|--worktree-root] <project-name>
+# Usage: fm-project-mode.sh [--raw|--branch-prefix|--forge|--pr|--base|--worktree-root] <project-name>
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -154,16 +175,18 @@ REG="$DATA/projects.md"
 RAW=0
 BRANCH_PREFIX_QUERY=0
 WANT_FORGE=0
+WANT_PR=0
 # Which single-token query, if any: base or worktree-root.
 TOKEN_QUERY=
 case "${1:-}" in
   --raw) RAW=1; shift ;;
   --branch-prefix) BRANCH_PREFIX_QUERY=1; shift ;;
   --forge) WANT_FORGE=1; shift ;;
+  --pr) WANT_PR=1; shift ;;
   --base) TOKEN_QUERY=base; shift ;;
   --worktree-root) TOKEN_QUERY=worktree-root; shift ;;
 esac
-NAME=${1:?usage: fm-project-mode.sh [--raw|--branch-prefix|--forge|--base|--worktree-root] <project-name>}
+NAME=${1:?usage: fm-project-mode.sh [--raw|--branch-prefix|--forge|--pr|--base|--worktree-root] <project-name>}
 
 # What an unregistered project resolves to, in the requested output form.
 print_unregistered_default() {
@@ -171,7 +194,8 @@ print_unregistered_default() {
     echo ""
   elif [ "$BRANCH_PREFIX_QUERY" -eq 1 ]; then
     echo "fm/"
-  elif [ "$WANT_FORGE" -eq 1 ]; then echo none; else echo "no-mistakes off"; fi
+  elif [ "$WANT_FORGE" -eq 1 ]; then echo none
+  elif [ "$WANT_PR" -eq 1 ]; then echo auto; else echo "no-mistakes off"; fi
 }
 
 if [ ! -f "$REG" ]; then
@@ -181,11 +205,12 @@ if [ ! -f "$REG" ]; then
 fi
 
 # awk emits one "near <token>" line per keyed token whose key is a near miss of
-# `forge`, then "posture <mode> <yolo> <forge> <base> <worktree-root> <branch-prefix>"
+# `forge`, then "posture <mode> <yolo> <forge> <pr> <base> <worktree-root> <branch-prefix>"
 # (forge, base, and worktree-root are each `none` or their whole `<key>=<value>`
-# token, so an empty value survives the split; branch-prefix is the raw prefix,
-# defaulting to "fm/"), or nothing if the project is absent. Every other token
-# beside the mode is ignored, exactly as before any annotation existed.
+# token and pr is `auto` or the whole `pr=<value>` token, so an empty value
+# survives the split; branch-prefix is the raw prefix, defaulting to "fm/"), or
+# nothing if the project is absent. Every other token beside the mode is
+# ignored, exactly as before any annotation existed.
 parsed=$(awk -v n="$NAME" '
   function dist(x, y,   i, j, lx, ly, d, c, v) {
     lx = length(x); ly = length(y);
@@ -210,7 +235,7 @@ parsed=$(awk -v n="$NAME" '
     if (substr($0, 1, plen) != prefix) next
     after = substr($0, plen + 1);
     if (after != "" && substr(after, 1, 2) != " [" && substr(after, 1, 3) != " - ") next
-    mode="no-mistakes"; yolo="off"; branch="fm/"; forge="none"; base="none"; root="none";
+    mode="no-mistakes"; yolo="off"; branch="fm/"; forge="none"; pr="auto"; base="none"; root="none";
     if (substr(after, 1, 2) == " [") {
       s="";
       nk = split(after, rest, " ");
@@ -218,15 +243,16 @@ parsed=$(awk -v n="$NAME" '
       gsub(/^\[|\]$/, "", s);           # strip the surrounding brackets
       k = split(s, a, " ");
       # Tokens are order-independent: +yolo, branch=<prefix>, forge=<value>,
-      # base=<branch>, and worktree-root=<path> are recognized by their own
-      # shape wherever they appear, other keyed tokens are ignored (with a
-      # near-miss warning for the forge spelling), and the first token left
-      # over is the mode.
+      # pr=<value>, base=<branch>, and worktree-root=<path> are recognized by
+      # their own shape wherever they appear, other keyed tokens are ignored
+      # (with a near-miss warning for the forge spelling), and the first token
+      # left over is the mode.
       mode_set = 0
       for (j=1; j<=k; j++) {
         if (a[j]=="+yolo") { yolo="on"; continue }
         if (a[j] ~ /^branch=/) { branch = substr(a[j], 8); continue }
         if (a[j] ~ /^forge=/) { forge = a[j]; continue }
+        if (a[j] ~ /^pr=/) { pr = a[j]; continue }
         if (a[j] ~ /^base=/) { base = a[j]; continue }
         if (a[j] ~ /^worktree-root=/) { root = a[j]; continue }
         if (a[j] ~ /^[^=]+=/) {
@@ -241,7 +267,7 @@ parsed=$(awk -v n="$NAME" '
     }
     # branch is printed LAST: an empty branch= override must survive as an
     # empty final field, which only holds when nothing follows it.
-    print "posture", mode, yolo, forge, base, root, branch; exit
+    print "posture", mode, yolo, forge, pr, base, root, branch; exit
   }
 ' "$REG")
 
@@ -260,8 +286,8 @@ while IFS=' ' read -r kind rest; do
 done <<EOF
 $parsed
 EOF
-while IFS=' ' read -r m y f bs r b; do
-  mode=$m; yolo=$y; rest_forge=$f; rest_base=$bs; rest_root=$r; branch=$b
+while IFS=' ' read -r m y f p bs r b; do
+  mode=$m; yolo=$y; rest_forge=$f; rest_pr=$p; rest_base=$bs; rest_root=$r; branch=$b
 done <<EOF
 $posture
 EOF
@@ -291,6 +317,7 @@ case "$TOKEN_QUERY" in
     echo "refused: worktree root \"$rest_root\" registered for $NAME in $REG is not an absolute path; Treehouse resolves a relative root from the repository root, which would put the pool inside the clone; register worktree-root=/<absolute path>, or drop the token for Treehouse's default pool; correct the registry entry" >&2
     exit 3 ;;
 esac
+pr=${rest_pr:-auto}
 case "$mode" in
   no-mistakes|direct-PR|local-only|no-mistakes-prod-only) ;;
   *) echo "warn: unknown mode \"$mode\" for $NAME; defaulting to no-mistakes off" >&2; mode=no-mistakes; yolo=off; branch=fm/ ;;
@@ -316,6 +343,32 @@ if [ "$forge" != none ] && [ "$mode" = local-only ]; then
 fi
 if [ "$WANT_FORGE" -eq 1 ]; then
   echo "$forge"
+  exit 0
+fi
+
+case "$pr" in
+  auto|pr=manual) pr=${pr#pr=} ;;
+  pr=)
+    echo "refused: empty PR-text binding \"pr=\" registered for $NAME in $REG; the only accepted value is pr=manual, or no pr token at all for the pipeline's own PR text; correct the registry entry" >&2
+    exit 3 ;;
+  *)
+    echo "refused: unknown PR-text binding \"$pr\" registered for $NAME in $REG; the only accepted value is pr=manual, or no pr token at all for the pipeline's own PR text; correct the registry entry" >&2
+    exit 3 ;;
+esac
+if [ "$pr" = manual ]; then
+  case "$mode" in
+    no-mistakes|no-mistakes-prod-only) ;;
+    *)
+      echo "refused: $NAME is registered $mode with pr=manual in $REG; only a no-mistakes ship takes it, because direct-PR already leaves the PR text to the worker and local-only opens no PR; register no-mistakes, or drop the pr token" >&2
+      exit 3 ;;
+  esac
+  if [ "$forge" != none ]; then
+    echo "refused: $NAME is registered with pr=manual and forge=$forge in $REG; pr=manual ships a project with no forge binding only; drop the pr token" >&2
+    exit 3
+  fi
+fi
+if [ "$WANT_PR" -eq 1 ]; then
+  echo "$pr"
   exit 0
 fi
 if [ "$forge" = gerrit ] && [ "$yolo" = on ]; then
