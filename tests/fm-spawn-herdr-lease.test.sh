@@ -161,6 +161,22 @@ test_fresh_spawn_leases_and_moves_the_top_level_shell() {
   pass "a fresh herdr spawn leases the copy and moves the pane's top-level shell into it"
 }
 
+# A project that registers worktree-root= keeps its pool there on Herdr too: the
+# durable lease carries Treehouse's own --root flag, as the interactive form does.
+test_lease_carries_the_registered_worktree_root() {
+  local id=lease-wt-root dir out status
+  dir=$(make_lease_case "$id")
+  mkdir -p "$dir/wtroot"
+  printf -- '- project [no-mistakes worktree-root=%s] - fixture with a pool root (added 2026-11-08)\n' \
+    "$dir/wtroot" > "$dir/home/data/projects.md"
+  out=$(run_lease_spawn "$dir" "$id")
+  status=$?
+  expect_code 0 "$status" "spawn with a registered worktree root should succeed"$'\n'"$out"
+  assert_grep "get --lease --lease-holder $id --root $dir/wtroot" "$dir/fake/treehouse-log" \
+    "the Herdr lease did not carry the registered worktree root"
+  pass "a Herdr lease carries the project's registered worktree root"
+}
+
 test_failed_lease_refuses_without_a_record() {
   local id=lease-refused dir out status
   dir=$(make_lease_case "$id")
@@ -294,6 +310,7 @@ test_dropped_worktree_entry
 test_never_moving_worktree_entry
 
 test_fresh_spawn_leases_and_moves_the_top_level_shell
+test_lease_carries_the_registered_worktree_root
 test_failed_lease_refuses_without_a_record
 test_aborted_spawn_names_the_lease_it_keeps
 test_rolled_back_spawn_after_launch_names_the_lease_it_keeps
