@@ -2922,6 +2922,8 @@ spawn_claude_builder_statement() {
 }
 
 # The channel statement for a task kind, with the ownership sentence for ship.
+# Carriers with a system-level slot for builders: the claude pane launch and the
+# polytoken ship facet. t3code (T3 owns the system prompt) and scouts get none.
 spawn_claude_task_system_prompt() {
   spawn_claude_task_channel_statement
   if [ "${1:-ship}" = ship ]; then
@@ -6414,7 +6416,7 @@ spawn_t3code_claude_channel_install() {
   fi
   tmp=$(mktemp "$WT/.CLAUDE.local.md.XXXXXX") || return 1
   {
-    spawn_claude_task_system_prompt "$KIND"
+    spawn_claude_task_channel_statement
     if fm_backend_t3code_claude_pr_tools_verified; then
       printf '\n'
     else
@@ -7281,6 +7283,7 @@ EOF
     if [ "$RAW_LAUNCH" -eq 0 ]; then
       if ! fm_polytoken_write_config "$(fm_polytoken_config_dir "$STATE_REAL" "$ID")" \
         || ! fm_polytoken_write_facet "$WT" "$STATE_REAL/$ID.inbox" \
+          "$([ "$KIND" = ship ] && spawn_claude_builder_statement)" \
         || ! fm_polytoken_write_busy_script "$FM_ROOT" "$STATE_REAL" "$ID" "$BUSY_GEN" "$TURNEND" \
         || ! fm_polytoken_write_hooks "$WT" "$(fm_polytoken_busy_script "$STATE_REAL" "$ID")"; then
         echo "error: could not arm the polytoken busy-state wiring for $ID" >&2

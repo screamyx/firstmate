@@ -51,4 +51,5 @@ The delivery guard is never a busy-state source; recorded state comes from the p
 
 No primary Stop guard, watcher protocol, pre-tool protection, or session-start contract is verified for Polytoken.
 Do not launch a primary or secondmate with this adapter.
+A ship task's facet also carries the sentence "This codebase is yours: what it's for and how it's built are your call, and you'll keep building on it."; a scout's facet does not.
 The worker facet removes `switch_facet`, `handoff_plan`, `subagent`, and `message_subagent` from its tool registry so a facet change or delegation cannot substitute a routed model for the explicit worker pin.
