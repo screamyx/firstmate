@@ -899,7 +899,7 @@ run_polytoken_spawn() {
     FM_POLYTOKEN_READY_POLLS="${FM_POLYTOKEN_READY_POLLS:-40}" \
     FM_POLYTOKEN_POLL_INTERVAL="${FM_POLYTOKEN_POLL_INTERVAL:-0.1}" \
     PATH="$fakebin:$BASE_PATH" \
-    "$SPAWN" "$id" "$proj" --harness polytoken --model zai/glm-5.3-flash --effort low --mode no-mistakes --yolo off "$@" 2>&1
+    "$SPAWN" "$id" "$proj" --harness polytoken --model zai/glm-5.3-flash --effort low ${PTFAKE_MODE_ARGS---mode no-mistakes --yolo off} "$@" 2>&1
 }
 
 test_polytoken_launch_carries_the_hybrid_contract() {
@@ -978,6 +978,32 @@ test_polytoken_launch_carries_the_hybrid_contract() {
   assert_contains "$cfg" "default_permission_matcher: bypass" \
     "the mirrored worker config must enforce the unattended posture"
   pass "fm-spawn: the polytoken launch carries the hybrid contract end to end"
+}
+
+test_polytoken_facet_carries_the_builder_sentence_only_on_ship() {
+  local id rec out rc facet sentence="This codebase is yours: what it's for and how it's built are your call, and you'll keep building on it."
+  id="pt-builder-ship-$$"
+  rec=$(make_polytoken_spawn_case builder-ship "$id")
+  read_polytoken_spawn_record "$rec"
+  out=$(run_polytoken_spawn "$CASE_DIR" "$HOME_DIR" "$PROJ_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$id" \
+    --model zai/glm-5.3-flash --effort low)
+  rc=$?
+  expect_code 0 "$rc" "polytoken ship spawn should succeed (output: $out)"
+  facet=$(cat "$WT_DIR/.polytoken/facets/firstmate-worker.md")
+  assert_contains "$facet" "$sentence" "the polytoken ship facet lacks the codebase-ownership sentence"
+
+  id="pt-builder-scout-$$"
+  rec=$(make_polytoken_spawn_case builder-scout "$id")
+  read_polytoken_spawn_record "$rec"
+  out=$(PTFAKE_MODE_ARGS= run_polytoken_spawn "$CASE_DIR" "$HOME_DIR" "$PROJ_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$id" \
+    --scout)
+  rc=$?
+  expect_code 0 "$rc" "polytoken scout spawn should succeed (output: $out)"
+  facet=$(cat "$WT_DIR/.polytoken/facets/firstmate-worker.md")
+  assert_contains "$facet" "Firstmate worker role contract" "the polytoken scout facet was not written"
+  assert_not_contains "$facet" "This codebase is yours" \
+    "the polytoken scout facet received the codebase-ownership sentence"
+  pass "fm-spawn: only the polytoken ship facet carries the codebase-ownership sentence"
 }
 
 test_polytoken_effort_maps_to_nearest_listed_level() {
@@ -1211,6 +1237,7 @@ test_polytoken_rest_interrupt_settles_the_turn
 test_polytoken_interrupt_close_spares_a_reopened_turn
 test_polytoken_turn_settled_reads_the_typed_sync_verdict
 test_polytoken_launch_carries_the_hybrid_contract
+test_polytoken_facet_carries_the_builder_sentence_only_on_ship
 test_polytoken_effort_maps_to_nearest_listed_level
 test_polytoken_missing_axes_refuse_before_pane_creation
 test_polytoken_unlisted_model_refuses_before_pane_creation
