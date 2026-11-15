@@ -633,7 +633,7 @@ HERDR_SECTION=$(printf '%s\n' \
 'A Herdr 2 / herdr-app lab with its own scratch `hc` cores needs neither the Herdr 1 CLI nor its default session, but rules 5 and 7-9 bind it as they bind every lab.' \
 '' \
 '7. An inherited `HC_SOCKET` (or any other socket override) beats `HC_SESSION`, so every `hc` call in a lab, whatever the operation, must reach only the lab'\''s own scratch core; the `default` session is never addressed.' \
-'   Clear any inherited override and pin the lab'\''s own scratch socket and session on that same call: `env -u HC_SOCKET HC_SESSION=<lab session> HC_SOCKET=<lab scratch socket> hc ...`; `"'"$(shell_quote "$FM_ROOT/bin/fm-hc-lab.sh")"'" run <lab session> <hc arguments...>` does this for a core it provisioned.' \
+'   Clear any inherited override and pin the lab'\''s own scratch socket and session on that same call: `env -u HC_SOCKET HC_SESSION=<lab session> HC_SOCKET=<lab scratch socket> hc ...`; `'"$(shell_quote "$FM_ROOT/bin/fm-hc-lab.sh")"' run <lab session> <hc arguments...>` does this for a core it provisioned.' \
 '8. Heredocs in lab work use a quoted delimiter (`<<'\''EOF'\''`), because an unquoted one runs backtick text as commands; this triggered the 12:22 crash that stopped the main herdr-core.' \
 '9. Run your own herdr-core tripwire, helper or not.' \
 '   Before any lab record the `herdr-core.service` MainPID (`systemctl --user show -p MainPID --value herdr-core.service`, only where `systemctl --user` works) and whether the default core socket exists; no service or no live core is a valid baseline, recorded as such.' \
