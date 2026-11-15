@@ -633,7 +633,7 @@ HERDR_SECTION=$(printf '%s\n' \
 'A Herdr 2 / herdr-app lab with its own scratch `hc` cores needs neither the Herdr 1 CLI nor its default session, but rules 5 and 7-9 bind it as they bind every lab.' \
 '' \
 '7. An inherited `HC_SOCKET` (or any other socket override) beats `HC_SESSION`, so every `hc` call in a lab, whatever the operation, must reach only the lab'\''s own scratch core; the `default` session is never addressed.' \
-'   Run each one through `HC_LAB_HELPER='"$(shell_quote "$FM_ROOT/bin/fm-hc-lab.sh")"'`: `"$HC_LAB_HELPER" run "$HC_LAB_SESSION" <hc arguments...>`, with the session from `"$HC_LAB_HELPER" name <label>` and `"$HC_LAB_HELPER" provision`, and clean up with `"$HC_LAB_HELPER" teardown` in the EXIT trap.' \
+'   Run each one through `HC_LAB_HELPER='"$(shell_quote "$FM_ROOT/bin/fm-hc-lab.sh")"'`: `"$HC_LAB_HELPER" run "$HC_LAB_SESSION" <hc arguments...>`, with `HC_LAB_SESSION=$("$HC_LAB_HELPER" name <label>)`, provisioned by `"$HC_LAB_HELPER" provision "$HC_LAB_SESSION"`, and cleaned up by `"$HC_LAB_HELPER" teardown "$HC_LAB_SESSION"` in the EXIT trap.' \
 '   If you must call `hc` directly, clear any inherited override and pin the lab-owned socket and session on that same call: `env -u HC_SOCKET HC_SESSION=<lab session> HC_SOCKET="$("$HC_LAB_HELPER" socket <lab session>)" hc ...`.' \
 '8. Heredocs in lab work use a quoted delimiter (`<<'\''EOF'\''`), because an unquoted one runs backtick text as commands; this triggered the 12:22 crash that stopped the main herdr-core.' \
 '9. Run your own herdr-core tripwire, helper or not.' \
