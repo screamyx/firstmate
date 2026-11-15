@@ -628,13 +628,17 @@ HERDR_SECTION=$(printf '%s\n' \
 '5. Forbidden commands: direct `herdr server stop`, `hc server stop`, `hc server restart`, `herdr-core server stop`, `herdr-core server restart`, every other server-global operation such as `herdr server live-handoff` or reload/update operations, direct `herdr session stop`, direct `herdr session delete`, and any Herdr call scoped only by ambient or inline `HERDR_SESSION`.' \
 '6. The helper records the live default session before provisioning and verifies the identical fleet state after teardown.' \
 '   A missing, stopped, or changed default session is a hard tripwire failure, never a cleanup warning to ignore.' \
-'7. These rules bind a Herdr 2 / herdr-app lab that uses its own scratch `hc` cores, not only the Herdr 0.7.3 helper path; skipping the helper never lifts them.' \
-'8. Every `hc` call in a lab carries `HC_SESSION=<the lab'\''s own scratch session>` written on that same call; the `default` session is never addressed.' \
-'9. Heredocs in lab work use a quoted delimiter (`<<'\''EOF'\''`), because an unquoted one runs backtick text as commands; this triggered the 12:22 crash that stopped the main herdr-core.' \
-'10. Run your own herdr-core tripwire, helper or not: before any lab record `systemctl --user show -p MainPID --value herdr-core.service` and whether the default core socket is present, and compare both after.' \
-'   A changed or empty MainPID, or a missing default socket, is a hard failure: report it at once.' \
 '' \
-'Never bypass the helper, even for a read-only lifecycle probe or cleanup after failure.' \
+'Rules 1-4 and 6 and the helper apply to Herdr 0.7.3 (Herdr 1) labs; never bypass the helper there, even for a read-only lifecycle probe or cleanup after failure.' \
+'A Herdr 2 / herdr-app lab with its own scratch `hc` cores needs neither the Herdr 1 CLI nor its default session, but rules 5 and 7-9 bind it as they bind every lab.' \
+'' \
+'7. An inherited `HC_SOCKET` (or any other socket override) beats `HC_SESSION`, so every `hc` call in a lab, whatever the operation, clears it and pins the lab'\''s own scratch session on that same call: `env -u HC_SOCKET HC_SESSION=<the lab'\''s own scratch session> hc ...`; the `default` session is never addressed.' \
+'8. Heredocs in lab work use a quoted delimiter (`<<'\''EOF'\''`), because an unquoted one runs backtick text as commands; this triggered the 12:22 crash that stopped the main herdr-core.' \
+'9. Run your own herdr-core tripwire, helper or not.' \
+'   Before any lab record the `herdr-core.service` MainPID (`systemctl --user show -p MainPID --value herdr-core.service`, only where `systemctl --user` works) and whether the default core socket exists; no service or no live core is a valid baseline, recorded as such.' \
+'   After the lab read the same values.' \
+'   A different MainPID, a MainPID that went empty, or a socket that was present and is now gone is a hard failure: report it at once.' \
+'   The same values before and after, including empty both times, pass; without systemd the socket check alone is the tripwire.' \
 'The captain fleet uses the running `default` session.')
 else
 IFS= read -r -d '' HERDR_SECTION <<'EOF' || true
