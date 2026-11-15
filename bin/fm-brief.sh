@@ -616,7 +616,7 @@ HERDR_SECTION=$(printf '%s\n' \
 '' \
 'For tmux-based lab primaries, `bin/fm-lab-home.sh` owns the short private socket directory; do not place `TMUX_TMPDIR` under the lab home or worktree.' \
 'Use `LAB_HOME_HELPER='"$(shell_quote "$FM_ROOT/bin/fm-lab-home.sh")"'`, then `LAB_TMUX_DIR=$("$LAB_HOME_HELPER" tmux-dir "$FM_HOME")` and launch tmux with `TMUX_TMPDIR="$LAB_TMUX_DIR"`.' \
-'Your single EXIT cleanup trap must kill only that server, by its explicit socket (`tmux -S "$LAB_TMUX_DIR/tmux-$(id -u)/<socket-name>" kill-server`) and only while that socket exists, never through `TMUX_TMPDIR` alone, which silently falls back to the default tmux server once the directory is gone; it must also call `"$LAB_HOME_HELPER" teardown "$FM_HOME"` and the Herdr teardown below; do not install a second trap that replaces either cleanup.' \
+'Your single EXIT cleanup trap must kill only that server, by its explicit socket (`tmux -S "$LAB_TMUX_DIR/tmux-$(id -u)/<socket-name>" kill-server`) and only while that socket exists, never through `TMUX_TMPDIR` alone, which silently falls back to the default tmux server once the directory is gone; it must also call `"$LAB_HOME_HELPER" teardown "$FM_HOME"` and, in a Herdr 1 lab, the Herdr teardown below; do not install a second trap that replaces either cleanup.' \
 '' \
 '1. Set `HERDR_LAB_HELPER='"$HERDR_LAB_HELPER"'` and generate the session name with `HERDR_LAB_SESSION=$("$HERDR_LAB_HELPER" name '"$ID"')`.' \
 '   Install the combined EXIT cleanup before provisioning, then provision only with `"$HERDR_LAB_HELPER" provision "$HERDR_LAB_SESSION"`.' \
@@ -632,12 +632,14 @@ HERDR_SECTION=$(printf '%s\n' \
 'Rules 1-4 and 6 and the helper apply to Herdr 0.7.3 (Herdr 1) labs; never bypass the helper there, even for a read-only lifecycle probe or cleanup after failure.' \
 'A Herdr 2 / herdr-app lab with its own scratch `hc` cores needs neither the Herdr 1 CLI nor its default session, but rules 5 and 7-9 bind it as they bind every lab.' \
 '' \
-'7. An inherited `HC_SOCKET` (or any other socket override) beats `HC_SESSION`, so every `hc` call in a lab, whatever the operation, clears it and pins the lab'\''s own scratch session on that same call: `env -u HC_SOCKET HC_SESSION=<the lab'\''s own scratch session> hc ...`; the `default` session is never addressed.' \
+'7. An inherited `HC_SOCKET` (or any other socket override) beats `HC_SESSION`, so every `hc` call in a lab, whatever the operation, must reach only the lab'\''s own scratch core; the `default` session is never addressed.' \
+'   Run each one through `HC_LAB_HELPER='"$(shell_quote "$FM_ROOT/bin/fm-hc-lab.sh")"'`: `"$HC_LAB_HELPER" run "$HC_LAB_SESSION" <hc arguments...>`, with the session from `"$HC_LAB_HELPER" name <label>` and `"$HC_LAB_HELPER" provision`, and clean up with `"$HC_LAB_HELPER" teardown` in the EXIT trap.' \
+'   If you must call `hc` directly, clear any inherited override and pin the lab-owned socket and session on that same call: `env -u HC_SOCKET HC_SESSION=<lab session> HC_SOCKET="$("$HC_LAB_HELPER" socket <lab session>)" hc ...`.' \
 '8. Heredocs in lab work use a quoted delimiter (`<<'\''EOF'\''`), because an unquoted one runs backtick text as commands; this triggered the 12:22 crash that stopped the main herdr-core.' \
 '9. Run your own herdr-core tripwire, helper or not.' \
 '   Before any lab record the `herdr-core.service` MainPID (`systemctl --user show -p MainPID --value herdr-core.service`, only where `systemctl --user` works) and whether the default core socket exists; no service or no live core is a valid baseline, recorded as such.' \
 '   After the lab read the same values.' \
-'   A different MainPID, a MainPID that went empty, or a socket that was present and is now gone is a hard failure: report it at once.' \
+'   A different MainPID, a MainPID that went empty, a MainPID that went from empty to a value, a default core socket that was present and is now gone, or a default core socket that was absent and now exists is a hard failure: report it at once.' \
 '   The same values before and after, including empty both times, pass; without systemd the socket check alone is the tripwire.' \
 'The captain fleet uses the running `default` session.')
 else

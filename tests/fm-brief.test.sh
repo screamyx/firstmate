@@ -668,12 +668,16 @@ test_herdr_lab_contract_is_explicit_and_complete() {
     "Herdr lab brief missing the forbidden server-global command list"
   assert_grep "\`hc server stop\`, \`hc server restart\`, \`herdr-core server stop\`, \`herdr-core server restart\`" "$brief" \
     "Herdr lab brief missing the forbidden hc and herdr-core server commands"
-  assert_grep "env -u HC_SOCKET HC_SESSION=<the lab's own scratch session> hc" "$brief" \
-    "Herdr lab brief missing the per-call HC_SOCKET clear and HC_SESSION pin"
+  assert_grep "env -u HC_SOCKET HC_SESSION=<lab session> HC_SOCKET=" "$brief" \
+    "Herdr lab brief missing the per-call HC_SOCKET clear and scratch socket pin"
+  assert_grep "\"\$HC_LAB_HELPER\" run \"\$HC_LAB_SESSION\"" "$brief" \
+    "Herdr lab brief missing the hc lab helper route"
   assert_grep "quoted delimiter (\`<<'EOF'\`)" "$brief" \
     "Herdr lab brief missing the quoted heredoc rule"
   assert_grep "show -p MainPID --value herdr-core.service" "$brief" \
     "Herdr lab brief missing the worker-run MainPID tripwire"
+  assert_grep "absent and now exists" "$brief" \
+    "Herdr lab brief missing the absent-to-present socket tripwire"
   assert_grep "no service or no live core is a valid baseline" "$brief" \
     "Herdr lab brief missing the no-service baseline"
   assert_grep "rules 5 and 7-9 bind it" "$brief" \
