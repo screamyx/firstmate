@@ -1011,6 +1011,7 @@ Immediately before every destructive call it re-queries the named session and re
 Its before/after tripwire requires the live default-session snapshot to remain byte-identical.
 
 The helper's header and `--help` own exact commands.
+A Herdr 2 (`hc`) lab is not driven by this helper; [`hc-backend.md`](hc-backend.md#tests) points at its isolation owner, and the `--herdr-lab` brief from `bin/fm-brief.sh` still forbids `hc server stop` and `hc server restart`, requires every `hc` call to pin the lab's own scratch session and socket, and requires a `herdr-core.service` MainPID and default-socket tripwire.
 Tests use thin compatibility wrappers in `tests/herdr-test-safety.sh` and never duplicate the destructive policy.
 
 ## Active limits
