@@ -625,9 +625,14 @@ HERDR_SECTION=$(printf '%s\n' \
 '3. Teardown only through `"$HERDR_LAB_HELPER" teardown "$HERDR_LAB_SESSION"`.' \
 '   It re-checks refuse-default immediately before stop and again immediately before delete, and fails closed on ambiguity.' \
 '4. If an experiment requires a deliberate mid-run session stop, use only `"$HERDR_LAB_HELPER" stop "$HERDR_LAB_SESSION"`; it performs the same immediate refuse-default check.' \
-'5. Forbidden commands: direct `herdr server stop`, every other server-global operation such as `herdr server live-handoff` or reload/update operations, direct `herdr session stop`, direct `herdr session delete`, and any Herdr call scoped only by ambient or inline `HERDR_SESSION`.' \
+'5. Forbidden commands: direct `herdr server stop`, `hc server stop`, `hc server restart`, `herdr-core server stop`, `herdr-core server restart`, every other server-global operation such as `herdr server live-handoff` or reload/update operations, direct `herdr session stop`, direct `herdr session delete`, and any Herdr call scoped only by ambient or inline `HERDR_SESSION`.' \
 '6. The helper records the live default session before provisioning and verifies the identical fleet state after teardown.' \
 '   A missing, stopped, or changed default session is a hard tripwire failure, never a cleanup warning to ignore.' \
+'7. These rules bind a Herdr 2 / herdr-app lab that uses its own scratch `hc` cores, not only the Herdr 0.7.3 helper path; skipping the helper never lifts them.' \
+'8. Every `hc` call in a lab carries `HC_SESSION=<the lab'\''s own scratch session>` written on that same call; the `default` session is never addressed.' \
+'9. Heredocs in lab work use a quoted delimiter (`<<'\''EOF'\''`), because an unquoted one runs backtick text as commands; this triggered the 12:22 crash that stopped the main herdr-core.' \
+'10. Run your own herdr-core tripwire, helper or not: before any lab record `systemctl --user show -p MainPID --value herdr-core.service` and whether the default core socket is present, and compare both after.' \
+'   A changed or empty MainPID, or a missing default socket, is a hard failure: report it at once.' \
 '' \
 'Never bypass the helper, even for a read-only lifecycle probe or cleanup after failure.' \
 'The captain fleet uses the running `default` session.')
