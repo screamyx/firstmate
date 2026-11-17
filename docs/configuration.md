@@ -912,7 +912,7 @@ There are exactly two roots, and no environment variable or config file changes 
 When `/store/agent-outputs` is a real, writable directory, spawn creates this home's `/store/agent-outputs/home-<key>/` (one level, never through a symlink) and the task folder is `/store/agent-outputs/home-<key>/<task-id>/`; `<key>` is printed by `fm_task_output_home_key` in `bin/fm-task-output-lib.sh`.
 If `home-<key>` is a symlink, not a directory, or not writable, spawn prints why and uses `data/<task-id>/` in this home instead.
 `FM_TASK_OUTPUT_NO_STORE=1` only switches the store off (the test suites set it); it cannot point either root elsewhere.
-`bin/fm-spawn.sh` creates both parts, records them in `state/<id>.meta` as `output_build=` and `output_proof=`, and appends the recorded folder to the launch brief; a relaunch keeps the recorded values.
+`bin/fm-spawn.sh` creates both parts, records them in `state/<id>.meta` as `output_build=` and `output_proof=`, and appends the recorded folder to the launch brief; a relaunch keeps the recorded values, and a task spawned before this feature gets a folder assigned and recorded on its first relaunch.
 `bin/fm-brief.sh` and `bin/fm-promote.sh` name the same folder through the same resolver, so briefs point `CARGO_TARGET_DIR` and other build output at `build/`.
 Teardown reads only those two keys: it deletes the recorded `build/` folder, keeps `proof/` whole, and prints one `output freed` or `output kept` line per folder.
 A build folder teardown had to keep is written to `data/<id>/output.record`, and `bin/fm-output-sweep.sh` (list by default, `--delete` to remove) reads that record for tasks whose meta is gone.
@@ -921,7 +921,7 @@ The sweep lists, and never deletes, folders under the two roots that no record n
 The spawn adds the folder to the Claude `--add-dir` and Rovo `allowedExternalPaths` grants.
 Rovo's bash stays confined to the worktree, so a Rovo worker builds inside its worktree and uses the folder only for proof through its file tools; its briefs say so.
 A secondmate home is not retired while a finished child's `proof/` files or `output.record` still sit inside it; move them out first.
-The held-file check uses `lsof`, which only sees the calling user's processes, and a live-task check reads only this home's `state/`.
+The held-file check uses `lsof`, which only sees the calling user's processes, and a folder is treated as held when `lsof` is missing or fails; a live-task check reads only this home's `state/`.
 
 ## Task status archive (config/status-archive)
 
