@@ -916,6 +916,9 @@ Teardown reads only those two keys: it deletes the recorded `build/` folder, kee
 A build folder teardown had to keep is written to `data/<id>/output.record`, and `bin/fm-output-sweep.sh` (list by default, `--delete` to remove) reads that record for tasks whose meta is gone.
 The sweep only lists folders under `<root>` that no record names, and tasks that ended before this feature left no record.
 [`bin/fm-task-output-lib.sh`](../bin/fm-task-output-lib.sh) owns the delete guard (output roots, depth, symlinks, held files, overlap with live tasks), which `--force` does not relax.
+`bin/fm-spawn.sh` appends the recorded folder to the launch brief and adds it to the Claude `--add-dir` and Rovo `allowedExternalPaths` grants.
+Rovo's bash stays confined to the worktree, so a Rovo worker cannot run builds in the folder and builds inside its worktree.
+A secondmate home is not retired while a finished child's `proof/` files or `output.record` still sit inside it; move them out first.
 The held-file check uses `lsof`, which only sees the calling user's processes, and a live-task check reads only this home's `state/`.
 
 ## Task status archive (config/status-archive)

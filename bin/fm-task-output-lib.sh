@@ -151,13 +151,17 @@ fm_task_output_home_key() {
 # fm_task_output_dir <config> <data> <task-id>: the task's output folder.
 # Returns 1 when config/task-output-root is present but unusable or refused.
 fm_task_output_dir() {
-  local root
+  local base root dir
   root=$(fm_task_output_configured_root "$1" "$2") || return 1
   if [ -z "$root" ]; then
-    printf '%s/%s' "${2%/}" "$3"
+    base=${2%/}
+    dir="$base/$3"
   else
-    printf '%s/%s/%s' "$root" "$(fm_task_output_home_key "$2")" "$3"
+    base=$root
+    dir="$root/$(fm_task_output_home_key "$2")/$3"
   fi
+  [ "$(fm_task_output_phys "$dir")" = "$(fm_task_output_phys "$base")${dir#"$base"}" ] || return 1
+  printf '%s' "$dir"
 }
 
 # fm_task_output_prepare <dir>: create <dir>/build and <dir>/proof as real

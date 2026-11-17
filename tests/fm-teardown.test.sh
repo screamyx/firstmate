@@ -892,6 +892,64 @@ test_output_failed_record_write_keeps_the_task_record() {
   pass "a leftover record that cannot be written keeps the task record"
 }
 
+test_output_redirected_home_key_is_refused_and_not_scanned() {
+  local case_dir out key
+  case_dir=$(make_case output-home-key-link)
+  mkdir -p "$case_dir/outside/victim-task/build" "$case_dir/data/outroot"
+  printf 'x\n' > "$case_dir/outside/victim-task/build/f"
+  printf '%s\n' "$case_dir/data/outroot" > "$case_dir/config/task-output-root"
+  key=$(. "$ROOT/bin/fm-task-output-lib.sh"; fm_task_output_home_key "$case_dir/data")
+  ln -s "$case_dir/outside" "$case_dir/data/outroot/$key"
+  if out=$(. "$ROOT/bin/fm-task-output-lib.sh"; fm_task_output_dir "$case_dir/config" "$case_dir/data" task-x1); then
+    fail "a task folder below a redirected home key was accepted: $out"
+  fi
+  [ ! -e "$case_dir/outside/task-x1" ] || fail "a folder was created through the redirected home key"
+  out=$(FM_HOME="$case_dir" FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$case_dir/state" \
+    FM_DATA_OVERRIDE="$case_dir/data" FM_CONFIG_OVERRIDE="$case_dir/config" bash "$ROOT/bin/fm-output-sweep.sh" --delete)
+  printf '%s\n' "$out" | grep -F "victim-task" >/dev/null && fail "sweep scanned through a redirected home key: $out"
+  [ -f "$case_dir/outside/victim-task/build/f" ] || fail "sweep touched a redirected home key target"
+  pass "a redirected per-home folder is refused at assignment and never scanned"
+}
+
+test_output_sweep_lists_unrecorded_default_root_folders() {
+  local case_dir out
+  case_dir=$(make_case output-sweep-default)
+  mkdir -p "$case_dir/data/old-task/target" "$case_dir/data/old-task/proof"
+  printf 'x\n' > "$case_dir/data/old-task/target/f"
+  printf 'p\n' > "$case_dir/data/old-task/proof/shot.png"
+  out=$(FM_HOME="$case_dir" FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$case_dir/state" \
+    FM_DATA_OVERRIDE="$case_dir/data" FM_CONFIG_OVERRIDE="$case_dir/config" bash "$ROOT/bin/fm-output-sweep.sh" --delete) \
+    || fail "sweep failed: $out"
+  printf '%s\n' "$out" | grep -E "^unrecorded .* $case_dir/data/old-task/target$" >/dev/null || fail "unrecorded default-root folder not listed: $out"
+  [ -f "$case_dir/data/old-task/target/f" ] || fail "sweep deleted an unrecorded folder"
+  [ -f "$case_dir/data/old-task/proof/shot.png" ] || fail "sweep touched a proof folder"
+  pass "the sweep lists an unrecorded folder under the default data root and never deletes it"
+}
+
+test_secondmate_retirement_refuses_finished_child_proof() {
+  local case_dir home rc mode
+  for mode in ordinary forced; do
+    case_dir=$(make_case "secondmate-finished-child-$mode")
+    write_meta "$case_dir" local-only secondmate
+    home="$case_dir/secondmate-home"
+    mkdir -p "$home/state" "$home/data/done-child/proof" "$home/config" "$home/projects"
+    printf 'shot\n' > "$home/data/done-child/proof/shot.png"
+    printf '%s\n' task-x1 > "$home/.fm-secondmate-home"
+    printf '%s\n' "home=$home" >> "$case_dir/state/task-x1.meta"
+    add_treehouse_clean_fd "$case_dir"
+    rc=0
+    if [ "$mode" = forced ]; then
+      run_teardown "$case_dir" --force > "$case_dir/stdout" 2> "$case_dir/stderr" || rc=$?
+    else
+      run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr" || rc=$?
+    fi
+    [ "$rc" -ne 0 ] || fail "$mode retirement succeeded with a finished child's proof inside the home"
+    assert_grep "keeps proof files at $home/data/done-child/proof" "$case_dir/stderr" "$mode: no refusal naming the proof path"
+    [ -f "$home/data/done-child/proof/shot.png" ] || fail "$mode: the finished child's proof was removed"
+  done
+  pass "ordinary and forced secondmate retirement refuse while a finished child's proof sits inside the home"
+}
+
 test_forced_secondmate_refuses_child_proof_inside_home() {
   local case_dir home child_wt rc=0
   case_dir=$(make_case secondmate-child-proof)
@@ -6636,6 +6694,9 @@ test_output_build_is_removed_and_proof_is_kept
 test_output_symlinked_root_is_refused
 test_output_sweep_lists_unrecorded_siblings_in_a_home_folder
 test_output_failed_record_write_keeps_the_task_record
+test_output_redirected_home_key_is_refused_and_not_scanned
+test_output_sweep_lists_unrecorded_default_root_folders
+test_secondmate_retirement_refuses_finished_child_proof
 test_forced_secondmate_refuses_child_proof_inside_home
 test_output_held_file_is_skipped_even_when_forced
 test_output_guard_refusals_leave_folders_alone

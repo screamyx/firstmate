@@ -2846,6 +2846,26 @@ claude_expected_launch() {  # <launch> <home> <id> <permission-flag>
   printf '%s' "export COMPACT_ADVISER_DISABLE=1; $(task_inbox_export "$2" "$3")$(fm_test_launch_git_prefix "$1")env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false CLAUDE_CODE_SEND_FEEDBACK=0 claude $4 --no-chrome $(claude_worker_add_dirs "$2" "$3")--settings '{\"feedbackDrafts\":\"off\",\"attribution\":{\"commit\":\"\",\"pr\":\"\",\"sessionUrl\":false}}' $CLAUDE_CONTROL_CHANNEL_FLAG $quoted"
 }
 
+test_claude_launch_grants_the_recorded_output_folder() {
+  local rec id out status launch dir real_dir
+  id=output-grant-z20
+  rec=$(make_spawn_case output-grant claude "$id")
+  read_case_record "$rec"
+  mkdir -p "$HOME_DIR/data/outroot"
+  printf '%s\n' "$HOME_DIR/data/outroot" > "$HOME_DIR/config/task-output-root"
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR")
+  status=$?
+  expect_code 0 "$status" "claude spawn with an output root should succeed: $out"
+  dir=$(sed -n 's/^output_build=//p' "$HOME_DIR/state/$id.meta")
+  dir=${dir%/build}
+  [ -d "$dir/build" ] || fail "spawn did not create the recorded output folder: $dir"
+  real_dir=$(cd "$dir" && pwd -P)
+  launch=$(fm_test_launch_unframe "$(cat "$LAUNCH_LOG")")
+  assert_contains "$launch" "--add-dir '$real_dir'" "the launch did not grant the recorded output folder"
+  assert_contains "$(cat "$HOME_DIR/data/$id/launch-brief.md")" "$dir/build/" "the launch brief does not name the recorded folder"
+  pass "a claude launch grants and names the recorded output folder"
+}
+
 test_claude_permission_mode_absent_defaults_to_bypass() {
   local rec id out status launch expected
   id=permmode-absent-z18
@@ -3314,6 +3334,7 @@ test_claude_forwards_firstmate_config_dir_when_set
 test_lavish_server_address_is_exported_to_worker_launch
 test_lavish_absent_config_preserves_destination_ambient
 test_claude_omits_config_dir_prefix_when_unset
+test_claude_launch_grants_the_recorded_output_folder
 test_claude_permission_mode_absent_defaults_to_bypass
 test_claude_permission_mode_auto_opts_into_model_reviewed_launch
 test_claude_permission_mode_bypass_swaps_only_the_permission_flag

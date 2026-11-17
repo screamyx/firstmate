@@ -18,7 +18,7 @@
 #
 # Folders directly under those roots that no task record or live task names
 # (another user's, another agent's, anything unknown), and this home's
-# data/<id>/build folders likewise, are listed as "unrecorded" with their size
+# data/<id>/<folder> folders other than proof likewise, are listed as "unrecorded" with their size
 # and are never deleted, with or without --delete.
 # Tasks that ended before this record existed left no record, so their folders
 # are listed as unrecorded too.
@@ -92,7 +92,7 @@ done
 
 # Unrecorded folders, listed only: the id folders and their per-home folders
 # under /store/agent-outputs and the configured root, and this home's
-# <data>/<id>/build folders.
+# <data>/<id>/<folder> folders.
 list_unrecorded() {  # <dir>
   local dir=$1 path recorded=0
   [ -d "$dir" ] && [ ! -L "$dir" ] || return 0
@@ -110,10 +110,15 @@ for scan in "$FM_TASK_OUTPUT_STORE_ROOT" ${root:+"$root"}; do
   [ -d "$scan" ] && [ ! -L "$scan" ] || continue
   for dir in "$scan"/*; do
     case "${dir##*/}" in
-      home-*) for task_dir in "$dir"/*; do list_unrecorded "$task_dir"; done ;;
+      home-*) [ -L "$dir" ] || for task_dir in "$dir"/*; do list_unrecorded "$task_dir"; done ;;
       *) list_unrecorded "$dir" ;;
     esac
   done
 done | sort -u
-for dir in "$DATA"/*/build; do list_unrecorded "$dir"; done
+for dir in "$DATA"/*/*; do
+  [ ! -L "${dir%/*}" ] || continue
+  [ "${dir##*/}" != proof ] || continue
+  [ -z "$root" ] || ! fm_task_output_overlaps "$dir" "$root" || continue
+  list_unrecorded "$dir"
+done
 [ "$MODE" != delete ] || printf 'sweep freed %s in total\n' "$(fm_task_output_human "$freed_kb")"

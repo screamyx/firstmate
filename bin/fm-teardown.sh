@@ -2883,6 +2883,21 @@ safe_rm_rf_child_worktree() {
   rm -rf -- "$target"
 }
 
+home_retained_output_refusal() {  # <abs-home> <label>
+  local home=$1 label=$2 dir
+  for dir in "$home"/data/*/; do
+    dir=${dir%/}
+    if [ -d "$dir/proof" ] && [ ! -L "$dir/proof" ] && [ -n "$(ls -A -- "$dir/proof" 2>/dev/null)" ]; then
+      echo "REFUSED: $label $home keeps proof files at $dir/proof; move them out of $home first, then retry; teardown changed nothing" >&2
+      return 1
+    fi
+    if [ -e "$dir/output.record" ] || [ -L "$dir/output.record" ]; then
+      echo "REFUSED: $label $home keeps a leftover build record at $dir/output.record; run bin/fm-output-sweep.sh or move the record out of $home first, then retry; teardown changed nothing" >&2
+      return 1
+    fi
+  done
+}
+
 validate_firstmate_home_for_removal() {
   local home=$1 label=$2 expected_id=${3:-} abs_home_path marker_id conflict child_id child_home
   [ -n "$home" ] || return 0
@@ -2910,6 +2925,7 @@ validate_firstmate_home_for_removal() {
       fi
     fi
   fi
+  home_retained_output_refusal "$abs_home_path" "$label" || return 1
   validate_firstmate_operational_dirs_for_removal "$abs_home_path" "$label" || return 1
   conflict=
   if conflict=$(registered_descendant_home_for_removal "$SECONDMATE_REG" "$abs_home_path"); then
@@ -3313,10 +3329,6 @@ child_output_kept_inside_home() {  # <home> <child-id> <child-meta>
       echo "REFUSED: child task $child_id keeps proof files at $proof, inside the home being retired; move them out of $home first, then retry; forced teardown changed nothing" >&2
       return 1 ;;
     esac
-  fi
-  if [ -e "$home/data/$child_id/output.record" ] || [ -L "$home/data/$child_id/output.record" ]; then
-    echo "REFUSED: child task $child_id has leftover build output recorded at $home/data/$child_id/output.record, inside the home being retired; move that record out of $home first, then retry; forced teardown changed nothing" >&2
-    return 1
   fi
 }
 
