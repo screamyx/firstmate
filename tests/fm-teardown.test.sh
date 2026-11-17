@@ -849,6 +849,7 @@ output_sweep_with_store() {  # <case_dir> <scratch-store> [sweep args]: the swee
 }
 
 output_dir_in_store() {  # <case_dir> <scratch-store>: fm_task_output_dir for task-x1 with the store pointed at a scratch dir in this process only
+  # shellcheck disable=SC2030 # subshell scoped on purpose
   ( unset FM_TASK_OUTPUT_NO_STORE; . "$ROOT/bin/fm-task-output-lib.sh"; FM_TASK_OUTPUT_STORE_ROOT=$2; fm_task_output_dir "$1/data" task-x1 )
 }
 
@@ -1004,6 +1005,7 @@ test_output_store_root_ignores_the_environment() {
   case_dir=$(make_case output-env-ignored)
   key=$(. "$ROOT/bin/fm-task-output-lib.sh"; fm_task_output_home_key "$case_dir/data")
   mkdir -p "$case_dir/prod-backups/$key" "$case_dir/data/task-x1"
+  # shellcheck disable=SC2031 # subshell scoped on purpose
   out=$(unset FM_TASK_OUTPUT_NO_STORE; export FM_TASK_OUTPUT_STORE_ROOT="$case_dir/prod-backups"; . "$ROOT/bin/fm-task-output-lib.sh"; fm_task_output_dir "$case_dir/data" task-x1)
   case "$out" in *prod-backups*) fail "an exported store root changed the task folder: $out" ;; esac
   mkdir -p "$case_dir/prod-backups/stray/build"

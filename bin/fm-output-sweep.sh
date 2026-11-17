@@ -123,6 +123,7 @@ NAMED
 }
 own_key=$(fm_task_output_home_key "$DATA")
 shopt -s nullglob dotglob
+# shellcheck disable=SC2066 # single store root, kept as a loop for the shared body
 for scan in "$FM_TASK_OUTPUT_STORE_ROOT"; do
   [ -d "$scan" ] && [ ! -L "$scan" ] || continue
   for dir in "$scan"/*; do

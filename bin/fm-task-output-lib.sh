@@ -282,7 +282,7 @@ EOF
 # already named that is still on disk (an earlier task that used this id) plus
 # the given ones; with none left, the record is removed.
 fm_task_output_record_leftover() {
-  local data=$1 task=$2 file tmp build body= seen=$'\n' old
+  local data=$1 task=$2 file tmp build body="" seen=$'\n' old
   shift 2
   file="$data/$task/output.record"
   old=()

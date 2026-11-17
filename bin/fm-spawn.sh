@@ -6397,6 +6397,7 @@ TASK_OUTPUT_GRANT=$TASK_OUTPUT_DIR
 if [ -n "$TASK_OUTPUT_RECORDED" ]; then
   TASK_OUTPUT_GRANT=${TASK_OUTPUT_RECORDED%/build}
 fi
+# shellcheck disable=SC2016 # backticks are literal brief markdown
 if [ -n "$TASK_OUTPUT_GRANT" ] && [ "$HARNESS" = rovo ]; then
   printf '\n# Task output folder\nThis section is the assignment recorded for this task and overrides any other output folder or build-output instruction named above.\nYour bash is confined to the worktree: build inside the worktree, with CARGO_TARGET_DIR, CARGO_HOME, node_modules and build dirs there, and write no build output outside it.\nPut proof files a PR body cites (screenshots, videos, logs) under `%s/proof/` with your file tools; teardown keeps that folder.\n' \
     "$TASK_OUTPUT_GRANT" >> "$BRIEF" \

@@ -278,6 +278,7 @@ Exercise Kimi dispatch.
 ## Firstmate spec
 Verify launch and delivery behavior.
 EOF
+  # shellcheck disable=SC2016 # backticks are literal brief markdown
   printf 'Write build output under `%s/data/%s/build/`.\n' "$home" "$id" >> "$home/data/$id/brief.md"
   printf 'kimi\n' > "$home/config/crew-harness"
   fm_git_worktree "$proj" "$wt" "wt-$name"
