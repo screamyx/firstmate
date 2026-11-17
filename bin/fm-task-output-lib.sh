@@ -86,6 +86,9 @@ fm_task_output_normalized() {
 }
 
 FM_TASK_OUTPUT_STORE_ROOT=/store/agent-outputs
+if [ -n "${FM_TASK_OUTPUT_NO_STORE:-}" ]; then
+  FM_TASK_OUTPUT_STORE_ROOT=/nonexistent/fm-no-agent-outputs
+fi
 
 # fm_task_output_root_ok <real-root>: a root must sit at least two levels below
 # "/", so "/", "/store" and "/home" can never be a root.
@@ -113,18 +116,24 @@ fm_task_output_home_key() {
 }
 
 # fm_task_output_dir <data> <task-id>: the task's output folder. The store is
-# used only when this home's folder in it already exists as a real, writable
-# directory; the owner creates it once per home. Returns 1 when the task folder
-# is a symlink.
+# used when it is a real, writable directory and this home's folder in it is
+# absent (fm_task_output_prepare creates it, one level) or a real, writable
+# directory; a symlink or a non-directory there is refused with a printed
+# reason and the folder falls back to this home's data/. Returns 1 when the
+# task folder is a symlink. FM_TASK_OUTPUT_NO_STORE=1 only ever switches the
+# store off; nothing can point either root elsewhere.
 fm_task_output_dir() {
-  local home="$FM_TASK_OUTPUT_STORE_ROOT/$(fm_task_output_home_key "$1")"
-  if [ -d "$FM_TASK_OUTPUT_STORE_ROOT" ] && [ ! -L "$FM_TASK_OUTPUT_STORE_ROOT" ] \
-    && [ -d "$home" ] && [ ! -L "$home" ] && [ -w "$home" ]; then
-    [ ! -L "$home/$2" ] || return 1
-    printf '%s/%s' "$home" "$2"
-  else
-    printf '%s/%s' "${1%/}" "$2"
+  local store=$FM_TASK_OUTPUT_STORE_ROOT home
+  home="$store/$(fm_task_output_home_key "$1")"
+  if [ -d "$store" ] && [ ! -L "$store" ] && [ -w "$store" ]; then
+    if [ ! -e "$home" ] && [ ! -L "$home" ] || { [ -d "$home" ] && [ ! -L "$home" ] && [ -w "$home" ]; }; then
+      [ ! -L "$home/$2" ] || return 1
+      printf '%s/%s' "$home" "$2"
+      return 0
+    fi
+    echo "note: $home is a symlink, not a directory, or not writable; this task's output folder falls back to $1" >&2
   fi
+  printf '%s/%s' "${1%/}" "$2"
 }
 
 # fm_task_output_prepare <dir>: create <dir>/build and <dir>/proof as real

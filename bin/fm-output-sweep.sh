@@ -103,6 +103,7 @@ NAMED
   [ "$recorded" = 1 ] || printf 'unrecorded %s %s\n' \
     "$(fm_task_output_human "$(fm_task_output_size_kb "$dir")")" "$dir"
 }
+shopt -s nullglob dotglob
 for scan in "$FM_TASK_OUTPUT_STORE_ROOT"; do
   [ -d "$scan" ] && [ ! -L "$scan" ] || continue
   for dir in "$scan"/*; do
@@ -117,4 +118,5 @@ for dir in "$DATA"/*/*; do
   [ "${dir##*/}" != proof ] || continue
   list_unrecorded "$dir"
 done
+shopt -u nullglob dotglob
 [ "$MODE" != delete ] || printf 'sweep freed %s in total\n' "$(fm_task_output_human "$freed_kb")"
