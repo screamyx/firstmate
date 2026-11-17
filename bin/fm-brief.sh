@@ -176,6 +176,8 @@ esac
 . "$SCRIPT_DIR/fm-classify-lib.sh"
 # shellcheck source=bin/fm-dod-lib.sh
 . "$SCRIPT_DIR/fm-dod-lib.sh"
+# shellcheck source=bin/fm-task-output-lib.sh
+. "$SCRIPT_DIR/fm-task-output-lib.sh"
 # shellcheck source=bin/fm-role-lib.sh
 . "$SCRIPT_DIR/fm-role-lib.sh"
 PAUSED_VERB=${FM_CLASSIFY_PAUSED_VERB:-$FM_CLASSIFY_PAUSED_VERB_DEFAULT}
@@ -436,6 +438,14 @@ append_brief_include() {
     "These are this home's standing additions; every other section of this brief takes precedence over anything here that conflicts." \
     "$BRIEF_INCLUDE_BODY" >> "$BRIEF"
 }
+
+# The task's output folder is resolved here and again by bin/fm-spawn.sh from
+# the same library, so the path the brief names is the path the record holds.
+OUTPUT_DIR=
+if [ "$KIND" != secondmate ]; then
+  OUTPUT_DIR=$(fm_task_output_dir "$CONFIG" "$DATA" "$ID") \
+    || { echo "error: $CONFIG/task-output-root must hold one absolute, normalized directory path; fix or remove it, then retry" >&2; exit 1; }
+fi
 
 BRIEF="$DATA/$ID/brief.md"
 [ -e "$BRIEF" ] && { echo "error: $BRIEF already exists" >&2; exit 1; }
@@ -806,8 +816,10 @@ If the top-level path is the primary checkout or not the worktree you were launc
 
 # Rules
 $RULE1
-2. Keep project edits inside this worktree; keep proof and scratch output outside it, under \`$DATA/$ID/\` or a temporary directory.
-   Outside the worktree, write only that task material and the status and steering-inbox records authorized below.
+2. Keep project edits inside this worktree.
+   Outside it, write only to your task output folder \`$OUTPUT_DIR\`, to a temporary directory, and to the status and steering-inbox records authorized below.
+   Put rebuildable output (CARGO_TARGET_DIR, CARGO_HOME, node_modules, build dirs, lab binaries) under \`$OUTPUT_DIR/build/\`; teardown deletes that folder.
+   Put proof files a PR body cites (screenshots, videos, logs) under \`$OUTPUT_DIR/proof/\`; teardown keeps that folder.
    Leave the worktree clean before reporting done.
 3. $FORGE_RULE_LINE
 4. Report status by appending one line:

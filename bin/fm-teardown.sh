@@ -552,6 +552,8 @@ fm_backlog_directory_present "$STATE" "state directory" || {
 }
 # shellcheck source=bin/fm-wake-lib.sh
 . "$SCRIPT_DIR/fm-wake-lib.sh"
+# shellcheck source=bin/fm-task-output-lib.sh
+. "$SCRIPT_DIR/fm-task-output-lib.sh"
 # Supervision lease guard: post-landing cleanup is overlap territory between
 # the two Pi supervision actors; refuse while the OTHER actor holds this
 # task's live lease (contract: bin/fm-lease-lib.sh; no-op in homes without
@@ -4151,6 +4153,14 @@ fm_backend_clear_transition "$BACKEND" "$STATE" "$T" || true
 # Remove the per-task temp root (/tmp/fm-<id>/, incl. its gotmp/) recorded by spawn.
 # Read before the state-file rm below; empty (pre-fix tasks without tasktmp=) is a no-op.
 [ -n "$TASK_TMP" ] && rm -rf "$TASK_TMP"
+# Delete the task's rebuildable output folder outside the worktree and keep its
+# proof folder. bin/fm-task-output-lib.sh owns the guard, which --force does not
+# relax; a folder it refuses is reported as kept and never fails the teardown.
+TASK_OUTPUT_BUILD=$(fm_meta_get "$META" output_build)
+if [ "$KIND" != secondmate ] && [ -n "$TASK_OUTPUT_BUILD" ]; then
+  fm_task_output_teardown "$ID" "$STATE" "$CONFIG" "$DATA" "$TASK_OUTPUT_BUILD" \
+    "$(fm_meta_get "$META" output_proof)"
+fi
 # Retire only this Firstmate home's launch namespace. Its never-reused per-spawn
 # files leave the equal task-id namespace of every other home untouched.
 teardown_launch_home_token() {

@@ -217,6 +217,10 @@ test_ship_modes_generate_clean_briefs() {
     assert_grep "mid-task \`working:\` line (including setup complete) is nonterminal" "$brief" \
       "$id: brief missing nonterminal working:/setup-complete gate protection"
     assert_no_grep "EOF" "$brief" "$id: brief leaked a heredoc EOF marker (unterminated heredoc)"
+    assert_grep "\`$home/data/$id/build/\`; teardown deletes that folder" "$brief" \
+      "$id: brief did not name its task output build folder"
+    assert_grep "\`$home/data/$id/proof/\`; teardown keeps that folder" "$brief" \
+      "$id: brief did not name its task output proof folder"
   done
   pass "fm-brief.sh: no-mistakes/direct-PR/local-only briefs generate cleanly"
 }

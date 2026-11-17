@@ -994,6 +994,8 @@ if [ -e "$STATE" ] || [ -L "$STATE" ]; then
 fi
 # shellcheck source=bin/fm-ff-lib.sh
 . "$SCRIPT_DIR/fm-ff-lib.sh"
+# shellcheck source=bin/fm-task-output-lib.sh
+. "$SCRIPT_DIR/fm-task-output-lib.sh"
 # shellcheck source=bin/fm-wake-lib.sh
 . "$SCRIPT_DIR/fm-wake-lib.sh"
 # shellcheck source=bin/fm-classify-lib.sh
@@ -6363,6 +6365,18 @@ else
 fi
 mkdir -p "$TASK_TMP/gotmp"
 
+# Per-task output folder outside the worktree (bin/fm-task-output-lib.sh owns
+# the layout and the delete guard): <root>/<id>/build holds rebuildable output
+# and teardown deletes it, <root>/<id>/proof holds files a PR cites and stays.
+# A relaunch keeps the recorded values, so nothing is resolved or created again.
+TASK_OUTPUT_DIR=
+if [ "$RELAUNCH" -eq 0 ] && [ "$KIND" != secondmate ]; then
+  TASK_OUTPUT_DIR=$(fm_task_output_dir "$CONFIG" "$DATA" "$ID") \
+    || { echo "error: $CONFIG/task-output-root must hold one absolute, normalized directory path; fix or remove it, then retry" >&2; exit 1; }
+  fm_task_output_prepare "$TASK_OUTPUT_DIR" \
+    || { echo "error: task output folder $TASK_OUTPUT_DIR (build/ and proof/) could not be created as real, writable directories; check config/task-output-root, then retry" >&2; exit 1; }
+fi
+
 # Per-harness turn-end hook where enabled: a file that touches
 # state/<id>.turn-ended when the agent finishes a turn. Worktree-resident hooks
 # and token pointers stay out of git's view so they never block teardown's dirty
@@ -7418,6 +7432,9 @@ preserve_relaunch_meta() {
   [ -z "${BRANCH:-}" ] || echo "branch=$BRANCH"
   echo "tasktmp=$TASK_TMP"
   [ -z "$BASE_BRANCH" ] || echo "base_branch=$BASE_BRANCH"
+  # The task's output folder (bin/fm-task-output-lib.sh); a relaunch preserves
+  # the recorded lines below instead of writing them again.
+  [ -z "$TASK_OUTPUT_DIR" ] || printf 'output_build=%s/build\noutput_proof=%s/proof\n' "$TASK_OUTPUT_DIR" "$TASK_OUTPUT_DIR"
   [ -z "$UPSTREAM_CONSENT" ] || echo "upstream_consent=$UPSTREAM_CONSENT"
   # Read by bin/fm-dod-lib.sh's ready-report gate; absent on every other forge.
   [ "$EXTERNAL_REVIEW" = 0 ] || echo "forge=external"
