@@ -743,28 +743,28 @@ test_local_only_fork_remote_allows() {
 output_case() {  # <name> -> case dir with an output root, a landed task and a recorded folder
   local case_dir
   case_dir=$(make_case "$1")
-  mkdir -p "$case_dir/outroot/task-x1/build/deep" "$case_dir/outroot/task-x1/proof"
-  printf 'rebuildable\n' > "$case_dir/outroot/task-x1/build/deep/artifact"
-  printf 'screenshot\n' > "$case_dir/outroot/task-x1/proof/shot.png"
-  printf '%s\n' "$case_dir/outroot" > "$case_dir/config/task-output-root"
+  mkdir -p "$case_dir/data/outroot/task-x1/build/deep" "$case_dir/data/outroot/task-x1/proof"
+  printf 'rebuildable\n' > "$case_dir/data/outroot/task-x1/build/deep/artifact"
+  printf 'screenshot\n' > "$case_dir/data/outroot/task-x1/proof/shot.png"
+  printf '%s\n' "$case_dir/data/outroot" > "$case_dir/config/task-output-root"
   write_meta "$case_dir" no-mistakes ship
   printf '%s\n' 'pr=https://github.com/example/repo/pull/7' \
-    "output_build=$case_dir/outroot/task-x1/build" \
-    "output_proof=$case_dir/outroot/task-x1/proof" >> "$case_dir/state/task-x1.meta"
+    "output_build=$case_dir/data/outroot/task-x1/build" \
+    "output_proof=$case_dir/data/outroot/task-x1/proof" >> "$case_dir/state/task-x1.meta"
   printf '%s\n' "$case_dir"
 }
 
 test_output_build_is_removed_and_proof_is_kept() {
   local case_dir out
   case_dir=$(output_case output-removed)
-  mkdir -p "$case_dir/outroot/other-job/build" "$case_dir/outside"
-  printf 'other\n' > "$case_dir/outroot/other-job/build/keep"
+  mkdir -p "$case_dir/data/outroot/other-job/build" "$case_dir/outside"
+  printf 'other\n' > "$case_dir/data/outroot/other-job/build/keep"
   printf 'outside\n' > "$case_dir/outside/precious"
-  ln -s "$case_dir/outside" "$case_dir/outroot/task-x1/build/escape"
+  ln -s "$case_dir/outside" "$case_dir/data/outroot/task-x1/build/escape"
   out=$(run_teardown "$case_dir") || fail "teardown failed with a recorded output folder: $out"
-  assert_absent "$case_dir/outroot/task-x1/build" "recorded build folder survived teardown"
-  [ -f "$case_dir/outroot/task-x1/proof/shot.png" ] || fail "the cited proof file was removed"
-  [ -f "$case_dir/outroot/other-job/build/keep" ] || fail "another task's folder was touched"
+  assert_absent "$case_dir/data/outroot/task-x1/build" "recorded build folder survived teardown"
+  [ -f "$case_dir/data/outroot/task-x1/proof/shot.png" ] || fail "the cited proof file was removed"
+  [ -f "$case_dir/data/outroot/other-job/build/keep" ] || fail "another task's folder was touched"
   [ -f "$case_dir/outside/precious" ] || fail "a symlink inside the build folder was followed"
   printf '%s\n' "$out" | grep -F "teardown task-x1 output freed" >/dev/null || fail "no freed line: $out"
   printf '%s\n' "$out" | grep -F "output kept (proof folder" >/dev/null || fail "no kept proof line: $out"
@@ -775,29 +775,29 @@ test_output_build_is_removed_and_proof_is_kept() {
 test_output_held_file_is_skipped_even_when_forced() {
   local case_dir out holder
   case_dir=$(output_case output-held)
-  ( exec 3< "$case_dir/outroot/task-x1/build/deep/artifact"; exec sleep 60 ) &
+  ( exec 3< "$case_dir/data/outroot/task-x1/build/deep/artifact"; exec sleep 60 ) &
   holder=$!
   sleep 1
   out=$(run_teardown "$case_dir" --force) || { kill "$holder" 2>/dev/null; fail "forced teardown failed: $out"; }
-  [ -f "$case_dir/outroot/task-x1/build/deep/artifact" ] || { kill "$holder" 2>/dev/null; fail "a held file was deleted"; }
+  [ -f "$case_dir/data/outroot/task-x1/build/deep/artifact" ] || { kill "$holder" 2>/dev/null; fail "a held file was deleted"; }
   printf '%s\n' "$out" | grep -F "output kept (held by a running process" >/dev/null \
     || { kill "$holder" 2>/dev/null; fail "no held line: $out"; }
-  assert_grep "output_build=$case_dir/outroot/task-x1/build" "$case_dir/data/task-x1/output.record" \
+  assert_grep "output_build=$case_dir/data/outroot/task-x1/build" "$case_dir/data/task-x1/output.record" \
     "a kept folder left no sweep record"
   kill "$holder" 2>/dev/null || true
   wait "$holder" 2>/dev/null || true
   # The sweep lists first, deletes only with --delete, and never touches an unrecorded folder.
-  mkdir -p "$case_dir/outroot/stray/build"
-  printf 'x\n' > "$case_dir/outroot/stray/build/f"
+  mkdir -p "$case_dir/data/outroot/stray/build"
+  printf 'x\n' > "$case_dir/data/outroot/stray/build/f"
   local sweep="$ROOT/bin/fm-output-sweep.sh"
   out=$(FM_HOME="$case_dir" FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$case_dir/state" \
     FM_DATA_OVERRIDE="$case_dir/data" FM_CONFIG_OVERRIDE="$case_dir/config" bash "$sweep") || fail "sweep list failed"
   printf '%s\n' "$out" | grep -F "would-free" >/dev/null || fail "sweep did not list the recorded folder: $out"
-  [ -f "$case_dir/outroot/task-x1/build/deep/artifact" ] || fail "sweep without --delete removed a folder"
+  [ -f "$case_dir/data/outroot/task-x1/build/deep/artifact" ] || fail "sweep without --delete removed a folder"
   out=$(FM_HOME="$case_dir" FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$case_dir/state" \
     FM_DATA_OVERRIDE="$case_dir/data" FM_CONFIG_OVERRIDE="$case_dir/config" bash "$sweep" --delete) || fail "sweep --delete failed"
-  assert_absent "$case_dir/outroot/task-x1/build" "sweep --delete left the recorded folder"
-  [ -f "$case_dir/outroot/stray/build/f" ] || fail "sweep deleted a folder no record names"
+  assert_absent "$case_dir/data/outroot/task-x1/build" "sweep --delete left the recorded folder"
+  [ -f "$case_dir/data/outroot/stray/build/f" ] || fail "sweep deleted a folder no record names"
   printf '%s\n' "$out" | grep -F "unrecorded" >/dev/null || fail "sweep did not list the unrecorded folder: $out"
   pass "a held output folder is skipped, recorded, and later swept; an unrecorded folder is only listed"
 }
@@ -806,17 +806,17 @@ test_output_guard_refusals_leave_folders_alone() {
   local case_dir out
   case_dir=$(output_case output-guard)
   # Another live task records the same build folder.
-  fm_write_meta "$case_dir/state/other-live.meta" "kind=ship" "output_build=$case_dir/outroot/task-x1/build"
+  fm_write_meta "$case_dir/state/other-live.meta" "kind=ship" "output_build=$case_dir/data/outroot/task-x1/build"
   out=$(run_teardown "$case_dir" --force) || fail "teardown failed: $out"
-  [ -f "$case_dir/outroot/task-x1/build/deep/artifact" ] || fail "a folder a live task records was deleted"
+  [ -f "$case_dir/data/outroot/task-x1/build/deep/artifact" ] || fail "a folder a live task records was deleted"
   printf '%s\n' "$out" | grep -F "recorded by live task other-live" >/dev/null || fail "no shared line: $out"
   # Outside every root, two levels deep rule, and a symlinked record.
   case_dir=$(output_case output-guard-paths)
   mkdir -p "$case_dir/elsewhere/a/b" "$case_dir/real-target/x"
   printf 'e\n' > "$case_dir/elsewhere/a/b/f"
   printf 'r\n' > "$case_dir/real-target/x/f"
-  rm -rf "$case_dir/outroot/task-x1/build"
-  ln -s "$case_dir/real-target" "$case_dir/outroot/task-x1/build"
+  rm -rf "$case_dir/data/outroot/task-x1/build"
+  ln -s "$case_dir/real-target" "$case_dir/data/outroot/task-x1/build"
   out=$(run_teardown "$case_dir") || fail "teardown failed on a symlinked record: $out"
   [ -f "$case_dir/real-target/x/f" ] || fail "a symlinked record was followed"
   printf '%s\n' "$out" | grep -F "the recorded path is a symlink" >/dev/null || fail "no symlink line: $out"
@@ -828,9 +828,9 @@ test_output_guard_refusals_leave_folders_alone() {
   [ -f "$case_dir/elsewhere/a/b/f" ] || fail "a folder outside every output root was deleted"
   printf '%s\n' "$out" | grep -F "outside the output roots" >/dev/null || fail "no outside line: $out"
   case_dir=$(output_case output-guard-shallow)
-  printf '%s\n' "output_build=$case_dir/outroot/task-x1" >> "$case_dir/state/task-x1.meta"
+  printf '%s\n' "output_build=$case_dir/data/outroot/task-x1" >> "$case_dir/state/task-x1.meta"
   out=$(run_teardown "$case_dir") || fail "teardown failed on a shallow record: $out"
-  [ -f "$case_dir/outroot/task-x1/proof/shot.png" ] || fail "an id folder was deleted as a build folder"
+  [ -f "$case_dir/data/outroot/task-x1/proof/shot.png" ] || fail "an id folder was deleted as a build folder"
   pass "the delete guard keeps shared, symlinked, outside-root and too-shallow records"
 }
 

@@ -12,12 +12,14 @@
 # live and skipped. Every deletion goes through the guard in
 # bin/fm-task-output-lib.sh, the same one teardown uses, which owns the rules
 # (output roots, depth, symlinks, held files, overlap with live tasks).
-# The sweep only looks under the configured output root (config/task-output-root)
-# and this home's data/ folder, never anywhere else.
+# The sweep only looks under /store/agent-outputs, the configured output root
+# (config/task-output-root, itself limited to those places and this home's data/
+# folder) and this home's data/ folder, never anywhere else.
 #
-# Folders directly under the configured root that no task record or live task
-# names (another user's, another agent's, anything unknown) are listed as
-# "unrecorded" with their size and are never deleted, with or without --delete.
+# Folders directly under those roots that no task record or live task names
+# (another user's, another agent's, anything unknown), and this home's
+# data/<id>/build folders likewise, are listed as "unrecorded" with their size
+# and are never deleted, with or without --delete.
 # Tasks that ended before this record existed left no record, so their folders
 # are listed as unrecorded too.
 #
@@ -80,7 +82,7 @@ for record in "$DATA"/*/output.record; do
     [ -n "$build" ] || continue
     named="$named$build"$'\n'
     while IFS=$'\t' read -r kind a b; do emit "$kind" "$a" "$b"; done \
-      < <(fm_task_output_reclaim "$MODE" "$id" "$STATE" "$CONFIG" "$DATA" "$build")
+      < <(fm_task_output_reclaim "$MODE" "$id" "$STATE" "$DATA" "$build")
     if [ -e "$build" ] || [ -L "$build" ]; then remaining+=("$build"); fi
   done < <(sed -n 's/^output_build=//p' "$record")
   if [ "$MODE" = delete ]; then
@@ -88,19 +90,25 @@ for record in "$DATA"/*/output.record; do
   fi
 done
 
-root=$(fm_task_output_configured_root "$CONFIG") || root=
-if [ -n "$root" ] && [ -d "$root" ] && [ "$(fm_task_output_real "$root")" != "$(fm_task_output_real "$DATA")" ]; then
-  for dir in "$root"/*; do
-    [ -d "$dir" ] || continue
-    recorded=0
-    while IFS= read -r path; do
-      [ -n "$path" ] || continue
-      if fm_task_output_overlaps "$dir" "$path"; then recorded=1; break; fi
-    done <<NAMED
+# Unrecorded folders, listed only: the id folders and their per-home folders
+# under /store/agent-outputs and the configured root, and this home's
+# <data>/<id>/build folders.
+list_unrecorded() {  # <dir>
+  local dir=$1 path recorded=0
+  [ -d "$dir" ] && [ ! -L "$dir" ] || return 0
+  while IFS= read -r path; do
+    [ -n "$path" ] || continue
+    if fm_task_output_overlaps "$dir" "$path"; then recorded=1; break; fi
+  done <<NAMED
 $named
 NAMED
-    [ "$recorded" = 1 ] || printf 'unrecorded %s %s\n' \
-      "$(fm_task_output_human "$(fm_task_output_size_kb "$dir")")" "$dir"
-  done
-fi
+  [ "$recorded" = 1 ] || printf 'unrecorded %s %s\n' \
+    "$(fm_task_output_human "$(fm_task_output_size_kb "$dir")")" "$dir"
+}
+root=$(fm_task_output_configured_root "$CONFIG" "$DATA") || root=
+for scan in "$FM_TASK_OUTPUT_STORE_ROOT" ${root:+"$root"}; do
+  [ -d "$scan" ] || continue
+  for dir in "$scan"/*; do list_unrecorded "$dir"; done
+done | sort -u
+for dir in "$DATA"/*/build; do list_unrecorded "$dir"; done
 [ "$MODE" != delete ] || printf 'sweep freed %s in total\n' "$(fm_task_output_human "$freed_kb")"

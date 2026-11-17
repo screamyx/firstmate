@@ -6373,6 +6373,8 @@ TASK_OUTPUT_DIR=
 if [ "$RELAUNCH" -eq 0 ] && [ "$KIND" != secondmate ]; then
   TASK_OUTPUT_DIR=$(fm_task_output_dir "$CONFIG" "$DATA" "$ID") \
     || { echo "error: $CONFIG/task-output-root must hold one absolute, normalized directory path; fix or remove it, then retry" >&2; exit 1; }
+  grep -qF -- "$TASK_OUTPUT_DIR/build/" "$BRIEF" \
+    || { echo "error: $BRIEF does not name this task's output folder $TASK_OUTPUT_DIR; it was scaffolded before this folder was assigned or under a different config/task-output-root; re-scaffold it with bin/fm-brief.sh, then retry" >&2; exit 1; }
   fm_task_output_prepare "$TASK_OUTPUT_DIR" \
     || { echo "error: task output folder $TASK_OUTPUT_DIR (build/ and proof/) could not be created as real, writable directories; check config/task-output-root, then retry" >&2; exit 1; }
 fi

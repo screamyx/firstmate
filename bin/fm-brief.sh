@@ -737,7 +737,7 @@ The report is the only thing that survives, so anything worth keeping must be in
 
 # Rules
 1. Never push to any remote and never open a PR.
-2. Stay inside this worktree; outside it, write only the report and status file below, except for the task's empty-inventory attestation through \`fm-captain-hold.sh complete --none\`, exactly as specified under Definition of done.
+2. Stay inside this worktree; outside it, write only the report and status file below, your task output folder \`$OUTPUT_DIR\` (rebuildable output such as CARGO_TARGET_DIR, CARGO_HOME, node_modules and build dirs under \`$OUTPUT_DIR/build/\`, which teardown deletes; proof files under \`$OUTPUT_DIR/proof/\`, which teardown keeps), except for the task's empty-inventory attestation through \`fm-captain-hold.sh complete --none\`, exactly as specified under Definition of done.
 3. Use gh-axi for GitHub operations and chrome-devtools-axi for browser operations.
 4. Report status by appending one line:
    \`$STATUS_APPEND\`

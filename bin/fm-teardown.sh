@@ -3572,6 +3572,11 @@ cleanup_firstmate_home_children() {
       fi
     fi
     teardown_export_records "$sub_state" "$child_id" || return 1
+    if [ "$child_kind" != secondmate ] && [ -n "$(meta_value "$child_meta" output_build)" ]; then
+      fm_task_output_teardown "$child_id" "$sub_state" "$home/data" "$(meta_value "$child_meta" output_build)" \
+        "$(meta_value "$child_meta" output_proof)" \
+        || { echo "error: child $child_id left output that could not be recorded for the sweep; its task record is kept" >&2; return 1; }
+    fi
     if [ "$child_kind" = secondmate ]; then
       child_home=$(meta_value "$child_meta" home)
       [ -n "$child_home" ] || child_home=$child_wt
@@ -4155,11 +4160,17 @@ fm_backend_clear_transition "$BACKEND" "$STATE" "$T" || true
 [ -n "$TASK_TMP" ] && rm -rf "$TASK_TMP"
 # Delete the task's rebuildable output folder outside the worktree and keep its
 # proof folder. bin/fm-task-output-lib.sh owns the guard, which --force does not
-# relax; a folder it refuses is reported as kept and never fails the teardown.
+# relax; a folder it refuses is reported as kept, and only a leftover whose
+# record cannot be written keeps the task record and fails the teardown.
 TASK_OUTPUT_BUILD=$(fm_meta_get "$META" output_build)
 if [ "$KIND" != secondmate ] && [ -n "$TASK_OUTPUT_BUILD" ]; then
-  fm_task_output_teardown "$ID" "$STATE" "$CONFIG" "$DATA" "$TASK_OUTPUT_BUILD" \
-    "$(fm_meta_get "$META" output_proof)"
+  fm_task_output_teardown "$ID" "$STATE" "$DATA" "$TASK_OUTPUT_BUILD" \
+    "$(fm_meta_get "$META" output_proof)" || {
+    fm_lock_release "$META_LOCK"
+    META_LOCK_HELD=0
+    echo "error: $ID's endpoint and local copy are cleaned up, but its leftover build output could not be recorded for the sweep; the task record is kept so it stays recoverable" >&2
+    exit 1
+  }
 fi
 # Retire only this Firstmate home's launch namespace. Its never-reused per-spawn
 # files leave the equal task-id namespace of every other home untouched.
