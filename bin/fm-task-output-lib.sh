@@ -112,13 +112,15 @@ fm_task_output_configured_root() {
   root=$(sed -n '1{s/[[:space:]]*$//;p;}' "$file")
   [ -n "$root" ] || return 0
   fm_task_output_normalized "$root" || return 1
-  [ ! -L "$root" ] || return 1
   real=$(fm_task_output_phys "$root") || return 1
   for base in "$FM_TASK_OUTPUT_STORE_ROOT" "$data"; do
     [ -n "$base" ] || continue
+    case "$root" in "$base"|"$base"/*) ;; *) continue ;; esac
     [ "$base" != "$FM_TASK_OUTPUT_STORE_ROOT" ] || [ ! -L "$base" ] || continue
     base_real=$(fm_task_output_real "$base") || continue
-    case "$real" in "$base_real"|"$base_real"/*) printf '%s' "$root"; return 0 ;; esac
+    [ "$real" = "$base_real${root#"$base"}" ] || continue
+    printf '%s' "$root"
+    return 0
   done
   return 1
 }

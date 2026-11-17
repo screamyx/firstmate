@@ -950,6 +950,43 @@ test_secondmate_retirement_refuses_finished_child_proof() {
   pass "ordinary and forced secondmate retirement refuse while a finished child's proof sits inside the home"
 }
 
+test_output_root_below_a_symlinked_parent_is_refused() {
+  local case_dir out
+  case_dir=$(make_case output-symlink-parent)
+  mkdir -p "$case_dir/data/real-dir/sub"
+  ln -s "$case_dir/data/real-dir" "$case_dir/data/link"
+  printf '%s\n' "$case_dir/data/link/sub" > "$case_dir/config/task-output-root"
+  if out=$(. "$ROOT/bin/fm-task-output-lib.sh"; fm_task_output_dir "$case_dir/config" "$case_dir/data" task-x1); then
+    fail "a root below a symlinked parent inside data was accepted: $out"
+  fi
+  [ -z "$(ls -A "$case_dir/data/real-dir/sub")" ] || fail "something was created through the symlinked parent"
+  pass "a configured root below a symlinked parent is refused even when it resolves inside data"
+}
+
+test_secondmate_retirement_refuses_configured_layout_proof() {
+  local case_dir home rc mode
+  for mode in ordinary forced; do
+    case_dir=$(make_case "secondmate-configured-proof-$mode")
+    write_meta "$case_dir" local-only secondmate
+    home="$case_dir/secondmate-home"
+    mkdir -p "$home/state" "$home/data/home-111/done-child/proof" "$home/config" "$home/projects"
+    printf 'shot\n' > "$home/data/home-111/done-child/proof/shot.png"
+    printf '%s\n' task-x1 > "$home/.fm-secondmate-home"
+    printf '%s\n' "home=$home" >> "$case_dir/state/task-x1.meta"
+    add_treehouse_clean_fd "$case_dir"
+    rc=0
+    if [ "$mode" = forced ]; then
+      run_teardown "$case_dir" --force > "$case_dir/stdout" 2> "$case_dir/stderr" || rc=$?
+    else
+      run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr" || rc=$?
+    fi
+    [ "$rc" -ne 0 ] || fail "$mode retirement succeeded with configured-layout proof inside the home"
+    assert_grep "keeps proof files at $home/data/home-111/done-child/proof" "$case_dir/stderr" "$mode: no refusal naming the proof path"
+    [ -f "$home/data/home-111/done-child/proof/shot.png" ] || fail "$mode: the proof was removed"
+  done
+  pass "ordinary and forced retirement refuse proof at the configured-root layout inside the home"
+}
+
 test_forced_secondmate_refuses_child_proof_inside_home() {
   local case_dir home child_wt rc=0
   case_dir=$(make_case secondmate-child-proof)
@@ -6697,6 +6734,8 @@ test_output_failed_record_write_keeps_the_task_record
 test_output_redirected_home_key_is_refused_and_not_scanned
 test_output_sweep_lists_unrecorded_default_root_folders
 test_secondmate_retirement_refuses_finished_child_proof
+test_output_root_below_a_symlinked_parent_is_refused
+test_secondmate_retirement_refuses_configured_layout_proof
 test_forced_secondmate_refuses_child_proof_inside_home
 test_output_held_file_is_skipped_even_when_forced
 test_output_guard_refusals_leave_folders_alone

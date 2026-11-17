@@ -6395,7 +6395,11 @@ if [ "$RELAUNCH" -eq 1 ] && [ "$KIND" != secondmate ]; then
   TASK_OUTPUT_GRANT=$(fm_meta_get "$RELAUNCH_META" output_build)
   [ -z "$TASK_OUTPUT_GRANT" ] || TASK_OUTPUT_GRANT=${TASK_OUTPUT_GRANT%/build}
 fi
-if [ -n "$TASK_OUTPUT_GRANT" ]; then
+if [ -n "$TASK_OUTPUT_GRANT" ] && [ "$HARNESS" = rovo ]; then
+  printf '\n# Task output folder\nThis section is the assignment recorded for this task and overrides any other output folder or build-output instruction named above.\nYour bash is confined to the worktree: build inside the worktree, with CARGO_TARGET_DIR, CARGO_HOME, node_modules and build dirs there, and write no build output outside it.\nPut proof files a PR body cites (screenshots, videos, logs) under `%s/proof/` with your file tools; teardown keeps that folder.\n' \
+    "$TASK_OUTPUT_GRANT" >> "$BRIEF" \
+    || { echo "error: could not record the task output folder in $BRIEF" >&2; exit 1; }
+elif [ -n "$TASK_OUTPUT_GRANT" ]; then
   printf '\n# Task output folder\nThis section is the assignment recorded for this task and overrides any other output folder named above.\nPut rebuildable output (CARGO_TARGET_DIR, CARGO_HOME, node_modules, build dirs, lab binaries) under `%s/build/`; teardown deletes that folder.\nPut proof files a PR body cites (screenshots, videos, logs) under `%s/proof/`; teardown keeps that folder.\n' \
     "$TASK_OUTPUT_GRANT" "$TASK_OUTPUT_GRANT" >> "$BRIEF" \
     || { echo "error: could not record the task output folder in $BRIEF" >&2; exit 1; }
