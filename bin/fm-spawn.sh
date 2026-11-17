@@ -6384,10 +6384,10 @@ mkdir -p "$TASK_TMP/gotmp"
 # A relaunch keeps the recorded values, so nothing is resolved or created again.
 TASK_OUTPUT_DIR=
 if [ "$RELAUNCH" -eq 0 ] && [ "$KIND" != secondmate ]; then
-  TASK_OUTPUT_DIR=$(fm_task_output_dir "$CONFIG" "$DATA" "$ID") \
-    || { echo "error: $CONFIG/task-output-root must hold one absolute, normalized directory path; fix or remove it, then retry" >&2; exit 1; }
+  TASK_OUTPUT_DIR=$(fm_task_output_dir "$DATA" "$ID") \
+    || { echo "error: the per-home output folder under $FM_TASK_OUTPUT_STORE_ROOT for task $ID is a symlink; remove it, then retry" >&2; exit 1; }
   fm_task_output_prepare "$TASK_OUTPUT_DIR" \
-    || { echo "error: task output folder $TASK_OUTPUT_DIR (build/ and proof/) could not be created as real, writable directories; check config/task-output-root, then retry" >&2; exit 1; }
+    || { echo "error: task output folder $TASK_OUTPUT_DIR (build/ and proof/) could not be created as real, writable directories; check $FM_TASK_OUTPUT_STORE_ROOT and $DATA, then retry" >&2; exit 1; }
 fi
 
 TASK_OUTPUT_GRANT=$TASK_OUTPUT_DIR

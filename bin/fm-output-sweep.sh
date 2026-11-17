@@ -12,11 +12,10 @@
 # live and skipped. Every deletion goes through the guard in
 # bin/fm-task-output-lib.sh, the same one teardown uses, which owns the rules
 # (output roots, depth, symlinks, held files, overlap with live tasks).
-# The sweep only looks under /store/agent-outputs, the configured output root
-# (config/task-output-root, itself limited to those places and this home's data/
-# folder) and this home's data/ folder, never anywhere else.
+# The sweep only looks under /store/agent-outputs and this home's data/ folder,
+# never anywhere else.
 #
-# Folders directly under those roots that no task record or live task names
+# Folders directly under /store/agent-outputs (and inside its home-* folders) that no task record or live task names
 # (another user's, another agent's, anything unknown), and this home's
 # data/<id>/<folder> folders other than proof likewise, are listed as "unrecorded" with their size
 # and are never deleted, with or without --delete.
@@ -35,7 +34,6 @@ FM_ROOT="${FM_ROOT_OVERRIDE:-$(CDPATH='' cd -- "$SCRIPT_DIR/.." && pwd -P)}"
 FM_HOME="${FM_HOME:-${FM_ROOT_OVERRIDE:-$FM_ROOT}}"
 STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 DATA="${FM_DATA_OVERRIDE:-$FM_HOME/data}"
-CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
 # shellcheck source=bin/fm-pr-lib.sh
 . "$SCRIPT_DIR/fm-pr-lib.sh"
 # shellcheck source=bin/fm-task-output-lib.sh
@@ -91,7 +89,7 @@ for record in "$DATA"/*/output.record; do
 done
 
 # Unrecorded folders, listed only: the id folders and their per-home folders
-# under /store/agent-outputs and the configured root, and this home's
+# under /store/agent-outputs, and this home's
 # <data>/<id>/<folder> folders.
 list_unrecorded() {  # <dir>
   local dir=$1 path recorded=0
@@ -105,8 +103,7 @@ NAMED
   [ "$recorded" = 1 ] || printf 'unrecorded %s %s\n' \
     "$(fm_task_output_human "$(fm_task_output_size_kb "$dir")")" "$dir"
 }
-root=$(fm_task_output_configured_root "$CONFIG" "$DATA") || root=
-for scan in "$FM_TASK_OUTPUT_STORE_ROOT" ${root:+"$root"}; do
+for scan in "$FM_TASK_OUTPUT_STORE_ROOT"; do
   [ -d "$scan" ] && [ ! -L "$scan" ] || continue
   for dir in "$scan"/*; do
     case "${dir##*/}" in
@@ -118,7 +115,6 @@ done | sort -u
 for dir in "$DATA"/*/*; do
   [ ! -L "${dir%/*}" ] || continue
   [ "${dir##*/}" != proof ] || continue
-  [ -z "$root" ] || ! fm_task_output_overlaps "$dir" "$root" || continue
   list_unrecorded "$dir"
 done
 [ "$MODE" != delete ] || printf 'sweep freed %s in total\n' "$(fm_task_output_human "$freed_kb")"

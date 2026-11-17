@@ -2851,8 +2851,8 @@ test_rovo_brief_keeps_builds_in_the_worktree() {
   id=output-rovo-z21
   rec=$(make_spawn_case output-rovo rovo "$id")
   read_case_record "$rec"
-  mkdir -p "$HOME_DIR/data/outroot"
-  printf '%s\n' "$HOME_DIR/data/outroot" > "$HOME_DIR/config/task-output-root"
+  mkdir -p "$CASE_DIR/store"
+  export FM_TASK_OUTPUT_STORE_ROOT="$CASE_DIR/store"
   fm_fake_exit0 "$FAKEBIN_DIR" rovo
   out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR")
   status=$?
@@ -2860,6 +2860,7 @@ test_rovo_brief_keeps_builds_in_the_worktree() {
   brief=$(cat "$HOME_DIR/data/$id/launch-brief.md")
   assert_contains "$brief" "build inside the worktree" "the rovo brief does not contain builds in the worktree"
   assert_not_contains "$brief" "teardown deletes that folder" "the rovo brief still tells the worker to build in the external folder"
+  export FM_TASK_OUTPUT_STORE_ROOT=/nonexistent/fm-test-agent-outputs
   pass "a rovo launch brief keeps builds in the worktree and proof in the output folder"
 }
 
@@ -2868,8 +2869,8 @@ test_claude_launch_grants_the_recorded_output_folder() {
   id=output-grant-z20
   rec=$(make_spawn_case output-grant claude "$id")
   read_case_record "$rec"
-  mkdir -p "$HOME_DIR/data/outroot"
-  printf '%s\n' "$HOME_DIR/data/outroot" > "$HOME_DIR/config/task-output-root"
+  mkdir -p "$CASE_DIR/store"
+  export FM_TASK_OUTPUT_STORE_ROOT="$CASE_DIR/store"
   out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR")
   status=$?
   expect_code 0 "$status" "claude spawn with an output root should succeed: $out"
@@ -2880,6 +2881,7 @@ test_claude_launch_grants_the_recorded_output_folder() {
   launch=$(fm_test_launch_unframe "$(cat "$LAUNCH_LOG")")
   assert_contains "$launch" "--add-dir '$real_dir'" "the launch did not grant the recorded output folder"
   assert_contains "$(cat "$HOME_DIR/data/$id/launch-brief.md")" "$dir/build/" "the launch brief does not name the recorded folder"
+  export FM_TASK_OUTPUT_STORE_ROOT=/nonexistent/fm-test-agent-outputs
   pass "a claude launch grants and names the recorded output folder"
 }
 

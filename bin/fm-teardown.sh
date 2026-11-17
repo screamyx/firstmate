@@ -2885,7 +2885,7 @@ safe_rm_rf_child_worktree() {
 
 home_retained_output_refusal() {  # <abs-home> <label>
   local home=$1 label=$2 dir
-  for dir in "$home"/data/*/ "$home"/data/home-*/*/; do
+  for dir in "$home"/data/*/; do
     dir=${dir%/}
     if [ -d "$dir/proof" ] && [ ! -L "$dir/proof" ] && [ -n "$(ls -A -- "$dir/proof" 2>/dev/null)" ]; then
       echo "REFUSED: $label $home keeps proof files at $dir/proof; move them out of $home first, then retry; teardown changed nothing" >&2

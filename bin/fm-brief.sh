@@ -443,8 +443,8 @@ append_brief_include() {
 # the same library, so the path the brief names is the path the record holds.
 OUTPUT_DIR=
 if [ "$KIND" != secondmate ]; then
-  OUTPUT_DIR=$(fm_task_output_dir "$CONFIG" "$DATA" "$ID") \
-    || { echo "error: $CONFIG/task-output-root must hold one absolute, normalized directory path; fix or remove it, then retry" >&2; exit 1; }
+  OUTPUT_DIR=$(fm_task_output_dir "$DATA" "$ID") \
+    || { echo "error: the per-home output folder under $FM_TASK_OUTPUT_STORE_ROOT for task $ID is a symlink; remove it, then retry" >&2; exit 1; }
 fi
 
 BRIEF="$DATA/$ID/brief.md"
@@ -737,7 +737,7 @@ The report is the only thing that survives, so anything worth keeping must be in
 
 # Rules
 1. Never push to any remote and never open a PR.
-2. Stay inside this worktree; outside it, write only the report and status file below, your task output folder \`$OUTPUT_DIR\` (rebuildable output such as CARGO_TARGET_DIR, CARGO_HOME, node_modules and build dirs under \`$OUTPUT_DIR/build/\`, which teardown deletes; proof files under \`$OUTPUT_DIR/proof/\`, which teardown keeps), except for the task's empty-inventory attestation through \`fm-captain-hold.sh complete --none\`, exactly as specified under Definition of done.
+2. Stay inside this worktree; outside it, write only the report and status file below, your task output folder \`$OUTPUT_DIR\` (rebuildable output such as CARGO_TARGET_DIR, CARGO_HOME, node_modules and build dirs under \`$OUTPUT_DIR/build/\`, which teardown deletes; proof files under \`$OUTPUT_DIR/proof/\`, which teardown keeps; a rovo worker, whose bash is confined to the worktree, builds inside the worktree instead and writes only proof there), except for the task's empty-inventory attestation through \`fm-captain-hold.sh complete --none\`, exactly as specified under Definition of done.
 3. Use gh-axi for GitHub operations and chrome-devtools-axi for browser operations.
 4. Report status by appending one line:
    \`$STATUS_APPEND\`
@@ -819,6 +819,7 @@ $RULE1
 2. Keep project edits inside this worktree.
    Outside it, write only to your task output folder \`$OUTPUT_DIR\`, to a temporary directory, and to the status and steering-inbox records authorized below.
    Put rebuildable output (CARGO_TARGET_DIR, CARGO_HOME, node_modules, build dirs, lab binaries) under \`$OUTPUT_DIR/build/\`; teardown deletes that folder.
+   A rovo worker, whose bash is confined to the worktree, builds inside the worktree instead and writes only proof under \`$OUTPUT_DIR/proof/\`.
    Put proof files a PR body cites (screenshots, videos, logs) under \`$OUTPUT_DIR/proof/\`; teardown keeps that folder.
    Leave the worktree clean before reporting done.
 3. $FORGE_RULE_LINE

@@ -219,6 +219,8 @@ test_ship_modes_generate_clean_briefs() {
     assert_no_grep "EOF" "$brief" "$id: brief leaked a heredoc EOF marker (unterminated heredoc)"
     assert_grep "\`$home/data/$id/build/\`; teardown deletes that folder" "$brief" \
       "$id: brief did not name its task output build folder"
+    assert_grep "A rovo worker, whose bash is confined to the worktree, builds inside the worktree instead" "$brief" \
+      "$id: ship brief gives a rovo worker no worktree-build contract"
     assert_grep "\`$home/data/$id/proof/\`; teardown keeps that folder" "$brief" \
       "$id: brief did not name its task output proof folder"
   done
@@ -605,6 +607,8 @@ test_ask_user_escalation_format() {
   other_id="brief-no-ask-user-scout"
   FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$other_id" some-proj --scout >/dev/null 2>&1
   other_brief="$home/data/$other_id/brief.md"
+  assert_grep "a rovo worker, whose bash is confined to the worktree, builds inside the worktree" "$other_brief" \
+    "scout brief gives a rovo worker no worktree-build contract"
   assert_no_grep "destructive actions, ask-user findings" "$other_brief" \
     "scout brief received a no-mistakes-only decision case"
 

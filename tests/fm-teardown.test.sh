@@ -746,7 +746,6 @@ output_case() {  # <name> -> case dir with an output root, a landed task and a r
   mkdir -p "$case_dir/data/outroot/task-x1/build/deep" "$case_dir/data/outroot/task-x1/proof"
   printf 'rebuildable\n' > "$case_dir/data/outroot/task-x1/build/deep/artifact"
   printf 'screenshot\n' > "$case_dir/data/outroot/task-x1/proof/shot.png"
-  printf '%s\n' "$case_dir/data/outroot" > "$case_dir/config/task-output-root"
   write_meta "$case_dir" no-mistakes ship
   printf '%s\n' 'pr=https://github.com/example/repo/pull/7' \
     "output_build=$case_dir/data/outroot/task-x1/build" \
@@ -834,36 +833,15 @@ test_output_guard_refusals_leave_folders_alone() {
   pass "the delete guard keeps shared, symlinked, outside-root and too-shallow records"
 }
 
-test_output_symlinked_root_is_refused() {
-  local case_dir out
-  case_dir=$(make_case output-symlink-root)
-  mkdir -p "$case_dir/outside/precious-tree"
-  ln -s "$case_dir/outside" "$case_dir/data/linkroot"
-  printf '%s\n' "$case_dir/data/linkroot/sub" > "$case_dir/config/task-output-root"
-  if out=$(. "$ROOT/bin/fm-task-output-lib.sh"; fm_task_output_dir "$case_dir/config" "$case_dir/data" task-x1); then
-    fail "a root below a symlinked folder was accepted: $out"
-  fi
-  printf '%s\n' "$case_dir/data/linkroot" > "$case_dir/config/task-output-root"
-  if out=$(. "$ROOT/bin/fm-task-output-lib.sh"; fm_task_output_dir "$case_dir/config" "$case_dir/data" task-x1); then
-    fail "a root that is itself a symlink was accepted: $out"
-  fi
-  out=$(FM_HOME="$case_dir" FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$case_dir/state" \
-    FM_DATA_OVERRIDE="$case_dir/data" FM_CONFIG_OVERRIDE="$case_dir/config" bash "$ROOT/bin/fm-output-sweep.sh" --delete)
-  printf '%s\n' "$out" | grep -F "precious-tree" >/dev/null && fail "sweep scanned through a symlinked root: $out"
-  [ -d "$case_dir/outside/precious-tree" ] || fail "a symlinked root target was touched"
-  pass "a configured root that is or sits below a symlink is refused and never scanned"
-}
-
 test_output_sweep_lists_unrecorded_siblings_in_a_home_folder() {
   local case_dir out home
   case_dir=$(make_case output-sweep-siblings)
-  home="$case_dir/data/outroot/home-123"
+  home="$case_dir/store/home-123"
   mkdir -p "$home/task-a/build" "$home/task-b/build" "$case_dir/data/task-a"
   printf 'a\n' > "$home/task-a/build/f"
   printf 'b\n' > "$home/task-b/build/f"
-  printf '%s\n' "$case_dir/data/outroot" > "$case_dir/config/task-output-root"
   printf 'output_build=%s\n' "$home/task-a/build" > "$case_dir/data/task-a/output.record"
-  out=$(FM_HOME="$case_dir" FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$case_dir/state" \
+  out=$(FM_TASK_OUTPUT_STORE_ROOT="$case_dir/store" FM_HOME="$case_dir" FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$case_dir/state" \
     FM_DATA_OVERRIDE="$case_dir/data" FM_CONFIG_OVERRIDE="$case_dir/config" bash "$ROOT/bin/fm-output-sweep.sh" --delete) \
     || fail "sweep failed: $out"
   printf '%s\n' "$out" | grep -E "^unrecorded .* $home/task-b$" >/dev/null || fail "unrecorded sibling not listed: $out"
@@ -895,20 +873,47 @@ test_output_failed_record_write_keeps_the_task_record() {
 test_output_redirected_home_key_is_refused_and_not_scanned() {
   local case_dir out key
   case_dir=$(make_case output-home-key-link)
-  mkdir -p "$case_dir/outside/victim-task/build" "$case_dir/data/outroot"
+  mkdir -p "$case_dir/outside/victim-task/build" "$case_dir/store"
   printf 'x\n' > "$case_dir/outside/victim-task/build/f"
-  printf '%s\n' "$case_dir/data/outroot" > "$case_dir/config/task-output-root"
   key=$(. "$ROOT/bin/fm-task-output-lib.sh"; fm_task_output_home_key "$case_dir/data")
-  ln -s "$case_dir/outside" "$case_dir/data/outroot/$key"
-  if out=$(. "$ROOT/bin/fm-task-output-lib.sh"; fm_task_output_dir "$case_dir/config" "$case_dir/data" task-x1); then
+  ln -s "$case_dir/outside" "$case_dir/store/$key"
+  if out=$(export FM_TASK_OUTPUT_STORE_ROOT="$case_dir/store"; . "$ROOT/bin/fm-task-output-lib.sh"; fm_task_output_dir "$case_dir/data" task-x1); then
     fail "a task folder below a redirected home key was accepted: $out"
   fi
   [ ! -e "$case_dir/outside/task-x1" ] || fail "a folder was created through the redirected home key"
-  out=$(FM_HOME="$case_dir" FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$case_dir/state" \
+  out=$(FM_TASK_OUTPUT_STORE_ROOT="$case_dir/store" FM_HOME="$case_dir" FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$case_dir/state" \
     FM_DATA_OVERRIDE="$case_dir/data" FM_CONFIG_OVERRIDE="$case_dir/config" bash "$ROOT/bin/fm-output-sweep.sh" --delete)
   printf '%s\n' "$out" | grep -F "victim-task" >/dev/null && fail "sweep scanned through a redirected home key: $out"
   [ -f "$case_dir/outside/victim-task/build/f" ] || fail "sweep touched a redirected home key target"
   pass "a redirected per-home folder is refused at assignment and never scanned"
+}
+
+test_output_dir_uses_the_store_when_usable_else_data() {
+  local case_dir key out
+  case_dir=$(make_case output-dir-roots)
+  key=$(. "$ROOT/bin/fm-task-output-lib.sh"; fm_task_output_home_key "$case_dir/data")
+  mkdir -p "$case_dir/store"
+  out=$(export FM_TASK_OUTPUT_STORE_ROOT="$case_dir/store"; . "$ROOT/bin/fm-task-output-lib.sh"; fm_task_output_dir "$case_dir/data" task-x1)
+  [ "$out" = "$case_dir/store/$key/task-x1" ] || fail "a usable store did not hold the task folder: $out"
+  out=$(export FM_TASK_OUTPUT_STORE_ROOT="$case_dir/no-store"; . "$ROOT/bin/fm-task-output-lib.sh"; fm_task_output_dir "$case_dir/data" task-x1)
+  [ "$out" = "$case_dir/data/task-x1" ] || fail "a missing store did not fall back to data: $out"
+  pass "the output folder is under the store when it is usable and under data otherwise"
+}
+
+test_output_record_keeps_a_reused_ids_earlier_leftover() {
+  local case_dir out
+  case_dir=$(make_case output-record-reuse)
+  mkdir -p "$case_dir/old-root/task-x1/build" "$case_dir/new-root/task-x1/build" "$case_dir/data/task-x1"
+  out=$(. "$ROOT/bin/fm-task-output-lib.sh"
+    fm_task_output_record_leftover "$case_dir/data" task-x1 "$case_dir/old-root/task-x1/build"
+    fm_task_output_record_leftover "$case_dir/data" task-x1 "$case_dir/new-root/task-x1/build"
+    rm -rf "$case_dir/new-root/task-x1/build"
+    fm_task_output_record_leftover "$case_dir/data" task-x1) || fail "record helper failed: $out"
+  assert_grep "output_build=$case_dir/old-root/task-x1/build" "$case_dir/data/task-x1/output.record" "the earlier leftover was lost"
+  rm -rf "$case_dir/old-root/task-x1/build"
+  ( . "$ROOT/bin/fm-task-output-lib.sh"; fm_task_output_record_leftover "$case_dir/data" task-x1 )
+  assert_absent "$case_dir/data/task-x1/output.record" "a record naming nothing on disk survived"
+  pass "a leftover record keeps an earlier leftover for a reused task id and drops finished ones"
 }
 
 test_output_sweep_lists_unrecorded_default_root_folders() {
@@ -948,43 +953,6 @@ test_secondmate_retirement_refuses_finished_child_proof() {
     [ -f "$home/data/done-child/proof/shot.png" ] || fail "$mode: the finished child's proof was removed"
   done
   pass "ordinary and forced secondmate retirement refuse while a finished child's proof sits inside the home"
-}
-
-test_output_root_below_a_symlinked_parent_is_refused() {
-  local case_dir out
-  case_dir=$(make_case output-symlink-parent)
-  mkdir -p "$case_dir/data/real-dir/sub"
-  ln -s "$case_dir/data/real-dir" "$case_dir/data/link"
-  printf '%s\n' "$case_dir/data/link/sub" > "$case_dir/config/task-output-root"
-  if out=$(. "$ROOT/bin/fm-task-output-lib.sh"; fm_task_output_dir "$case_dir/config" "$case_dir/data" task-x1); then
-    fail "a root below a symlinked parent inside data was accepted: $out"
-  fi
-  [ -z "$(ls -A "$case_dir/data/real-dir/sub")" ] || fail "something was created through the symlinked parent"
-  pass "a configured root below a symlinked parent is refused even when it resolves inside data"
-}
-
-test_secondmate_retirement_refuses_configured_layout_proof() {
-  local case_dir home rc mode
-  for mode in ordinary forced; do
-    case_dir=$(make_case "secondmate-configured-proof-$mode")
-    write_meta "$case_dir" local-only secondmate
-    home="$case_dir/secondmate-home"
-    mkdir -p "$home/state" "$home/data/home-111/done-child/proof" "$home/config" "$home/projects"
-    printf 'shot\n' > "$home/data/home-111/done-child/proof/shot.png"
-    printf '%s\n' task-x1 > "$home/.fm-secondmate-home"
-    printf '%s\n' "home=$home" >> "$case_dir/state/task-x1.meta"
-    add_treehouse_clean_fd "$case_dir"
-    rc=0
-    if [ "$mode" = forced ]; then
-      run_teardown "$case_dir" --force > "$case_dir/stdout" 2> "$case_dir/stderr" || rc=$?
-    else
-      run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr" || rc=$?
-    fi
-    [ "$rc" -ne 0 ] || fail "$mode retirement succeeded with configured-layout proof inside the home"
-    assert_grep "keeps proof files at $home/data/home-111/done-child/proof" "$case_dir/stderr" "$mode: no refusal naming the proof path"
-    [ -f "$home/data/home-111/done-child/proof/shot.png" ] || fail "$mode: the proof was removed"
-  done
-  pass "ordinary and forced retirement refuse proof at the configured-root layout inside the home"
 }
 
 test_forced_secondmate_refuses_child_proof_inside_home() {
@@ -6728,14 +6696,13 @@ test_retained_sources_still_reach_the_ordinary_refusal
 test_local_only_fork_remote_allows
 test_teardown_closes_the_backlog_item_itself
 test_output_build_is_removed_and_proof_is_kept
-test_output_symlinked_root_is_refused
 test_output_sweep_lists_unrecorded_siblings_in_a_home_folder
 test_output_failed_record_write_keeps_the_task_record
 test_output_redirected_home_key_is_refused_and_not_scanned
+test_output_dir_uses_the_store_when_usable_else_data
+test_output_record_keeps_a_reused_ids_earlier_leftover
 test_output_sweep_lists_unrecorded_default_root_folders
 test_secondmate_retirement_refuses_finished_child_proof
-test_output_root_below_a_symlinked_parent_is_refused
-test_secondmate_retirement_refuses_configured_layout_proof
 test_forced_secondmate_refuses_child_proof_inside_home
 test_output_held_file_is_skipped_even_when_forced
 test_output_guard_refusals_leave_folders_alone

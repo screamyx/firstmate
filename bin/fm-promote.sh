@@ -250,7 +250,7 @@ OUTPUT_BUILD_REC=$(sed -n 's/^output_build=//p' "$META" | tail -n 1)
 OUTPUT_PROOF_REC=$(sed -n 's/^output_proof=//p' "$META" | tail -n 1)
 OUTPUT_PROOF_WORDS="under \`$DATA/$ID/\` "
 if [ -n "$OUTPUT_BUILD_REC" ] && [ -n "$OUTPUT_PROOF_REC" ]; then
-  OUTPUT_PROOF_WORDS="rebuildable output under \`$OUTPUT_BUILD_REC/\` (teardown deletes it) and proof under \`$OUTPUT_PROOF_REC/\` (teardown keeps it), "
+  OUTPUT_PROOF_WORDS="rebuildable output under \`$OUTPUT_BUILD_REC/\` (teardown deletes it) and proof under \`$OUTPUT_PROOF_REC/\` (teardown keeps it); a rovo worker, whose bash is confined to the worktree, builds inside the worktree instead, "
 fi
 fm_base_branch_valid "$BASE_BRANCH" "$MODE" "$FORGE" "fm-promote.sh $ID" || exit 1
 # The same self-repository publication gate bin/fm-spawn.sh applies to a fresh

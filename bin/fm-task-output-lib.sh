@@ -4,18 +4,17 @@
 # ONE OWNER for three things; the spawn, brief, teardown and sweep scripts only
 # call it.
 #
-#   1. Where the folder is. fm_task_output_dir <config> <data> <task-id> prints
-#      <data>/<task-id> when config/task-output-root is absent, else
-#      <root>/<home-key>/<task-id>, where <root> is the single absolute directory
-#      in that file and <home-key> is distinct per firstmate home, so two homes
-#      sharing a root never share a task folder. <root> must be
-#      /store/agent-outputs, this home's data/ folder, or a folder inside one of
-#      them; anything else is refused. The folder has a build/ part (rebuildable output: cargo target,
+#   1. Where the folder is. fm_task_output_dir <data> <task-id> prints
+#      <store>/<home-key>/<task-id> when <store> (/store/agent-outputs) is a real,
+#      writable directory, else <data>/<task-id> in this home's data/ folder.
+#      <home-key> is distinct per firstmate home, so two homes sharing the store
+#      never share a task folder. These are the only two output roots. The
+#      folder has a build/ part (rebuildable output: cargo target,
 #      cargo-home, node_modules, build dirs, lab binaries) and a proof/ part
 #      (files a PR body or the owner still needs). fm_task_output_prepare
 #      creates both. bin/fm-spawn.sh records the two paths in state/<id>.meta
-#      as output_build= and output_proof=; bin/fm-brief.sh names the same
-#      folder to the worker through the same resolver.
+#      as output_build= and output_proof= and appends the same folder to the
+#      launch brief; bin/fm-brief.sh names it through the same resolver.
 #
 #   2. The delete guard. fm_task_output_reclaim <delete|list> ... removes or
 #      lists ONE recorded build folder, and only when every rule holds:
@@ -84,46 +83,7 @@ fm_task_output_normalized() {
   return 0
 }
 
-FM_TASK_OUTPUT_STORE_ROOT=/store/agent-outputs
-
-# fm_task_output_phys <abs-path>: the physical path, resolving every symlink in
-# the nearest existing parent and appending the part that does not exist yet.
-fm_task_output_phys() {
-  local path=$1 tail= head
-  while [ ! -d "$path" ] || [ -L "$path" ]; do
-    [ -L "$path" ] && return 1
-    [ "$path" != / ] && [ -n "$path" ] || return 1
-    tail="/${path##*/}$tail"
-    path=${path%/*}
-    [ -n "$path" ] || path=/
-  done
-  head=$(fm_task_output_real "$path") || return 1
-  printf '%s%s' "${head%/}" "$tail"
-}
-
-# fm_task_output_configured_root <config> <data>: the absolute directory named
-# by config/task-output-root, empty when the file is absent or empty. Prints
-# nothing and returns 1 when the file is present but unusable or names a place
-# other than /store/agent-outputs, <data>, or a folder inside one of them.
-fm_task_output_configured_root() {
-  local file="$1/task-output-root" data=${2%/} root real base base_real
-  [ -e "$file" ] || [ -L "$file" ] || return 0
-  [ -f "$file" ] && [ ! -L "$file" ] || return 1
-  root=$(sed -n '1{s/[[:space:]]*$//;p;}' "$file")
-  [ -n "$root" ] || return 0
-  fm_task_output_normalized "$root" || return 1
-  real=$(fm_task_output_phys "$root") || return 1
-  for base in "$FM_TASK_OUTPUT_STORE_ROOT" "$data"; do
-    [ -n "$base" ] || continue
-    case "$root" in "$base"|"$base"/*) ;; *) continue ;; esac
-    [ "$base" != "$FM_TASK_OUTPUT_STORE_ROOT" ] || [ ! -L "$base" ] || continue
-    base_real=$(fm_task_output_real "$base") || continue
-    [ "$real" = "$base_real${root#"$base"}" ] || continue
-    printf '%s' "$root"
-    return 0
-  done
-  return 1
-}
+: "${FM_TASK_OUTPUT_STORE_ROOT:=/store/agent-outputs}"
 
 # fm_task_output_root_ok <real-root>: a root must sit at least two levels below
 # "/", so "/", "/store" and "/home" can never be a root.
@@ -150,20 +110,17 @@ fm_task_output_home_key() {
   printf 'home-%s' "$(printf '%s' "${1%/}" | cksum | awk '{print $1}')"
 }
 
-# fm_task_output_dir <config> <data> <task-id>: the task's output folder.
-# Returns 1 when config/task-output-root is present but unusable or refused.
+# fm_task_output_dir <data> <task-id>: the task's output folder. Returns 1 when
+# the store is usable but the per-home folder or the task folder is a symlink.
 fm_task_output_dir() {
-  local base root dir
-  root=$(fm_task_output_configured_root "$1" "$2") || return 1
-  if [ -z "$root" ]; then
-    base=${2%/}
-    dir="$base/$3"
+  local store=$FM_TASK_OUTPUT_STORE_ROOT home
+  if [ -d "$store" ] && [ ! -L "$store" ] && [ -w "$store" ]; then
+    home="$store/$(fm_task_output_home_key "$1")"
+    [ ! -L "$home" ] && [ ! -L "$home/$2" ] || return 1
+    printf '%s/%s' "$home" "$2"
   else
-    base=$root
-    dir="$root/$(fm_task_output_home_key "$2")/$3"
+    printf '%s/%s' "${1%/}" "$2"
   fi
-  [ "$(fm_task_output_phys "$dir")" = "$(fm_task_output_phys "$base")${dir#"$base"}" ] || return 1
-  printf '%s' "$dir"
 }
 
 # fm_task_output_prepare <dir>: create <dir>/build and <dir>/proof as real
@@ -302,21 +259,29 @@ EOF
   printf 'kept\tcould not be fully removed\t%s\n' "$build"
 }
 
-# fm_task_output_record_leftover <data> <task-id> <build>...: record folders a
-# finished task left behind, atomically; no build argument clears the record.
+# fm_task_output_record_leftover <data> <task-id> <build>...: record the folders
+# a finished task left behind, atomically. The record keeps every folder it
+# already named that is still on disk (an earlier task that used this id) plus
+# the given ones; with none left, the record is removed.
 fm_task_output_record_leftover() {
-  local data=$1 task=$2 file tmp build body
+  local data=$1 task=$2 file tmp build body= seen=$'\n' old
   shift 2
   file="$data/$task/output.record"
-  if [ "$#" -eq 0 ]; then
+  old=()
+  [ ! -f "$file" ] || mapfile -t old < <(sed -n 's/^output_build=//p' "$file")
+  for build in "$@" ${old[@]+"${old[@]}"}; do
+    [ -e "$build" ] || [ -L "$build" ] || continue
+    case "$seen" in *$'\n'"$build"$'\n'*) continue ;; esac
+    seen="$seen$build"$'\n'
+    body="$body$(printf 'output_build=%s\n.' "$build")"
+  done
+  body=${body//$'\n.'/$'\n'}
+  if [ -z "$body" ]; then
     rm -f -- "$file" 2>/dev/null || true
     return 0
   fi
   mkdir -p -- "$data/$task" 2>/dev/null || return 1
   tmp="$file.tmp.$$"
-  body=
-  for build in "$@"; do body="$body$(printf 'output_build=%s\n.' "$build")"; done
-  body=${body//$'\n.'/$'\n'}
   if ! printf '%s' "$body" > "$tmp" || ! printf '%s' "$body" | cmp -s - "$tmp" \
     || ! mv -f -- "$tmp" "$file"; then
     rm -f -- "$tmp" 2>/dev/null
@@ -343,10 +308,5 @@ fm_task_output_teardown() {
     printf 'teardown %s output kept (proof folder, files a PR cites): %s (%s)\n' \
       "$task" "$proof" "$(fm_task_output_human "$(fm_task_output_size_kb "$proof")")"
   fi
-  if [ -e "$build" ] || [ -L "$build" ]; then
-    fm_task_output_record_leftover "$data" "$task" "$build" || return 1
-  else
-    fm_task_output_record_leftover "$data" "$task" || true
-  fi
-  return 0
+  fm_task_output_record_leftover "$data" "$task" "$build"
 }
