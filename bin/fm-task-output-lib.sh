@@ -5,8 +5,10 @@
 # call it.
 #
 #   1. Where the folder is. fm_task_output_dir <data> <task-id> prints
-#      <store>/<home-key>/<task-id> when <store> (/store/agent-outputs) is a real,
-#      writable directory, else <data>/<task-id> in this home's data/ folder.
+#      <store>/<home-key>/<task-id> when <store> (/store/agent-outputs) holds a
+#      real, writable <home-key> folder for this home, else <data>/<task-id> in
+#      this home's data/ folder. Neither root can be changed by an environment
+#      variable or a config file.
 #      <home-key> is distinct per firstmate home, so two homes sharing the store
 #      never share a task folder. These are the only two output roots. The
 #      folder has a build/ part (rebuildable output: cargo target,
@@ -83,7 +85,7 @@ fm_task_output_normalized() {
   return 0
 }
 
-: "${FM_TASK_OUTPUT_STORE_ROOT:=/store/agent-outputs}"
+FM_TASK_OUTPUT_STORE_ROOT=/store/agent-outputs
 
 # fm_task_output_root_ok <real-root>: a root must sit at least two levels below
 # "/", so "/", "/store" and "/home" can never be a root.
@@ -110,13 +112,15 @@ fm_task_output_home_key() {
   printf 'home-%s' "$(printf '%s' "${1%/}" | cksum | awk '{print $1}')"
 }
 
-# fm_task_output_dir <data> <task-id>: the task's output folder. Returns 1 when
-# the store is usable but the per-home folder or the task folder is a symlink.
+# fm_task_output_dir <data> <task-id>: the task's output folder. The store is
+# used only when this home's folder in it already exists as a real, writable
+# directory; the owner creates it once per home. Returns 1 when the task folder
+# is a symlink.
 fm_task_output_dir() {
-  local store=$FM_TASK_OUTPUT_STORE_ROOT home
-  if [ -d "$store" ] && [ ! -L "$store" ] && [ -w "$store" ]; then
-    home="$store/$(fm_task_output_home_key "$1")"
-    [ ! -L "$home" ] && [ ! -L "$home/$2" ] || return 1
+  local home="$FM_TASK_OUTPUT_STORE_ROOT/$(fm_task_output_home_key "$1")"
+  if [ -d "$FM_TASK_OUTPUT_STORE_ROOT" ] && [ ! -L "$FM_TASK_OUTPUT_STORE_ROOT" ] \
+    && [ -d "$home" ] && [ ! -L "$home" ] && [ -w "$home" ]; then
+    [ ! -L "$home/$2" ] || return 1
     printf '%s/%s' "$home" "$2"
   else
     printf '%s/%s' "${1%/}" "$2"

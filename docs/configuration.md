@@ -908,8 +908,8 @@ The flag is a home-local preference and is not inherited by secondmate homes; [`
 ## Task output folder
 
 Every ship and scout task gets its own output folder outside its worktree, with a `build/` part for rebuildable output (cargo target, cargo-home, node_modules, build dirs, lab binaries) and a `proof/` part for files a PR body cites.
-There are exactly two roots.
-When `/store/agent-outputs` is a real, writable directory the folder is `/store/agent-outputs/home-<key>/<task-id>/`, where `<key>` is distinct per firstmate home; otherwise it is `data/<task-id>/` in this home.
+There are exactly two roots, and no environment variable or config file changes either.
+When this home has a real, writable folder `/store/agent-outputs/home-<key>/` (the owner creates it once per home; `<key>` is printed by `fm_task_output_home_key` in `bin/fm-task-output-lib.sh`), the task folder is `/store/agent-outputs/home-<key>/<task-id>/`; otherwise it is `data/<task-id>/` in this home.
 `bin/fm-spawn.sh` creates both parts, records them in `state/<id>.meta` as `output_build=` and `output_proof=`, and appends the recorded folder to the launch brief; a relaunch keeps the recorded values.
 `bin/fm-brief.sh` and `bin/fm-promote.sh` name the same folder through the same resolver, so briefs point `CARGO_TARGET_DIR` and other build output at `build/`.
 Teardown reads only those two keys: it deletes the recorded `build/` folder, keeps `proof/` whole, and prints one `output freed` or `output kept` line per folder.

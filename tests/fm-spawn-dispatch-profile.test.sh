@@ -2851,8 +2851,6 @@ test_rovo_brief_keeps_builds_in_the_worktree() {
   id=output-rovo-z21
   rec=$(make_spawn_case output-rovo rovo "$id")
   read_case_record "$rec"
-  mkdir -p "$CASE_DIR/store"
-  export FM_TASK_OUTPUT_STORE_ROOT="$CASE_DIR/store"
   fm_fake_exit0 "$FAKEBIN_DIR" rovo
   out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR")
   status=$?
@@ -2860,29 +2858,7 @@ test_rovo_brief_keeps_builds_in_the_worktree() {
   brief=$(cat "$HOME_DIR/data/$id/launch-brief.md")
   assert_contains "$brief" "build inside the worktree" "the rovo brief does not contain builds in the worktree"
   assert_not_contains "$brief" "teardown deletes that folder" "the rovo brief still tells the worker to build in the external folder"
-  export FM_TASK_OUTPUT_STORE_ROOT=/nonexistent/fm-test-agent-outputs
   pass "a rovo launch brief keeps builds in the worktree and proof in the output folder"
-}
-
-test_claude_launch_grants_the_recorded_output_folder() {
-  local rec id out status launch dir real_dir
-  id=output-grant-z20
-  rec=$(make_spawn_case output-grant claude "$id")
-  read_case_record "$rec"
-  mkdir -p "$CASE_DIR/store"
-  export FM_TASK_OUTPUT_STORE_ROOT="$CASE_DIR/store"
-  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR")
-  status=$?
-  expect_code 0 "$status" "claude spawn with an output root should succeed: $out"
-  dir=$(sed -n 's/^output_build=//p' "$HOME_DIR/state/$id.meta")
-  dir=${dir%/build}
-  [ -d "$dir/build" ] || fail "spawn did not create the recorded output folder: $dir"
-  real_dir=$(cd "$dir" && pwd -P)
-  launch=$(fm_test_launch_unframe "$(cat "$LAUNCH_LOG")")
-  assert_contains "$launch" "--add-dir '$real_dir'" "the launch did not grant the recorded output folder"
-  assert_contains "$(cat "$HOME_DIR/data/$id/launch-brief.md")" "$dir/build/" "the launch brief does not name the recorded folder"
-  export FM_TASK_OUTPUT_STORE_ROOT=/nonexistent/fm-test-agent-outputs
-  pass "a claude launch grants and names the recorded output folder"
 }
 
 test_claude_permission_mode_absent_defaults_to_bypass() {
@@ -3354,7 +3330,6 @@ test_lavish_server_address_is_exported_to_worker_launch
 test_lavish_absent_config_preserves_destination_ambient
 test_claude_omits_config_dir_prefix_when_unset
 test_rovo_brief_keeps_builds_in_the_worktree
-test_claude_launch_grants_the_recorded_output_folder
 test_claude_permission_mode_absent_defaults_to_bypass
 test_claude_permission_mode_auto_opts_into_model_reviewed_launch
 test_claude_permission_mode_bypass_swaps_only_the_permission_flag

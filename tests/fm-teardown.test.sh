@@ -833,6 +833,17 @@ test_output_guard_refusals_leave_folders_alone() {
   pass "the delete guard keeps shared, symlinked, outside-root and too-shallow records"
 }
 
+output_sweep_with_store() {  # <case_dir> <scratch-store> [sweep args]: the sweep run from a scratch copy of bin/ whose store root is the scratch store
+  local case_dir=$1 store=$2
+  shift 2
+  rm -rf "$case_dir/binctl"
+  cp -r "$ROOT/bin" "$case_dir/binctl"
+  sed -i "s#^FM_TASK_OUTPUT_STORE_ROOT=.*#FM_TASK_OUTPUT_STORE_ROOT=$store#" "$case_dir/binctl/fm-task-output-lib.sh"
+  grep -qx "FM_TASK_OUTPUT_STORE_ROOT=$store" "$case_dir/binctl/fm-task-output-lib.sh" || fail "could not point the scratch copy at the scratch store"
+  FM_HOME="$case_dir" FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$case_dir/state" \
+    FM_DATA_OVERRIDE="$case_dir/data" FM_CONFIG_OVERRIDE="$case_dir/config" bash "$case_dir/binctl/fm-output-sweep.sh" "$@"
+}
+
 test_output_sweep_lists_unrecorded_siblings_in_a_home_folder() {
   local case_dir out home
   case_dir=$(make_case output-sweep-siblings)
@@ -841,8 +852,7 @@ test_output_sweep_lists_unrecorded_siblings_in_a_home_folder() {
   printf 'a\n' > "$home/task-a/build/f"
   printf 'b\n' > "$home/task-b/build/f"
   printf 'output_build=%s\n' "$home/task-a/build" > "$case_dir/data/task-a/output.record"
-  out=$(FM_TASK_OUTPUT_STORE_ROOT="$case_dir/store" FM_HOME="$case_dir" FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$case_dir/state" \
-    FM_DATA_OVERRIDE="$case_dir/data" FM_CONFIG_OVERRIDE="$case_dir/config" bash "$ROOT/bin/fm-output-sweep.sh" --delete) \
+  out=$(output_sweep_with_store "$case_dir" "$case_dir/store" --delete) \
     || fail "sweep failed: $out"
   printf '%s\n' "$out" | grep -E "^unrecorded .* $home/task-b$" >/dev/null || fail "unrecorded sibling not listed: $out"
   printf '%s\n' "$out" | grep -E "^unrecorded .* $home/task-a$" >/dev/null && fail "the recorded task was listed unrecorded: $out"
@@ -870,34 +880,56 @@ test_output_failed_record_write_keeps_the_task_record() {
   pass "a leftover record that cannot be written keeps the task record"
 }
 
-test_output_redirected_home_key_is_refused_and_not_scanned() {
+test_output_redirected_home_key_is_never_used_or_scanned() {
   local case_dir out key
   case_dir=$(make_case output-home-key-link)
   mkdir -p "$case_dir/outside/victim-task/build" "$case_dir/store"
   printf 'x\n' > "$case_dir/outside/victim-task/build/f"
   key=$(. "$ROOT/bin/fm-task-output-lib.sh"; fm_task_output_home_key "$case_dir/data")
   ln -s "$case_dir/outside" "$case_dir/store/$key"
-  if out=$(export FM_TASK_OUTPUT_STORE_ROOT="$case_dir/store"; . "$ROOT/bin/fm-task-output-lib.sh"; fm_task_output_dir "$case_dir/data" task-x1); then
-    fail "a task folder below a redirected home key was accepted: $out"
-  fi
+  out=$(. "$ROOT/bin/fm-task-output-lib.sh"; FM_TASK_OUTPUT_STORE_ROOT="$case_dir/store"; fm_task_output_dir "$case_dir/data" task-x1)
+  [ "$out" = "$case_dir/data/task-x1" ] || fail "a redirected home key was used for the task folder: $out"
   [ ! -e "$case_dir/outside/task-x1" ] || fail "a folder was created through the redirected home key"
-  out=$(FM_TASK_OUTPUT_STORE_ROOT="$case_dir/store" FM_HOME="$case_dir" FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$case_dir/state" \
-    FM_DATA_OVERRIDE="$case_dir/data" FM_CONFIG_OVERRIDE="$case_dir/config" bash "$ROOT/bin/fm-output-sweep.sh" --delete)
+  out=$(output_sweep_with_store "$case_dir" "$case_dir/store" --delete)
   printf '%s\n' "$out" | grep -F "victim-task" >/dev/null && fail "sweep scanned through a redirected home key: $out"
   [ -f "$case_dir/outside/victim-task/build/f" ] || fail "sweep touched a redirected home key target"
-  pass "a redirected per-home folder is refused at assignment and never scanned"
+  rm "$case_dir/store/$key"
+  mkdir -p "$case_dir/store/$key" "$case_dir/outside/task-x1"
+  ln -s "$case_dir/outside/task-x1" "$case_dir/store/$key/task-x1"
+  if out=$(. "$ROOT/bin/fm-task-output-lib.sh"; FM_TASK_OUTPUT_STORE_ROOT="$case_dir/store"; fm_task_output_dir "$case_dir/data" task-x1); then
+    fail "a symlinked task folder was accepted: $out"
+  fi
+  pass "a redirected per-home or task folder is never used, and a redirected home folder is never scanned"
 }
 
-test_output_dir_uses_the_store_when_usable_else_data() {
+test_output_dir_uses_the_store_only_for_an_existing_home_folder() {
   local case_dir key out
   case_dir=$(make_case output-dir-roots)
   key=$(. "$ROOT/bin/fm-task-output-lib.sh"; fm_task_output_home_key "$case_dir/data")
   mkdir -p "$case_dir/store"
-  out=$(export FM_TASK_OUTPUT_STORE_ROOT="$case_dir/store"; . "$ROOT/bin/fm-task-output-lib.sh"; fm_task_output_dir "$case_dir/data" task-x1)
-  [ "$out" = "$case_dir/store/$key/task-x1" ] || fail "a usable store did not hold the task folder: $out"
-  out=$(export FM_TASK_OUTPUT_STORE_ROOT="$case_dir/no-store"; . "$ROOT/bin/fm-task-output-lib.sh"; fm_task_output_dir "$case_dir/data" task-x1)
-  [ "$out" = "$case_dir/data/task-x1" ] || fail "a missing store did not fall back to data: $out"
-  pass "the output folder is under the store when it is usable and under data otherwise"
+  out=$(. "$ROOT/bin/fm-task-output-lib.sh"; FM_TASK_OUTPUT_STORE_ROOT="$case_dir/store"; fm_task_output_dir "$case_dir/data" task-x1)
+  [ "$out" = "$case_dir/data/task-x1" ] || fail "a store without this home's folder was used: $out"
+  mkdir -p "$case_dir/store/$key"
+  out=$(. "$ROOT/bin/fm-task-output-lib.sh"; FM_TASK_OUTPUT_STORE_ROOT="$case_dir/store"; fm_task_output_dir "$case_dir/data" task-x1)
+  [ "$out" = "$case_dir/store/$key/task-x1" ] || fail "this home's store folder did not hold the task folder: $out"
+  pass "the output folder is under the store only for an existing per-home folder, else under data"
+}
+
+test_output_store_root_ignores_the_environment() {
+  local case_dir key out
+  case_dir=$(make_case output-env-ignored)
+  key=$(. "$ROOT/bin/fm-task-output-lib.sh"; fm_task_output_home_key "$case_dir/data")
+  mkdir -p "$case_dir/prod-backups/$key" "$case_dir/data/task-x1"
+  out=$(export FM_TASK_OUTPUT_STORE_ROOT="$case_dir/prod-backups"; . "$ROOT/bin/fm-task-output-lib.sh"; fm_task_output_dir "$case_dir/data" task-x1)
+  [ "$out" = "$case_dir/data/task-x1" ] || fail "an exported store root changed the task folder: $out"
+  mkdir -p "$case_dir/prod-backups/stray/build"
+  printf 'x\n' > "$case_dir/prod-backups/stray/build/f"
+  printf 'output_build=%s\n' "$case_dir/prod-backups/stray/build" > "$case_dir/data/task-x1/output.record"
+  out=$(FM_TASK_OUTPUT_STORE_ROOT="$case_dir/prod-backups" FM_HOME="$case_dir" FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$case_dir/state" \
+    FM_DATA_OVERRIDE="$case_dir/data" FM_CONFIG_OVERRIDE="$case_dir/config" bash "$ROOT/bin/fm-output-sweep.sh" --delete)
+  [ -f "$case_dir/prod-backups/stray/build/f" ] || fail "the sweep deleted under an exported store root: $out"
+  printf '%s\n' "$out" | grep -F "prod-backups" | grep -v "^kept" >/dev/null && fail "the sweep scanned an exported store root: $out"
+  pass "an exported FM_TASK_OUTPUT_STORE_ROOT changes neither the assigned folder, the delete guard nor the sweep"
 }
 
 test_output_record_keeps_a_reused_ids_earlier_leftover() {
@@ -6698,8 +6730,9 @@ test_teardown_closes_the_backlog_item_itself
 test_output_build_is_removed_and_proof_is_kept
 test_output_sweep_lists_unrecorded_siblings_in_a_home_folder
 test_output_failed_record_write_keeps_the_task_record
-test_output_redirected_home_key_is_refused_and_not_scanned
-test_output_dir_uses_the_store_when_usable_else_data
+test_output_redirected_home_key_is_never_used_or_scanned
+test_output_dir_uses_the_store_only_for_an_existing_home_folder
+test_output_store_root_ignores_the_environment
 test_output_record_keeps_a_reused_ids_earlier_leftover
 test_output_sweep_lists_unrecorded_default_root_folders
 test_secondmate_retirement_refuses_finished_child_proof
