@@ -834,6 +834,92 @@ test_output_guard_refusals_leave_folders_alone() {
   pass "the delete guard keeps shared, symlinked, outside-root and too-shallow records"
 }
 
+test_output_symlinked_root_is_refused() {
+  local case_dir out
+  case_dir=$(make_case output-symlink-root)
+  mkdir -p "$case_dir/outside/precious-tree"
+  ln -s "$case_dir/outside" "$case_dir/data/linkroot"
+  printf '%s\n' "$case_dir/data/linkroot/sub" > "$case_dir/config/task-output-root"
+  if out=$(. "$ROOT/bin/fm-task-output-lib.sh"; fm_task_output_dir "$case_dir/config" "$case_dir/data" task-x1); then
+    fail "a root below a symlinked folder was accepted: $out"
+  fi
+  printf '%s\n' "$case_dir/data/linkroot" > "$case_dir/config/task-output-root"
+  if out=$(. "$ROOT/bin/fm-task-output-lib.sh"; fm_task_output_dir "$case_dir/config" "$case_dir/data" task-x1); then
+    fail "a root that is itself a symlink was accepted: $out"
+  fi
+  out=$(FM_HOME="$case_dir" FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$case_dir/state" \
+    FM_DATA_OVERRIDE="$case_dir/data" FM_CONFIG_OVERRIDE="$case_dir/config" bash "$ROOT/bin/fm-output-sweep.sh" --delete)
+  printf '%s\n' "$out" | grep -F "precious-tree" >/dev/null && fail "sweep scanned through a symlinked root: $out"
+  [ -d "$case_dir/outside/precious-tree" ] || fail "a symlinked root target was touched"
+  pass "a configured root that is or sits below a symlink is refused and never scanned"
+}
+
+test_output_sweep_lists_unrecorded_siblings_in_a_home_folder() {
+  local case_dir out home
+  case_dir=$(make_case output-sweep-siblings)
+  home="$case_dir/data/outroot/home-123"
+  mkdir -p "$home/task-a/build" "$home/task-b/build" "$case_dir/data/task-a"
+  printf 'a\n' > "$home/task-a/build/f"
+  printf 'b\n' > "$home/task-b/build/f"
+  printf '%s\n' "$case_dir/data/outroot" > "$case_dir/config/task-output-root"
+  printf 'output_build=%s\n' "$home/task-a/build" > "$case_dir/data/task-a/output.record"
+  out=$(FM_HOME="$case_dir" FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$case_dir/state" \
+    FM_DATA_OVERRIDE="$case_dir/data" FM_CONFIG_OVERRIDE="$case_dir/config" bash "$ROOT/bin/fm-output-sweep.sh" --delete) \
+    || fail "sweep failed: $out"
+  printf '%s\n' "$out" | grep -E "^unrecorded .* $home/task-b$" >/dev/null || fail "unrecorded sibling not listed: $out"
+  printf '%s\n' "$out" | grep -E "^unrecorded .* $home/task-a$" >/dev/null && fail "the recorded task was listed unrecorded: $out"
+  [ -f "$home/task-b/build/f" ] || fail "sweep deleted an unrecorded sibling"
+  assert_absent "$home/task-a/build" "sweep left the recorded folder"
+  pass "the sweep lists an unrecorded task folder inside a per-home folder and never deletes it"
+}
+
+test_output_failed_record_write_keeps_the_task_record() {
+  local case_dir out holder rc=0
+  [ "$(id -u)" != 0 ] || { pass "skipped: a failed record write cannot be simulated as root"; return; }
+  case_dir=$(output_case output-record-fails)
+  mkdir -p "$case_dir/data/task-x1"
+  chmod 500 "$case_dir/data/task-x1"
+  ( exec 3< "$case_dir/data/outroot/task-x1/build/deep/artifact"; exec sleep 60 ) &
+  holder=$!
+  sleep 1
+  out=$(run_teardown "$case_dir" --force 2>&1) || rc=$?
+  kill "$holder" 2>/dev/null || true
+  wait "$holder" 2>/dev/null || true
+  chmod 700 "$case_dir/data/task-x1"
+  [ "$rc" -ne 0 ] || fail "teardown succeeded though the leftover record could not be written: $out"
+  [ -f "$case_dir/state/task-x1.meta" ] || fail "the task record was removed with an unrecorded leftover: $out"
+  [ -f "$case_dir/data/outroot/task-x1/build/deep/artifact" ] || fail "the held file was deleted"
+  pass "a leftover record that cannot be written keeps the task record"
+}
+
+test_forced_secondmate_refuses_child_proof_inside_home() {
+  local case_dir home child_wt rc=0
+  case_dir=$(make_case secondmate-child-proof)
+  write_meta "$case_dir" local-only secondmate
+  home="$case_dir/secondmate-home"
+  mkdir -p "$home/state" "$home/data/child-scout/proof" "$home/config" "$home/projects"
+  printf 'shot\n' > "$home/data/child-scout/proof/shot.png"
+  printf '%s\n' task-x1 > "$home/.fm-secondmate-home"
+  printf '%s\n' "home=$home" >> "$case_dir/state/task-x1.meta"
+  child_wt="$case_dir/child-scout-wt"
+  git -C "$case_dir/project" worktree add -q -b fm/child-scout "$child_wt" main
+  fm_write_meta "$home/state/child-scout.meta" \
+    "window=firstmate:fm-child-scout" \
+    "endpoint_task_id=child-scout" \
+    "worktree=$child_wt" \
+    "project=$case_dir/project" \
+    "kind=scout" \
+    "mode=local-only" \
+    "output_build=$home/data/child-scout/build" \
+    "output_proof=$home/data/child-scout/proof"
+  add_treehouse_clean_fd "$case_dir"
+  run_teardown "$case_dir" --force > "$case_dir/stdout" 2> "$case_dir/stderr" || rc=$?
+  [ "$rc" -ne 0 ] || fail "forced retirement succeeded with child proof inside the home"
+  assert_grep "keeps proof files at $home/data/child-scout/proof" "$case_dir/stderr" "no refusal naming the proof path"
+  [ -f "$home/data/child-scout/proof/shot.png" ] || fail "the child proof file was removed"
+  pass "a forced secondmate retirement refuses while a child's proof sits inside the home"
+}
+
 test_teardown_closes_the_backlog_item_itself() {
   local case_dir out
   case_dir=$(make_case tasks-axi-close)
@@ -6547,6 +6633,10 @@ test_retained_sources_still_reach_the_ordinary_refusal
 test_local_only_fork_remote_allows
 test_teardown_closes_the_backlog_item_itself
 test_output_build_is_removed_and_proof_is_kept
+test_output_symlinked_root_is_refused
+test_output_sweep_lists_unrecorded_siblings_in_a_home_folder
+test_output_failed_record_write_keeps_the_task_record
+test_forced_secondmate_refuses_child_proof_inside_home
 test_output_held_file_is_skipped_even_when_forced
 test_output_guard_refusals_leave_folders_alone
 test_teardown_closes_a_gerrit_task_with_its_change_url_as_a_note

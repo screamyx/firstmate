@@ -3305,6 +3305,21 @@ preflight_descendant_treehouse_slots() {
   done
 }
 
+child_output_kept_inside_home() {  # <home> <child-id> <child-meta>
+  local home=$1 child_id=$2 child_meta=$3 proof
+  proof=$(meta_value "$child_meta" output_proof)
+  if [ -n "$proof" ] && [ -d "$proof" ] && [ -n "$(ls -A -- "$proof" 2>/dev/null)" ]; then
+    case "$proof/" in "$home"/*)
+      echo "REFUSED: child task $child_id keeps proof files at $proof, inside the home being retired; move them out of $home first, then retry; forced teardown changed nothing" >&2
+      return 1 ;;
+    esac
+  fi
+  if [ -e "$home/data/$child_id/output.record" ] || [ -L "$home/data/$child_id/output.record" ]; then
+    echo "REFUSED: child task $child_id has leftover build output recorded at $home/data/$child_id/output.record, inside the home being retired; move that record out of $home first, then retry; forced teardown changed nothing" >&2
+    return 1
+  fi
+}
+
 validate_firstmate_home_children_removal() {
   local home=$1 sub_state child_meta child_id child_wt child_proj child_kind child_home child_backend child_orca_worktree_id
   sub_state="$home/state"
@@ -3319,6 +3334,7 @@ validate_firstmate_home_children_removal() {
     [ -n "$child_kind" ] || child_kind=ship
     child_backend=$(fm_backend_of_meta "$child_meta")
     teardown_require_backend_prerequisites "$child_backend" "$child_id" || return 1
+    [ "$child_kind" = secondmate ] || child_output_kept_inside_home "$home" "$child_id" "$child_meta" || return 1
     if [ "$child_kind" = secondmate ]; then
       child_home=$(meta_value "$child_meta" home)
       [ -n "$child_home" ] || child_home=$child_wt
@@ -3576,6 +3592,10 @@ cleanup_firstmate_home_children() {
       fm_task_output_teardown "$child_id" "$sub_state" "$home/data" "$(meta_value "$child_meta" output_build)" \
         "$(meta_value "$child_meta" output_proof)" \
         || { echo "error: child $child_id left output that could not be recorded for the sweep; its task record is kept" >&2; return 1; }
+      if [ -e "$home/data/$child_id/output.record" ]; then
+        echo "REFUSED: child task $child_id still has build output recorded at $home/data/$child_id/output.record, inside the home being retired; move it out of $home or free it, then retry" >&2
+        return 1
+      fi
     fi
     if [ "$child_kind" = secondmate ]; then
       child_home=$(meta_value "$child_meta" home)

@@ -86,23 +86,41 @@ fm_task_output_normalized() {
 
 FM_TASK_OUTPUT_STORE_ROOT=/store/agent-outputs
 
+# fm_task_output_phys <abs-path>: the physical path, resolving every symlink in
+# the nearest existing parent and appending the part that does not exist yet.
+fm_task_output_phys() {
+  local path=$1 tail= head
+  while [ ! -d "$path" ] || [ -L "$path" ]; do
+    [ -L "$path" ] && return 1
+    [ "$path" != / ] && [ -n "$path" ] || return 1
+    tail="/${path##*/}$tail"
+    path=${path%/*}
+    [ -n "$path" ] || path=/
+  done
+  head=$(fm_task_output_real "$path") || return 1
+  printf '%s%s' "${head%/}" "$tail"
+}
+
 # fm_task_output_configured_root <config> <data>: the absolute directory named
 # by config/task-output-root, empty when the file is absent or empty. Prints
 # nothing and returns 1 when the file is present but unusable or names a place
 # other than /store/agent-outputs, <data>, or a folder inside one of them.
 fm_task_output_configured_root() {
-  local file="$1/task-output-root" data=${2%/} root
+  local file="$1/task-output-root" data=${2%/} root real base base_real
   [ -e "$file" ] || [ -L "$file" ] || return 0
   [ -f "$file" ] && [ ! -L "$file" ] || return 1
   root=$(sed -n '1{s/[[:space:]]*$//;p;}' "$file")
   [ -n "$root" ] || return 0
   fm_task_output_normalized "$root" || return 1
-  case "$root" in
-    "$FM_TASK_OUTPUT_STORE_ROOT"|"$FM_TASK_OUTPUT_STORE_ROOT"/*) ;;
-    "$data"|"$data"/*) [ -n "$data" ] || return 1 ;;
-    *) return 1 ;;
-  esac
-  printf '%s' "$root"
+  [ ! -L "$root" ] || return 1
+  real=$(fm_task_output_phys "$root") || return 1
+  for base in "$FM_TASK_OUTPUT_STORE_ROOT" "$data"; do
+    [ -n "$base" ] || continue
+    [ "$base" != "$FM_TASK_OUTPUT_STORE_ROOT" ] || [ ! -L "$base" ] || continue
+    base_real=$(fm_task_output_real "$base") || continue
+    case "$real" in "$base_real"|"$base_real"/*) printf '%s' "$root"; return 0 ;; esac
+  done
+  return 1
 }
 
 # fm_task_output_root_ok <real-root>: a root must sit at least two levels below
@@ -118,6 +136,7 @@ fm_task_output_root_ok() {
 fm_task_output_roots() {
   local root real
   for root in "$FM_TASK_OUTPUT_STORE_ROOT" "${1%/}"; do
+    [ "$root" = "${1%/}" ] || [ ! -L "$root" ] || continue
     real=$(fm_task_output_real "$root") || continue
     fm_task_output_root_ok "$real" || continue
     printf '%s|%s\n' "$root" "$real"
@@ -280,7 +299,7 @@ EOF
 # fm_task_output_record_leftover <data> <task-id> <build>...: record folders a
 # finished task left behind, atomically; no build argument clears the record.
 fm_task_output_record_leftover() {
-  local data=$1 task=$2 file tmp build
+  local data=$1 task=$2 file tmp build body
   shift 2
   file="$data/$task/output.record"
   if [ "$#" -eq 0 ]; then
@@ -289,8 +308,14 @@ fm_task_output_record_leftover() {
   fi
   mkdir -p -- "$data/$task" 2>/dev/null || return 1
   tmp="$file.tmp.$$"
-  for build in "$@"; do printf 'output_build=%s\n' "$build"; done > "$tmp"
-  if ! mv -f -- "$tmp" "$file"; then rm -f -- "$tmp"; return 1; fi
+  body=
+  for build in "$@"; do body="$body$(printf 'output_build=%s\n.' "$build")"; done
+  body=${body//$'\n.'/$'\n'}
+  if ! printf '%s' "$body" > "$tmp" || ! printf '%s' "$body" | cmp -s - "$tmp" \
+    || ! mv -f -- "$tmp" "$file"; then
+    rm -f -- "$tmp" 2>/dev/null
+    return 1
+  fi
 }
 
 # fm_task_output_teardown <task-id> <state> <data> <build> <proof>: the

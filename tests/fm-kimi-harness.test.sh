@@ -278,6 +278,7 @@ Exercise Kimi dispatch.
 ## Firstmate spec
 Verify launch and delivery behavior.
 EOF
+  printf 'Write build output under `%s/data/%s/build/`.\n' "$home" "$id" >> "$home/data/$id/brief.md"
   printf 'kimi\n' > "$home/config/crew-harness"
   fm_git_worktree "$proj" "$wt" "wt-$name"
   touch "$home/state/.last-watcher-beat"

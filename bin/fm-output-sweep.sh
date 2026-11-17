@@ -107,8 +107,13 @@ NAMED
 }
 root=$(fm_task_output_configured_root "$CONFIG" "$DATA") || root=
 for scan in "$FM_TASK_OUTPUT_STORE_ROOT" ${root:+"$root"}; do
-  [ -d "$scan" ] || continue
-  for dir in "$scan"/*; do list_unrecorded "$dir"; done
+  [ -d "$scan" ] && [ ! -L "$scan" ] || continue
+  for dir in "$scan"/*; do
+    case "${dir##*/}" in
+      home-*) for task_dir in "$dir"/*; do list_unrecorded "$task_dir"; done ;;
+      *) list_unrecorded "$dir" ;;
+    esac
+  done
 done | sort -u
 for dir in "$DATA"/*/build; do list_unrecorded "$dir"; done
 [ "$MODE" != delete ] || printf 'sweep freed %s in total\n' "$(fm_task_output_human "$freed_kb")"
