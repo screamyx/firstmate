@@ -36,6 +36,8 @@ STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 DATA="${FM_DATA_OVERRIDE:-$FM_HOME/data}"
 # shellcheck source=bin/fm-pr-lib.sh
 . "$SCRIPT_DIR/fm-pr-lib.sh"
+# shellcheck source=bin/fm-wake-lib.sh
+. "$SCRIPT_DIR/fm-wake-lib.sh"
 # shellcheck source=bin/fm-task-output-lib.sh
 . "$SCRIPT_DIR/fm-task-output-lib.sh"
 
@@ -71,7 +73,13 @@ for record in "$DATA"/*/output.record; do
   id=${record%/output.record}
   id=${id##*/}
   fm_task_id_path_safe "$id" || continue
+  lock=$(fm_meta_lock_path "$STATE/$id.meta") || continue
+  if ! fm_lock_try_acquire "$lock"; then
+    printf 'kept (task %s is being spawned or torn down) %s\n' "$id" "$record"
+    continue
+  fi
   if [ -e "$STATE/$id.meta" ]; then
+    fm_lock_release "$lock" || true
     printf 'kept (task %s is still live) %s\n' "$id" "$record"
     continue
   fi
@@ -86,6 +94,7 @@ for record in "$DATA"/*/output.record; do
   if [ "$MODE" = delete ]; then
     fm_task_output_record_leftover "$DATA" "$id" ${remaining[@]+"${remaining[@]}"} || true
   fi
+  fm_lock_release "$lock" || true
 done
 
 # Unrecorded folders, listed only: the id folders and their per-home folders
@@ -103,12 +112,27 @@ NAMED
   [ "$recorded" = 1 ] || printf 'unrecorded %s %s\n' \
     "$(fm_task_output_human "$(fm_task_output_size_kb "$dir")")" "$dir"
 }
+names_inside() {  # <dir>: 0 when a recorded path sits inside <dir>
+  local path
+  while IFS= read -r path; do
+    case "$path/" in "$1"/?*) return 0 ;; esac
+  done <<NAMED
+$named
+NAMED
+  return 1
+}
+own_key=$(fm_task_output_home_key "$DATA")
 shopt -s nullglob dotglob
 for scan in "$FM_TASK_OUTPUT_STORE_ROOT"; do
   [ -d "$scan" ] && [ ! -L "$scan" ] || continue
   for dir in "$scan"/*; do
     case "${dir##*/}" in
-      home-*) [ -L "$dir" ] || for task_dir in "$dir"/*; do list_unrecorded "$task_dir"; done ;;
+      home-*)
+        if [ "${dir##*/}" = "$own_key" ] || names_inside "$dir"; then
+          [ -L "$dir" ] || for task_dir in "$dir"/*; do list_unrecorded "$task_dir"; done
+        else
+          list_unrecorded "$dir"
+        fi ;;
       *) list_unrecorded "$dir" ;;
     esac
   done

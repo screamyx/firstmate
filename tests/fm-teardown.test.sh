@@ -875,6 +875,37 @@ test_output_incomplete_holder_listing_keeps_the_folder() {
   pass "an lsof listing with diagnostics or a failing status keeps the folder; a complete one allows the delete"
 }
 
+test_output_sweep_skips_a_task_being_spawned() {
+  local case_dir out holder lock
+  case_dir=$(make_case output-sweep-spawn-race)
+  mkdir -p "$case_dir/data/task-x1" "$case_dir/data/spawned/build"
+  printf 'x\n' > "$case_dir/data/spawned/build/f"
+  printf 'output_build=%s\n' "$case_dir/data/spawned/build" > "$case_dir/data/task-x1/output.record"
+  lock=$(. "$ROOT/bin/fm-wake-lib.sh"; fm_meta_lock_path "$case_dir/state/task-x1.meta")
+  ( . "$ROOT/bin/fm-wake-lib.sh"; fm_lock_try_acquire "$lock" || exit 1; exec sleep 30 ) &
+  holder=$!
+  sleep 1
+  out=$(output_sweep_with_store "$case_dir" "$case_dir/store" --delete) || { kill "$holder" 2>/dev/null; fail "sweep failed: $out"; }
+  kill "$holder" 2>/dev/null || true
+  wait "$holder" 2>/dev/null || true
+  [ -f "$case_dir/data/spawned/build/f" ] || fail "the sweep deleted a folder of a task whose spawn lock was held: $out"
+  printf '%s\n' "$out" | grep -F "is being spawned or torn down" >/dev/null || fail "no skip line: $out"
+  out=$(output_sweep_with_store "$case_dir" "$case_dir/store" --delete) || fail "second sweep failed: $out"
+  assert_absent "$case_dir/data/spawned/build" "the sweep did not delete once the lock was free"
+  pass "the sweep skips a recorded folder while its task id's spawn lock is held, and deletes once it is free"
+}
+
+test_output_sweep_lists_an_unrecorded_home_prefixed_folder() {
+  local case_dir out
+  case_dir=$(make_case output-sweep-home-prefix)
+  mkdir -p "$case_dir/store/home-oldjob"
+  printf 'x\n' > "$case_dir/store/home-oldjob/artifact"
+  out=$(output_sweep_with_store "$case_dir" "$case_dir/store" --delete) || fail "sweep failed: $out"
+  printf '%s\n' "$out" | grep -E "^unrecorded .* $case_dir/store/home-oldjob$" >/dev/null || fail "unrecorded home-* folder not listed: $out"
+  [ -f "$case_dir/store/home-oldjob/artifact" ] || fail "the sweep deleted an unrecorded home-* folder"
+  pass "an unrecorded home-* folder is listed as a whole and never deleted"
+}
+
 test_output_sweep_lists_unrecorded_siblings_in_a_home_folder() {
   local case_dir out home
   case_dir=$(make_case output-sweep-siblings)
@@ -6782,6 +6813,8 @@ test_local_only_fork_remote_allows
 test_teardown_closes_the_backlog_item_itself
 test_output_build_is_removed_and_proof_is_kept
 test_output_incomplete_holder_listing_keeps_the_folder
+test_output_sweep_skips_a_task_being_spawned
+test_output_sweep_lists_an_unrecorded_home_prefixed_folder
 test_output_sweep_lists_unrecorded_siblings_in_a_home_folder
 test_output_failed_record_write_keeps_the_task_record
 test_output_redirected_home_key_is_never_used_or_scanned
