@@ -738,6 +738,369 @@ test_local_only_fork_remote_allows() {
   pass "local-only worktree with HEAD on a fork remote is torn down and the home summary is refreshed"
 }
 
+# --- Task output folder (bin/fm-task-output-lib.sh): teardown deletes the
+# recorded build folder and keeps proof. Every path lives under the case dir.
+output_case() {  # <name> -> case dir with an output root, a landed task and a recorded folder
+  local case_dir
+  case_dir=$(make_case "$1")
+  mkdir -p "$case_dir/data/outroot/task-x1/build/deep" "$case_dir/data/outroot/task-x1/proof"
+  printf 'rebuildable\n' > "$case_dir/data/outroot/task-x1/build/deep/artifact"
+  printf 'screenshot\n' > "$case_dir/data/outroot/task-x1/proof/shot.png"
+  write_meta "$case_dir" no-mistakes ship
+  printf '%s\n' 'pr=https://github.com/example/repo/pull/7' \
+    "output_build=$case_dir/data/outroot/task-x1/build" \
+    "output_proof=$case_dir/data/outroot/task-x1/proof" >> "$case_dir/state/task-x1.meta"
+  printf '%s\n' "$case_dir"
+}
+
+test_output_build_is_removed_and_proof_is_kept() {
+  local case_dir out
+  case_dir=$(output_case output-removed)
+  mkdir -p "$case_dir/data/outroot/other-job/build" "$case_dir/outside"
+  printf 'other\n' > "$case_dir/data/outroot/other-job/build/keep"
+  printf 'outside\n' > "$case_dir/outside/precious"
+  ln -s "$case_dir/outside" "$case_dir/data/outroot/task-x1/build/escape"
+  out=$(run_teardown "$case_dir") || fail "teardown failed with a recorded output folder: $out"
+  assert_absent "$case_dir/data/outroot/task-x1/build" "recorded build folder survived teardown"
+  [ -f "$case_dir/data/outroot/task-x1/proof/shot.png" ] || fail "the cited proof file was removed"
+  [ -f "$case_dir/data/outroot/other-job/build/keep" ] || fail "another task's folder was touched"
+  [ -f "$case_dir/outside/precious" ] || fail "a symlink inside the build folder was followed"
+  printf '%s\n' "$out" | grep -F "teardown task-x1 output freed" >/dev/null || fail "no freed line: $out"
+  printf '%s\n' "$out" | grep -F "output kept (proof folder" >/dev/null || fail "no kept proof line: $out"
+  assert_absent "$case_dir/data/task-x1/output.record" "a fully removed folder left a sweep record"
+  pass "teardown removes the recorded build folder, keeps proof, and never follows a symlink out"
+}
+
+test_output_held_file_is_skipped_even_when_forced() {
+  local case_dir out holder
+  case_dir=$(output_case output-held)
+  ( exec 3< "$case_dir/data/outroot/task-x1/build/deep/artifact"; exec sleep 60 ) &
+  holder=$!
+  sleep 1
+  out=$(run_teardown "$case_dir" --force) || { kill "$holder" 2>/dev/null; fail "forced teardown failed: $out"; }
+  [ -f "$case_dir/data/outroot/task-x1/build/deep/artifact" ] || { kill "$holder" 2>/dev/null; fail "a held file was deleted"; }
+  printf '%s\n' "$out" | grep -F "output kept (held by a running process" >/dev/null \
+    || { kill "$holder" 2>/dev/null; fail "no held line: $out"; }
+  assert_grep "output_build=$case_dir/data/outroot/task-x1/build" "$case_dir/data/task-x1/output.record" \
+    "a kept folder left no sweep record"
+  kill "$holder" 2>/dev/null || true
+  wait "$holder" 2>/dev/null || true
+  # The sweep lists first, deletes only with --delete, and never touches an unrecorded folder.
+  mkdir -p "$case_dir/data/outroot/stray/build"
+  printf 'x\n' > "$case_dir/data/outroot/stray/build/f"
+  local sweep="$ROOT/bin/fm-output-sweep.sh"
+  out=$(FM_HOME="$case_dir" FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$case_dir/state" \
+    FM_DATA_OVERRIDE="$case_dir/data" FM_CONFIG_OVERRIDE="$case_dir/config" bash "$sweep") || fail "sweep list failed"
+  printf '%s\n' "$out" | grep -F "would-free" >/dev/null || fail "sweep did not list the recorded folder: $out"
+  [ -f "$case_dir/data/outroot/task-x1/build/deep/artifact" ] || fail "sweep without --delete removed a folder"
+  out=$(FM_HOME="$case_dir" FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$case_dir/state" \
+    FM_DATA_OVERRIDE="$case_dir/data" FM_CONFIG_OVERRIDE="$case_dir/config" bash "$sweep" --delete) || fail "sweep --delete failed"
+  assert_absent "$case_dir/data/outroot/task-x1/build" "sweep --delete left the recorded folder"
+  [ -f "$case_dir/data/outroot/stray/build/f" ] || fail "sweep deleted a folder no record names"
+  printf '%s\n' "$out" | grep -F "unrecorded" >/dev/null || fail "sweep did not list the unrecorded folder: $out"
+  pass "a held output folder is skipped, recorded, and later swept; an unrecorded folder is only listed"
+}
+
+test_output_guard_refusals_leave_folders_alone() {
+  local case_dir out
+  case_dir=$(output_case output-guard)
+  # Another live task records the same build folder.
+  fm_write_meta "$case_dir/state/other-live.meta" "kind=ship" "output_build=$case_dir/data/outroot/task-x1/build"
+  out=$(run_teardown "$case_dir" --force) || fail "teardown failed: $out"
+  [ -f "$case_dir/data/outroot/task-x1/build/deep/artifact" ] || fail "a folder a live task records was deleted"
+  printf '%s\n' "$out" | grep -F "recorded by live task other-live" >/dev/null || fail "no shared line: $out"
+  # Outside every root, two levels deep rule, and a symlinked record.
+  case_dir=$(output_case output-guard-paths)
+  mkdir -p "$case_dir/elsewhere/a/b" "$case_dir/real-target/x"
+  printf 'e\n' > "$case_dir/elsewhere/a/b/f"
+  printf 'r\n' > "$case_dir/real-target/x/f"
+  rm -rf "$case_dir/data/outroot/task-x1/build"
+  ln -s "$case_dir/real-target" "$case_dir/data/outroot/task-x1/build"
+  out=$(run_teardown "$case_dir") || fail "teardown failed on a symlinked record: $out"
+  [ -f "$case_dir/real-target/x/f" ] || fail "a symlinked record was followed"
+  printf '%s\n' "$out" | grep -F "the recorded path is a symlink" >/dev/null || fail "no symlink line: $out"
+  case_dir=$(output_case output-guard-outside)
+  mkdir -p "$case_dir/elsewhere/a/b"
+  printf 'e\n' > "$case_dir/elsewhere/a/b/f"
+  printf '%s\n' "output_build=$case_dir/elsewhere/a/b" >> "$case_dir/state/task-x1.meta"
+  out=$(run_teardown "$case_dir") || fail "teardown failed on an outside record: $out"
+  [ -f "$case_dir/elsewhere/a/b/f" ] || fail "a folder outside every output root was deleted"
+  printf '%s\n' "$out" | grep -F "outside the output roots" >/dev/null || fail "no outside line: $out"
+  case_dir=$(make_case output-guard-shallow)
+  mkdir -p "$case_dir/data/lonely/deep"
+  printf 'x\n' > "$case_dir/data/lonely/deep/f"
+  write_meta "$case_dir" no-mistakes ship
+  printf '%s\n' 'pr=https://github.com/example/repo/pull/7' "output_build=$case_dir/data/lonely" >> "$case_dir/state/task-x1.meta"
+  out=$(run_teardown "$case_dir") || fail "teardown failed on a shallow record: $out"
+  [ -f "$case_dir/data/lonely/deep/f" ] || fail "a one-level folder under a root was deleted as a build folder"
+  printf '%s\n' "$out" | grep -F "fewer than two levels deep" >/dev/null || fail "no depth refusal line: $out"
+  pass "the delete guard keeps shared, symlinked, outside-root and too-shallow records"
+}
+
+output_sweep_with_store() {  # <case_dir> <scratch-store> [sweep args]: the sweep run from a scratch copy of bin/ whose store root is the scratch store
+  local case_dir=$1 store=$2
+  shift 2
+  rm -rf "$case_dir/binctl"
+  cp -r "$ROOT/bin" "$case_dir/binctl"
+  sed -i "s#^FM_TASK_OUTPUT_STORE_ROOT=.*#FM_TASK_OUTPUT_STORE_ROOT=$store#" "$case_dir/binctl/fm-task-output-lib.sh"
+  grep -qx "FM_TASK_OUTPUT_STORE_ROOT=$store" "$case_dir/binctl/fm-task-output-lib.sh" || fail "could not point the scratch copy at the scratch store"
+  env -u FM_TASK_OUTPUT_NO_STORE FM_HOME="$case_dir" FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$case_dir/state" \
+    FM_DATA_OVERRIDE="$case_dir/data" FM_CONFIG_OVERRIDE="$case_dir/config" bash "$case_dir/binctl/fm-output-sweep.sh" "$@"
+}
+
+output_dir_in_store() {  # <case_dir> <scratch-store>: fm_task_output_dir for task-x1 with the store pointed at a scratch dir in this process only
+  # shellcheck disable=SC2030 # subshell scoped on purpose
+  ( unset FM_TASK_OUTPUT_NO_STORE; . "$ROOT/bin/fm-task-output-lib.sh"; FM_TASK_OUTPUT_STORE_ROOT=$2; fm_task_output_dir "$1/data" task-x1 )
+}
+
+test_output_incomplete_holder_listing_keeps_the_folder() {
+  local case_dir out mode real_lsof
+  real_lsof=$(command -v lsof) || { pass "skipped: lsof is not installed"; return; }
+  for mode in stderr status ok; do
+    case_dir=$(output_case "output-lsof-$mode")
+    case "$mode" in
+      stderr) body='echo "n/somewhere/else"; echo "lsof: cannot read another user" >&2; exit 0' ;;
+      status) body='echo "n/somewhere/else"; exit 2' ;;
+      ok) body='echo "n/somewhere/else"; exit 0' ;;
+    esac
+    printf '#!/bin/sh\nif [ "$*" = "-w -F n" ]; then %s; fi\nexec %s "$@"\n' "$body" "$real_lsof" > "$case_dir/fakebin/lsof"
+    chmod +x "$case_dir/fakebin/lsof"
+    out=$(run_teardown "$case_dir" --force 2>&1) || fail "$mode: teardown failed: $out"
+    if [ "$mode" = ok ]; then
+      assert_absent "$case_dir/data/outroot/task-x1/build" "a complete listing with no holder did not allow the delete"
+    else
+      [ -f "$case_dir/data/outroot/task-x1/build/deep/artifact" ] || fail "$mode: a folder was deleted though the holder listing was incomplete"
+      printf '%s\n' "$out" | grep -F "holders could not be listed" >/dev/null || fail "$mode: no held line: $out"
+    fi
+  done
+  pass "an lsof listing with diagnostics or a failing status keeps the folder; a complete one allows the delete"
+}
+
+test_output_sweep_skips_a_task_being_spawned() {
+  local case_dir out holder lock
+  case_dir=$(make_case output-sweep-spawn-race)
+  mkdir -p "$case_dir/data/task-x1" "$case_dir/data/spawned/build"
+  printf 'x\n' > "$case_dir/data/spawned/build/f"
+  printf 'output_build=%s\n' "$case_dir/data/spawned/build" > "$case_dir/data/task-x1/output.record"
+  lock=$(. "$ROOT/bin/fm-wake-lib.sh"; fm_meta_lock_path "$case_dir/state/task-x1.meta")
+  ( . "$ROOT/bin/fm-wake-lib.sh"; fm_lock_try_acquire "$lock" || exit 1; exec sleep 30 ) &
+  holder=$!
+  sleep 1
+  out=$(output_sweep_with_store "$case_dir" "$case_dir/store" --delete) || { kill "$holder" 2>/dev/null; fail "sweep failed: $out"; }
+  kill "$holder" 2>/dev/null || true
+  wait "$holder" 2>/dev/null || true
+  [ -f "$case_dir/data/spawned/build/f" ] || fail "the sweep deleted a folder of a task whose spawn lock was held: $out"
+  printf '%s\n' "$out" | grep -F "is being spawned or torn down" >/dev/null || fail "no skip line: $out"
+  out=$(output_sweep_with_store "$case_dir" "$case_dir/store" --delete) || fail "second sweep failed: $out"
+  assert_absent "$case_dir/data/spawned/build" "the sweep did not delete once the lock was free"
+  pass "the sweep skips a recorded folder while its task id's spawn lock is held, and deletes once it is free"
+}
+
+test_output_sweep_lists_an_unrecorded_home_prefixed_folder() {
+  local case_dir out
+  case_dir=$(make_case output-sweep-home-prefix)
+  mkdir -p "$case_dir/store/home-oldjob"
+  printf 'x\n' > "$case_dir/store/home-oldjob/artifact"
+  out=$(output_sweep_with_store "$case_dir" "$case_dir/store" --delete) || fail "sweep failed: $out"
+  printf '%s\n' "$out" | grep -E "^unrecorded .* $case_dir/store/home-oldjob$" >/dev/null || fail "unrecorded home-* folder not listed: $out"
+  [ -f "$case_dir/store/home-oldjob/artifact" ] || fail "the sweep deleted an unrecorded home-* folder"
+  pass "an unrecorded home-* folder is listed as a whole and never deleted"
+}
+
+test_output_sweep_lists_unrecorded_siblings_in_a_home_folder() {
+  local case_dir out home
+  case_dir=$(make_case output-sweep-siblings)
+  home="$case_dir/store/home-123"
+  mkdir -p "$home/task-a/build" "$home/task-b/build" "$case_dir/data/task-a"
+  printf 'a\n' > "$home/task-a/build/f"
+  printf 'b\n' > "$home/task-b/build/f"
+  printf 'output_build=%s\n' "$home/task-a/build" > "$case_dir/data/task-a/output.record"
+  out=$(output_sweep_with_store "$case_dir" "$case_dir/store" --delete) \
+    || fail "sweep failed: $out"
+  printf '%s\n' "$out" | grep -E "^unrecorded .* $home/task-b$" >/dev/null || fail "unrecorded sibling not listed: $out"
+  printf '%s\n' "$out" | grep -E "^unrecorded .* $home/task-a$" >/dev/null && fail "the recorded task was listed unrecorded: $out"
+  [ -f "$home/task-b/build/f" ] || fail "sweep deleted an unrecorded sibling"
+  assert_absent "$home/task-a/build" "sweep left the recorded folder"
+  pass "the sweep lists an unrecorded task folder inside a per-home folder and never deletes it"
+}
+
+test_output_failed_record_write_keeps_the_task_record() {
+  local case_dir out holder rc=0
+  [ "$(id -u)" != 0 ] || { pass "skipped: a failed record write cannot be simulated as root"; return; }
+  case_dir=$(output_case output-record-fails)
+  mkdir -p "$case_dir/data/task-x1"
+  chmod 500 "$case_dir/data/task-x1"
+  ( exec 3< "$case_dir/data/outroot/task-x1/build/deep/artifact"; exec sleep 60 ) &
+  holder=$!
+  sleep 1
+  out=$(run_teardown "$case_dir" --force 2>&1) || rc=$?
+  kill "$holder" 2>/dev/null || true
+  wait "$holder" 2>/dev/null || true
+  chmod 700 "$case_dir/data/task-x1"
+  [ "$rc" -ne 0 ] || fail "teardown succeeded though the leftover record could not be written: $out"
+  [ -f "$case_dir/state/task-x1.meta" ] || fail "the task record was removed with an unrecorded leftover: $out"
+  [ -f "$case_dir/data/outroot/task-x1/build/deep/artifact" ] || fail "the held file was deleted"
+  pass "a leftover record that cannot be written keeps the task record"
+}
+
+test_output_redirected_home_key_is_never_used_or_scanned() {
+  local case_dir out key
+  case_dir=$(make_case output-home-key-link)
+  mkdir -p "$case_dir/outside/victim-task/build" "$case_dir/store"
+  printf 'x\n' > "$case_dir/outside/victim-task/build/f"
+  key=$(. "$ROOT/bin/fm-task-output-lib.sh"; fm_task_output_home_key "$case_dir/data")
+  ln -s "$case_dir/outside" "$case_dir/store/$key"
+  out=$(output_dir_in_store "$case_dir" "$case_dir/store" 2>/dev/null)
+  [ "$out" = "$case_dir/data/task-x1" ] || fail "a redirected home key was used for the task folder: $out"
+  [ ! -e "$case_dir/outside/task-x1" ] || fail "a folder was created through the redirected home key"
+  out=$(output_sweep_with_store "$case_dir" "$case_dir/store" --delete)
+  printf '%s\n' "$out" | grep -F "victim-task" >/dev/null && fail "sweep scanned through a redirected home key: $out"
+  [ -f "$case_dir/outside/victim-task/build/f" ] || fail "sweep touched a redirected home key target"
+  rm "$case_dir/store/$key"
+  mkdir -p "$case_dir/store/$key" "$case_dir/outside/task-x1"
+  ln -s "$case_dir/outside/task-x1" "$case_dir/store/$key/task-x1"
+  if out=$(output_dir_in_store "$case_dir" "$case_dir/store" 2>/dev/null); then
+    fail "a symlinked task folder was accepted: $out"
+  fi
+  pass "a redirected per-home or task folder is never used, and a redirected home folder is never scanned"
+}
+
+test_output_dir_uses_the_store_and_spawn_creates_the_home_folder() {
+  local case_dir key out
+  case_dir=$(make_case output-dir-roots)
+  key=$(. "$ROOT/bin/fm-task-output-lib.sh"; fm_task_output_home_key "$case_dir/data")
+  mkdir -p "$case_dir/store"
+  out=$(output_dir_in_store "$case_dir" "$case_dir/store")
+  [ "$out" = "$case_dir/store/$key/task-x1" ] || fail "a writable store did not hold the task folder: $out"
+  ( . "$ROOT/bin/fm-task-output-lib.sh"; fm_task_output_prepare "$out" ) || fail "the task folder could not be prepared in the store"
+  [ -d "$case_dir/store/$key/task-x1/build" ] && [ -d "$case_dir/store/$key/task-x1/proof" ] || fail "prepare did not create the home folder with build/ and proof/"
+  mkdir -p "$case_dir/store2" "$case_dir/outside"
+  ln -s "$case_dir/outside" "$case_dir/store2/$key"
+  out=$(output_dir_in_store "$case_dir" "$case_dir/store2" 2>"$case_dir/reason")
+  [ "$out" = "$case_dir/data/task-x1" ] || fail "a symlinked home folder was used: $out"
+  assert_grep "falls back" "$case_dir/reason" "no printed reason for the fallback"
+  [ -z "$(ls -A "$case_dir/outside")" ] || fail "something was created through the symlinked home folder"
+  mkdir -p "$case_dir/store3"
+  : > "$case_dir/store3/$key"
+  out=$(output_dir_in_store "$case_dir" "$case_dir/store3" 2>/dev/null)
+  [ "$out" = "$case_dir/data/task-x1" ] || fail "a non-directory home folder was used: $out"
+  pass "spawn creates this home's store folder, and a symlinked or non-directory one falls back to data with a reason"
+}
+
+test_output_sweep_lists_hidden_unrecorded_folders() {
+  local case_dir out
+  case_dir=$(make_case output-sweep-hidden)
+  mkdir -p "$case_dir/data/old-task/.cargo" "$case_dir/store/.hidden-job"
+  printf 'x\n' > "$case_dir/data/old-task/.cargo/f"
+  printf 'x\n' > "$case_dir/store/.hidden-job/f"
+  out=$(output_sweep_with_store "$case_dir" "$case_dir/store" --delete) || fail "sweep failed: $out"
+  printf '%s\n' "$out" | grep -E "^unrecorded .* $case_dir/data/old-task/.cargo$" >/dev/null || fail "hidden data folder not listed: $out"
+  printf '%s\n' "$out" | grep -E "^unrecorded .* $case_dir/store/.hidden-job$" >/dev/null || fail "hidden store folder not listed: $out"
+  [ -f "$case_dir/data/old-task/.cargo/f" ] && [ -f "$case_dir/store/.hidden-job/f" ] || fail "sweep deleted an unrecorded hidden folder"
+  pass "the sweep lists hidden unrecorded folders in the data and store scans and never deletes them"
+}
+
+test_output_store_root_ignores_the_environment() {
+  local case_dir key out
+  case_dir=$(make_case output-env-ignored)
+  key=$(. "$ROOT/bin/fm-task-output-lib.sh"; fm_task_output_home_key "$case_dir/data")
+  mkdir -p "$case_dir/prod-backups/$key" "$case_dir/data/task-x1"
+  # shellcheck disable=SC2031 # subshell scoped on purpose
+  out=$(unset FM_TASK_OUTPUT_NO_STORE; export FM_TASK_OUTPUT_STORE_ROOT="$case_dir/prod-backups"; . "$ROOT/bin/fm-task-output-lib.sh"; fm_task_output_dir "$case_dir/data" task-x1)
+  case "$out" in *prod-backups*) fail "an exported store root changed the task folder: $out" ;; esac
+  mkdir -p "$case_dir/prod-backups/stray/build"
+  printf 'x\n' > "$case_dir/prod-backups/stray/build/f"
+  printf 'output_build=%s\n' "$case_dir/prod-backups/stray/build" > "$case_dir/data/task-x1/output.record"
+  out=$(FM_TASK_OUTPUT_STORE_ROOT="$case_dir/prod-backups" FM_HOME="$case_dir" FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$case_dir/state" \
+    FM_DATA_OVERRIDE="$case_dir/data" FM_CONFIG_OVERRIDE="$case_dir/config" bash "$ROOT/bin/fm-output-sweep.sh" --delete)
+  [ -f "$case_dir/prod-backups/stray/build/f" ] || fail "the sweep deleted under an exported store root: $out"
+  printf '%s\n' "$out" | grep -F "prod-backups" | grep -v "^kept" >/dev/null && fail "the sweep scanned an exported store root: $out"
+  pass "an exported FM_TASK_OUTPUT_STORE_ROOT changes neither the assigned folder, the delete guard nor the sweep"
+}
+
+test_output_record_keeps_a_reused_ids_earlier_leftover() {
+  local case_dir out
+  case_dir=$(make_case output-record-reuse)
+  mkdir -p "$case_dir/old-root/task-x1/build" "$case_dir/new-root/task-x1/build" "$case_dir/data/task-x1"
+  out=$(. "$ROOT/bin/fm-task-output-lib.sh"
+    fm_task_output_record_leftover "$case_dir/data" task-x1 "$case_dir/old-root/task-x1/build"
+    fm_task_output_record_leftover "$case_dir/data" task-x1 "$case_dir/new-root/task-x1/build"
+    rm -rf "$case_dir/new-root/task-x1/build"
+    fm_task_output_record_leftover "$case_dir/data" task-x1) || fail "record helper failed: $out"
+  assert_grep "output_build=$case_dir/old-root/task-x1/build" "$case_dir/data/task-x1/output.record" "the earlier leftover was lost"
+  rm -rf "$case_dir/old-root/task-x1/build"
+  ( . "$ROOT/bin/fm-task-output-lib.sh"; fm_task_output_record_leftover "$case_dir/data" task-x1 )
+  assert_absent "$case_dir/data/task-x1/output.record" "a record naming nothing on disk survived"
+  pass "a leftover record keeps an earlier leftover for a reused task id and drops finished ones"
+}
+
+test_output_sweep_lists_unrecorded_default_root_folders() {
+  local case_dir out
+  case_dir=$(make_case output-sweep-default)
+  mkdir -p "$case_dir/data/old-task/target" "$case_dir/data/old-task/proof"
+  printf 'x\n' > "$case_dir/data/old-task/target/f"
+  printf 'p\n' > "$case_dir/data/old-task/proof/shot.png"
+  out=$(FM_HOME="$case_dir" FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$case_dir/state" \
+    FM_DATA_OVERRIDE="$case_dir/data" FM_CONFIG_OVERRIDE="$case_dir/config" bash "$ROOT/bin/fm-output-sweep.sh" --delete) \
+    || fail "sweep failed: $out"
+  printf '%s\n' "$out" | grep -E "^unrecorded .* $case_dir/data/old-task/target$" >/dev/null || fail "unrecorded default-root folder not listed: $out"
+  [ -f "$case_dir/data/old-task/target/f" ] || fail "sweep deleted an unrecorded folder"
+  [ -f "$case_dir/data/old-task/proof/shot.png" ] || fail "sweep touched a proof folder"
+  pass "the sweep lists an unrecorded folder under the default data root and never deletes it"
+}
+
+test_secondmate_retirement_refuses_finished_child_proof() {
+  local case_dir home rc mode
+  for mode in ordinary forced; do
+    case_dir=$(make_case "secondmate-finished-child-$mode")
+    write_meta "$case_dir" local-only secondmate
+    home="$case_dir/secondmate-home"
+    mkdir -p "$home/state" "$home/data/done-child/proof" "$home/config" "$home/projects"
+    printf 'shot\n' > "$home/data/done-child/proof/shot.png"
+    printf '%s\n' task-x1 > "$home/.fm-secondmate-home"
+    printf '%s\n' "home=$home" >> "$case_dir/state/task-x1.meta"
+    add_treehouse_clean_fd "$case_dir"
+    rc=0
+    if [ "$mode" = forced ]; then
+      run_teardown "$case_dir" --force > "$case_dir/stdout" 2> "$case_dir/stderr" || rc=$?
+    else
+      run_teardown "$case_dir" > "$case_dir/stdout" 2> "$case_dir/stderr" || rc=$?
+    fi
+    [ "$rc" -ne 0 ] || fail "$mode retirement succeeded with a finished child's proof inside the home"
+    assert_grep "keeps proof files at $home/data/done-child/proof" "$case_dir/stderr" "$mode: no refusal naming the proof path"
+    [ -f "$home/data/done-child/proof/shot.png" ] || fail "$mode: the finished child's proof was removed"
+  done
+  pass "ordinary and forced secondmate retirement refuse while a finished child's proof sits inside the home"
+}
+
+test_forced_secondmate_refuses_child_proof_inside_home() {
+  local case_dir home child_wt rc=0
+  case_dir=$(make_case secondmate-child-proof)
+  write_meta "$case_dir" local-only secondmate
+  home="$case_dir/secondmate-home"
+  mkdir -p "$home/state" "$home/data/child-scout/proof" "$home/config" "$home/projects"
+  printf 'shot\n' > "$home/data/child-scout/proof/shot.png"
+  printf '%s\n' task-x1 > "$home/.fm-secondmate-home"
+  printf '%s\n' "home=$home" >> "$case_dir/state/task-x1.meta"
+  child_wt="$case_dir/child-scout-wt"
+  git -C "$case_dir/project" worktree add -q -b fm/child-scout "$child_wt" main
+  fm_write_meta "$home/state/child-scout.meta" \
+    "window=firstmate:fm-child-scout" \
+    "endpoint_task_id=child-scout" \
+    "worktree=$child_wt" \
+    "project=$case_dir/project" \
+    "kind=scout" \
+    "mode=local-only" \
+    "output_build=$home/data/child-scout/build" \
+    "output_proof=$home/data/child-scout/proof"
+  add_treehouse_clean_fd "$case_dir"
+  run_teardown "$case_dir" --force > "$case_dir/stdout" 2> "$case_dir/stderr" || rc=$?
+  [ "$rc" -ne 0 ] || fail "forced retirement succeeded with child proof inside the home"
+  assert_grep "keeps proof files at $home/data/child-scout/proof" "$case_dir/stderr" "no refusal naming the proof path"
+  [ -f "$home/data/child-scout/proof/shot.png" ] || fail "the child proof file was removed"
+  pass "a forced secondmate retirement refuses while a child's proof sits inside the home"
+}
+
 test_teardown_closes_the_backlog_item_itself() {
   local case_dir out
   case_dir=$(make_case tasks-axi-close)
@@ -6450,6 +6813,22 @@ test_forced_secondmate_own_missing_adapter_sibling_refuses_before_child_cleanup
 test_retained_sources_still_reach_the_ordinary_refusal
 test_local_only_fork_remote_allows
 test_teardown_closes_the_backlog_item_itself
+test_output_build_is_removed_and_proof_is_kept
+test_output_incomplete_holder_listing_keeps_the_folder
+test_output_sweep_skips_a_task_being_spawned
+test_output_sweep_lists_an_unrecorded_home_prefixed_folder
+test_output_sweep_lists_unrecorded_siblings_in_a_home_folder
+test_output_failed_record_write_keeps_the_task_record
+test_output_redirected_home_key_is_never_used_or_scanned
+test_output_dir_uses_the_store_and_spawn_creates_the_home_folder
+test_output_sweep_lists_hidden_unrecorded_folders
+test_output_store_root_ignores_the_environment
+test_output_record_keeps_a_reused_ids_earlier_leftover
+test_output_sweep_lists_unrecorded_default_root_folders
+test_secondmate_retirement_refuses_finished_child_proof
+test_forced_secondmate_refuses_child_proof_inside_home
+test_output_held_file_is_skipped_even_when_forced
+test_output_guard_refusals_leave_folders_alone
 test_teardown_closes_a_gerrit_task_with_its_change_url_as_a_note
 test_teardown_closes_a_gitlab_task_with_its_merge_request_url_as_a_note
 test_teardown_manual_backend_leaves_the_backlog_to_the_operator

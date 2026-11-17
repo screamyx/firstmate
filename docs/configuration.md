@@ -11,6 +11,7 @@ Start with the directory layout, then use the setting reference for the behavior
 | A project's delivery posture, base branch, or worktree pool location | The project registry, `data/projects.md`, whose format the header of [`bin/fm-project-mode.sh`](../bin/fm-project-mode.sh) owns |
 | Task windows and worker tools | [Runtime backend](#runtime-backend-configbackend--fm_backend) and [harness support](#harness-support) |
 | Worker permissions, accounts, or environment | [Codex approval review](#codex-automatic-approval-review), [Claude permission mode](#claude-permission-mode-configclaude-permission-mode), [Claude worker tool scope](#claude-worker-tool-scope-configclaude-worker-no-mcp-configclaude-worker-deny), [Codex permission mode](#codex-permission-mode-configcodex-permission-mode), [persistent managed-policy failover](#persistent-managed-policy-failover), [worker account pin](#worker-account-pin-configclaude-account-configpi-account), [several Claude accounts](#several-claude-accounts-configclaude-accounts), [worker tool exclusions](#worker-tool-exclusions-configcrew-exclude-tools), [worker launch environment](#worker-launch-environment-configlaunch-env-allowlist), and its [Orca environment source](#orca-environment-source-configlaunch-env-tmux-session) |
+| Where a task keeps build output and proof outside its worktree | [Task output folder](#task-output-folder) |
 | Backlog, preferences, and memory | [Backlog backend](#backlog-backend-taskstoml--configbacklog-backend), [captain preferences](#captain-preferences-datacaptainmd--datacaptain-sharedmd), [external memory tiers](#external-memory-tiers-memory-layering-section), [record export](#record-export-configrecord-export-root), and [startup memory budget](#startup-memory-budget-configstartup-memory-budget) |
 | Supervision and presentation | [agb messaging](#agb-messaging-configagb), [Pi supervision branch](#pi-supervision-branch), [supervision host](#supervision-host-configsupervision-host), [Codex native Stop park](#codex-native-stop-park-configcodex-stop-park), [warm-cache compaction](#warm-cache-compaction-configwarm-compact), and [Calm preference](#calm-preference-configcalm) |
 | Persistent secondmates | [Secondmate routes](#secondmate-routes-datasecondmatesmd) |
@@ -903,6 +904,24 @@ A registration made earlier publishes nothing, and registering again after the g
 The `direct-PR` and `local-only` modes and Gerrit changes are unaffected.
 The child's own `done` line still reaches the parent through `bin/fm-inactive-reconcile.sh`.
 The flag is a home-local preference and is not inherited by secondmate homes; [`bin/fm-pr-check.sh`](../bin/fm-pr-check.sh) owns the mechanics.
+
+## Task output folder
+
+Every ship and scout task gets its own output folder outside its worktree, with a `build/` part for rebuildable output (cargo target, cargo-home, node_modules, build dirs, lab binaries) and a `proof/` part for files a PR body cites.
+There are exactly two roots, and no environment variable or config file changes either.
+When `/store/agent-outputs` is a real, writable directory, spawn creates this home's `/store/agent-outputs/home-<key>/` (one level, never through a symlink) and the task folder is `/store/agent-outputs/home-<key>/<task-id>/`; `<key>` is printed by `fm_task_output_home_key` in `bin/fm-task-output-lib.sh`.
+If `home-<key>` is a symlink, not a directory, or not writable, spawn prints why and uses `data/<task-id>/` in this home instead.
+`FM_TASK_OUTPUT_NO_STORE=1` only switches the store off (the test suites set it); it cannot point either root elsewhere.
+`bin/fm-spawn.sh` creates both parts, records them in `state/<id>.meta` as `output_build=` and `output_proof=`, and appends the recorded folder to the launch brief; a relaunch keeps the recorded values, and a task spawned before this feature gets a folder assigned and recorded on its first relaunch.
+`bin/fm-brief.sh` and `bin/fm-promote.sh` name the same folder through the same resolver, so briefs point `CARGO_TARGET_DIR` and other build output at `build/`.
+Teardown reads only those two keys: it deletes the recorded `build/` folder, keeps `proof/` whole, and prints one `output freed` or `output kept` line per folder.
+A build folder teardown had to keep is written to `data/<id>/output.record`, and `bin/fm-output-sweep.sh` (list by default, `--delete` to remove) reads that record for tasks whose meta is gone.
+The sweep lists, and never deletes, folders under the two roots that no record names, and tasks that ended before this feature left no record.
+[`bin/fm-task-output-lib.sh`](../bin/fm-task-output-lib.sh) owns the delete guard (output roots, depth, symlinks, held files, overlap with live tasks), which `--force` does not relax.
+The spawn adds the folder to the Claude `--add-dir` and Rovo `allowedExternalPaths` grants.
+Rovo's bash stays confined to the worktree, so a Rovo worker builds inside its worktree and uses the folder only for proof through its file tools; its briefs say so.
+A secondmate home is not retired while a finished child's `proof/` files or `output.record` still sit inside it; move them out first.
+The held-file check uses `lsof`, which only sees the calling user's processes, and a folder is treated as held when `lsof` is missing or fails; a live-task check reads only this home's `state/`.
 
 ## Task status archive (config/status-archive)
 

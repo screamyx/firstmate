@@ -246,6 +246,12 @@ if [ -n "$PROMOTE_PROJECT" ]; then
   [ "$MODE" != no-mistakes ] || PR_TEXT=${PROMOTE_STANDING_PR:-auto}
 fi
 BASE_BRANCH=$(sed -n 's/^base_branch=//p' "$META" | head -n 1)
+OUTPUT_BUILD_REC=$(sed -n 's/^output_build=//p' "$META" | tail -n 1)
+OUTPUT_PROOF_REC=$(sed -n 's/^output_proof=//p' "$META" | tail -n 1)
+OUTPUT_PROOF_WORDS="under \`$DATA/$ID/\` "
+if [ -n "$OUTPUT_BUILD_REC" ] && [ -n "$OUTPUT_PROOF_REC" ]; then
+  OUTPUT_PROOF_WORDS="rebuildable output under \`$OUTPUT_BUILD_REC/\` (teardown deletes it) and proof under \`$OUTPUT_PROOF_REC/\` (teardown keeps it); a rovo worker, whose bash is confined to the worktree, builds inside the worktree instead, "
+fi
 fm_base_branch_valid "$BASE_BRANCH" "$MODE" "$FORGE" "fm-promote.sh $ID" || exit 1
 # The same self-repository publication gate bin/fm-spawn.sh applies to a fresh
 # ship spawn runs here on the recorded project: a promoted scout reaches no
@@ -333,7 +339,7 @@ This section supersedes every earlier brief instruction about delivery mode.
 These current ship instructions supersede the scout delivery rules and report-based Definition of done.
 Any earlier "Never push" or scout-only delivery language in this file is superseded.
 This replaces the scout rule limiting outside-worktree writes to the report and status file.
-Keep project edits inside this worktree; keep proof and scratch output outside it, under \`$DATA/$ID/\` or a temporary directory.
+Keep project edits inside this worktree; keep proof and scratch output outside it, ${OUTPUT_PROOF_WORDS}or a temporary directory.
 Outside the worktree, write only that task material and the status and steering-inbox records authorized below.
 Leave the worktree clean before reporting done.
 The mode-specific Definition of done below is the current delivery contract.

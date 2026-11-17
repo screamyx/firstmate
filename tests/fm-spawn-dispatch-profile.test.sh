@@ -2846,6 +2846,21 @@ claude_expected_launch() {  # <launch> <home> <id> <permission-flag>
   printf '%s' "export COMPACT_ADVISER_DISABLE=1; $(task_inbox_export "$2" "$3")$(fm_test_launch_git_prefix "$1")env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false CLAUDE_CODE_SEND_FEEDBACK=0 claude $4 --no-chrome $(claude_worker_add_dirs "$2" "$3")--settings '{\"feedbackDrafts\":\"off\",\"attribution\":{\"commit\":\"\",\"pr\":\"\",\"sessionUrl\":false}}' $CLAUDE_CONTROL_CHANNEL_FLAG $quoted"
 }
 
+test_rovo_brief_keeps_builds_in_the_worktree() {
+  local rec id out status brief
+  id=output-rovo-z21
+  rec=$(make_spawn_case output-rovo rovo "$id")
+  read_case_record "$rec"
+  fm_fake_exit0 "$FAKEBIN_DIR" rovo
+  out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR")
+  status=$?
+  assert_contains "$out" "did not show a verified ready signal" "the rovo spawn failed before the brief was written: $out"
+  brief=$(cat "$HOME_DIR/data/$id/launch-brief.md")
+  assert_contains "$brief" "build inside the worktree" "the rovo brief does not contain builds in the worktree"
+  assert_not_contains "$brief" "teardown deletes that folder" "the rovo brief still tells the worker to build in the external folder"
+  pass "a rovo launch brief keeps builds in the worktree and proof in the output folder"
+}
+
 test_claude_permission_mode_absent_defaults_to_bypass() {
   local rec id out status launch expected
   id=permmode-absent-z18
@@ -3314,6 +3329,7 @@ test_claude_forwards_firstmate_config_dir_when_set
 test_lavish_server_address_is_exported_to_worker_launch
 test_lavish_absent_config_preserves_destination_ambient
 test_claude_omits_config_dir_prefix_when_unset
+test_rovo_brief_keeps_builds_in_the_worktree
 test_claude_permission_mode_absent_defaults_to_bypass
 test_claude_permission_mode_auto_opts_into_model_reviewed_launch
 test_claude_permission_mode_bypass_swaps_only_the_permission_flag

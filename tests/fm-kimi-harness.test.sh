@@ -278,6 +278,8 @@ Exercise Kimi dispatch.
 ## Firstmate spec
 Verify launch and delivery behavior.
 EOF
+  # shellcheck disable=SC2016 # backticks are literal brief markdown
+  printf 'Write build output under `%s/data/%s/build/`.\n' "$home" "$id" >> "$home/data/$id/brief.md"
   printf 'kimi\n' > "$home/config/crew-harness"
   fm_git_worktree "$proj" "$wt" "wt-$name"
   touch "$home/state/.last-watcher-beat"
@@ -359,6 +361,9 @@ test_kimi_launch_then_send_is_verified() {
   assert_grep 'effort=high' "$meta" "kimi meta did not retain the unsupported effort axis"
   assert_grep "tasktmp=$task_tmp" "$meta" "kimi meta did not record its task temp root"
   assert_present "$task_tmp/gotmp" "kimi spawn did not create its Go temp directory"
+  assert_grep "output_build=$HOME_DIR/data/$id/build" "$meta" "kimi meta did not record its output build folder"
+  assert_grep "output_proof=$HOME_DIR/data/$id/proof" "$meta" "kimi meta did not record its output proof folder"
+  assert_present "$HOME_DIR/data/$id/build" "kimi spawn did not create its output build folder"
   [ "$(path_mode "$task_tmp")" = 700 ] \
     || fail "kimi spawn left its task temp root readable by others: $(path_mode "$task_tmp")"
   launch_file=$(kimi_typed_launch_file "$CASE_DIR/tmux-calls.log")

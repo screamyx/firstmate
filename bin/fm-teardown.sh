@@ -552,6 +552,8 @@ fm_backlog_directory_present "$STATE" "state directory" || {
 }
 # shellcheck source=bin/fm-wake-lib.sh
 . "$SCRIPT_DIR/fm-wake-lib.sh"
+# shellcheck source=bin/fm-task-output-lib.sh
+. "$SCRIPT_DIR/fm-task-output-lib.sh"
 # Supervision lease guard: post-landing cleanup is overlap territory between
 # the two Pi supervision actors; refuse while the OTHER actor holds this
 # task's live lease (contract: bin/fm-lease-lib.sh; no-op in homes without
@@ -2881,6 +2883,21 @@ safe_rm_rf_child_worktree() {
   rm -rf -- "$target"
 }
 
+home_retained_output_refusal() {  # <abs-home> <label>
+  local home=$1 label=$2 dir
+  for dir in "$home"/data/*/; do
+    dir=${dir%/}
+    if [ -d "$dir/proof" ] && [ ! -L "$dir/proof" ] && [ -n "$(ls -A -- "$dir/proof" 2>/dev/null)" ]; then
+      echo "REFUSED: $label $home keeps proof files at $dir/proof; move them out of $home first, then retry; teardown changed nothing" >&2
+      return 1
+    fi
+    if [ -e "$dir/output.record" ] || [ -L "$dir/output.record" ]; then
+      echo "REFUSED: $label $home keeps a leftover build record at $dir/output.record; run bin/fm-output-sweep.sh or move the record out of $home first, then retry; teardown changed nothing" >&2
+      return 1
+    fi
+  done
+}
+
 validate_firstmate_home_for_removal() {
   local home=$1 label=$2 expected_id=${3:-} abs_home_path marker_id conflict child_id child_home
   [ -n "$home" ] || return 0
@@ -2908,6 +2925,7 @@ validate_firstmate_home_for_removal() {
       fi
     fi
   fi
+  home_retained_output_refusal "$abs_home_path" "$label" || return 1
   validate_firstmate_operational_dirs_for_removal "$abs_home_path" "$label" || return 1
   conflict=
   if conflict=$(registered_descendant_home_for_removal "$SECONDMATE_REG" "$abs_home_path"); then
@@ -3303,6 +3321,17 @@ preflight_descendant_treehouse_slots() {
   done
 }
 
+child_output_kept_inside_home() {  # <home> <child-id> <child-meta>
+  local home=$1 child_id=$2 child_meta=$3 proof
+  proof=$(meta_value "$child_meta" output_proof)
+  if [ -n "$proof" ] && [ -d "$proof" ] && [ -n "$(ls -A -- "$proof" 2>/dev/null)" ]; then
+    case "$proof/" in "$home"/*)
+      echo "REFUSED: child task $child_id keeps proof files at $proof, inside the home being retired; move them out of $home first, then retry; forced teardown changed nothing" >&2
+      return 1 ;;
+    esac
+  fi
+}
+
 validate_firstmate_home_children_removal() {
   local home=$1 sub_state child_meta child_id child_wt child_proj child_kind child_home child_backend child_orca_worktree_id
   sub_state="$home/state"
@@ -3317,6 +3346,7 @@ validate_firstmate_home_children_removal() {
     [ -n "$child_kind" ] || child_kind=ship
     child_backend=$(fm_backend_of_meta "$child_meta")
     teardown_require_backend_prerequisites "$child_backend" "$child_id" || return 1
+    [ "$child_kind" = secondmate ] || child_output_kept_inside_home "$home" "$child_id" "$child_meta" || return 1
     if [ "$child_kind" = secondmate ]; then
       child_home=$(meta_value "$child_meta" home)
       [ -n "$child_home" ] || child_home=$child_wt
@@ -3570,6 +3600,15 @@ cleanup_firstmate_home_children() {
       fi
     fi
     teardown_export_records "$sub_state" "$child_id" || return 1
+    if [ "$child_kind" != secondmate ] && [ -n "$(meta_value "$child_meta" output_build)" ]; then
+      fm_task_output_teardown "$child_id" "$sub_state" "$home/data" "$(meta_value "$child_meta" output_build)" \
+        "$(meta_value "$child_meta" output_proof)" \
+        || { echo "error: child $child_id left output that could not be recorded for the sweep; its task record is kept" >&2; return 1; }
+      if [ -e "$home/data/$child_id/output.record" ]; then
+        echo "REFUSED: child task $child_id still has build output recorded at $home/data/$child_id/output.record, inside the home being retired; move it out of $home or free it, then retry" >&2
+        return 1
+      fi
+    fi
     if [ "$child_kind" = secondmate ]; then
       child_home=$(meta_value "$child_meta" home)
       [ -n "$child_home" ] || child_home=$child_wt
@@ -4151,6 +4190,20 @@ fm_backend_clear_transition "$BACKEND" "$STATE" "$T" || true
 # Remove the per-task temp root (/tmp/fm-<id>/, incl. its gotmp/) recorded by spawn.
 # Read before the state-file rm below; empty (pre-fix tasks without tasktmp=) is a no-op.
 [ -n "$TASK_TMP" ] && rm -rf "$TASK_TMP"
+# Delete the task's rebuildable output folder outside the worktree and keep its
+# proof folder. bin/fm-task-output-lib.sh owns the guard, which --force does not
+# relax; a folder it refuses is reported as kept, and only a leftover whose
+# record cannot be written keeps the task record and fails the teardown.
+TASK_OUTPUT_BUILD=$(fm_meta_get "$META" output_build)
+if [ "$KIND" != secondmate ] && [ -n "$TASK_OUTPUT_BUILD" ]; then
+  fm_task_output_teardown "$ID" "$STATE" "$DATA" "$TASK_OUTPUT_BUILD" \
+    "$(fm_meta_get "$META" output_proof)" || {
+    fm_lock_release "$META_LOCK"
+    META_LOCK_HELD=0
+    echo "error: $ID's endpoint and local copy are cleaned up, but its leftover build output could not be recorded for the sweep; the task record is kept so it stays recoverable" >&2
+    exit 1
+  }
+fi
 # Retire only this Firstmate home's launch namespace. Its never-reused per-spawn
 # files leave the equal task-id namespace of every other home untouched.
 teardown_launch_home_token() {

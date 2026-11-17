@@ -994,6 +994,8 @@ if [ -e "$STATE" ] || [ -L "$STATE" ]; then
 fi
 # shellcheck source=bin/fm-ff-lib.sh
 . "$SCRIPT_DIR/fm-ff-lib.sh"
+# shellcheck source=bin/fm-task-output-lib.sh
+. "$SCRIPT_DIR/fm-task-output-lib.sh"
 # shellcheck source=bin/fm-wake-lib.sh
 . "$SCRIPT_DIR/fm-wake-lib.sh"
 # shellcheck source=bin/fm-classify-lib.sh
@@ -4046,6 +4048,9 @@ json_escape() {
 # crewmate flow's literal `echo ... >> status file` bash line therefore still
 # fails under rovo, but the worker recovers by falling back to its own file
 # tools for the same append (confirmed live), which the grant below does cover.
+# The same limit applies to a configured external task output folder: the grant
+# below lets rovo's file tools reach it, but rovo's bash cannot run a build
+# there, so a rovo worker builds inside its worktree instead.
 # --config-override itself is single-value (a second occurrence silently
 # discards the first, confirmed live), so this is the ONE place that must
 # also fold in agent.efficiencyLevel when a supported effort was requested.
@@ -4054,10 +4059,15 @@ json_escape() {
 # brief.md/launch-brief.md/report.md), the steering inbox directory (covers
 # every steer and its handled/ acknowledgement), and the status file itself.
 rovo_config_override_flag() {
-  local effort=$1 data_dir=$2 state_dir=$3 id=$4
-  local data_real state_real agent_json paths_json config_json
+  local effort=$1 data_dir=$2 state_dir=$3 id=$4 output_dir=${5:-}
+  local data_real state_real output_real agent_json paths_json config_json
   data_real=$(cd "$data_dir" && pwd -P) || return 1
   state_real=$(cd "$state_dir" && pwd -P) || return 1
+  output_real=
+  if [ -n "$output_dir" ]; then
+    output_real=$(cd "$output_dir" && pwd -P) || return 1
+    [ "$output_real" != "$data_real/$id" ] || output_real=
+  fi
   agent_json=
   case "$effort" in
   low | medium | high | max) agent_json="\"agent\":{\"efficiencyLevel\":\"$(json_escape "$effort")\"}," ;;
@@ -4066,6 +4076,7 @@ rovo_config_override_flag() {
     "$(json_escape "$data_real/$id")" \
     "$(json_escape "$state_real/$id.inbox")" \
     "$(json_escape "$state_real/$id.status")")
+  [ -z "$output_real" ] || paths_json="$paths_json,\"$(json_escape "$output_real")\""
   config_json="{${agent_json}\"toolPermissions\":{\"allowedExternalPaths\":[$paths_json]}}"
   printf -- '--config-override %s ' "$(shell_quote "$config_json")"
 }
@@ -4092,9 +4103,9 @@ rovo_config_override_flag() {
 # directory that does not exist at launch would leave the channel created
 # later outside the grant. The grant never covers the whole state/ (watcher
 # internals live there) or anything wider.
-claude_add_dirs_flag() {  # <kind> <state-dir> <data-dir> <code-root> <task-id>
-  local kind=$1 state_dir=$2 data_dir=$3 code_root=$4 id=$5
-  local state_real data_real root_real out='' d
+claude_add_dirs_flag() {  # <kind> <state-dir> <data-dir> <code-root> <task-id> [<output-dir>]
+  local kind=$1 state_dir=$2 data_dir=$3 code_root=$4 id=$5 output_dir=${6:-}
+  local state_real data_real root_real output_real out='' d
   local dirs=()
   state_real=$(cd "$state_dir" && pwd -P) || return 1
   case "$kind" in
@@ -4108,6 +4119,10 @@ claude_add_dirs_flag() {  # <kind> <state-dir> <data-dir> <code-root> <task-id>
     [ -d "$root_real/.agents/skills" ] || return 1
     mkdir -p "$state_real/operational-inbox" "$state_real/$id.inbox/handled" "$data_real/$id" || return 1
     dirs=("$state_real/operational-inbox" "$state_real/$id.inbox" "$data_real/$id" "$root_real/.agents/skills")
+    if [ -n "$output_dir" ]; then
+      output_real=$(cd "$output_dir" && pwd -P) || return 1
+      [ "$output_real" = "$data_real/$id" ] || dirs+=("$output_real")
+    fi
     ;;
   esac
   for d in "${dirs[@]}"; do
@@ -6363,6 +6378,36 @@ else
 fi
 mkdir -p "$TASK_TMP/gotmp"
 
+# Per-task output folder outside the worktree (bin/fm-task-output-lib.sh owns
+# the layout and the delete guard): <root>/<id>/build holds rebuildable output
+# and teardown deletes it, <root>/<id>/proof holds files a PR cites and stays.
+# A relaunch keeps the recorded values; one without a record (spawned before
+# this feature) is assigned a folder like a fresh spawn.
+TASK_OUTPUT_DIR=
+TASK_OUTPUT_RECORDED=
+[ "$RELAUNCH" -eq 0 ] || TASK_OUTPUT_RECORDED=$(fm_meta_get "$RELAUNCH_META" output_build)
+if [ -z "$TASK_OUTPUT_RECORDED" ] && [ "$KIND" != secondmate ]; then
+  TASK_OUTPUT_DIR=$(fm_task_output_dir "$DATA" "$ID") \
+    || { echo "error: the output folder for task $ID is a symlink; remove it, then retry" >&2; exit 1; }
+  fm_task_output_prepare "$TASK_OUTPUT_DIR" \
+    || { echo "error: task output folder $TASK_OUTPUT_DIR (build/ and proof/) could not be created as real, writable directories; check $FM_TASK_OUTPUT_STORE_ROOT and $DATA, then retry" >&2; exit 1; }
+fi
+
+TASK_OUTPUT_GRANT=$TASK_OUTPUT_DIR
+if [ -n "$TASK_OUTPUT_RECORDED" ]; then
+  TASK_OUTPUT_GRANT=${TASK_OUTPUT_RECORDED%/build}
+fi
+# shellcheck disable=SC2016 # backticks are literal brief markdown
+if [ -n "$TASK_OUTPUT_GRANT" ] && [ "$HARNESS" = rovo ]; then
+  printf '\n# Task output folder\nThis section is the assignment recorded for this task and overrides any other output folder or build-output instruction named above.\nYour bash is confined to the worktree: build inside the worktree, with CARGO_TARGET_DIR, CARGO_HOME, node_modules and build dirs there, and write no build output outside it.\nPut proof files a PR body cites (screenshots, videos, logs) under `%s/proof/` with your file tools; teardown keeps that folder.\n' \
+    "$TASK_OUTPUT_GRANT" >> "$BRIEF" \
+    || { echo "error: could not record the task output folder in $BRIEF" >&2; exit 1; }
+elif [ -n "$TASK_OUTPUT_GRANT" ]; then
+  printf '\n# Task output folder\nThis section is the assignment recorded for this task and overrides any other output folder named above.\nPut rebuildable output (CARGO_TARGET_DIR, CARGO_HOME, node_modules, build dirs, lab binaries) under `%s/build/`; teardown deletes that folder.\nPut proof files a PR body cites (screenshots, videos, logs) under `%s/proof/`; teardown keeps that folder.\n' \
+    "$TASK_OUTPUT_GRANT" "$TASK_OUTPUT_GRANT" >> "$BRIEF" \
+    || { echo "error: could not record the task output folder in $BRIEF" >&2; exit 1; }
+fi
+
 # Per-harness turn-end hook where enabled: a file that touches
 # state/<id>.turn-ended when the agent finishes a turn. Worktree-resident hooks
 # and token pointers stay out of git's view so they never block teardown's dirty
@@ -7418,6 +7463,9 @@ preserve_relaunch_meta() {
   [ -z "${BRANCH:-}" ] || echo "branch=$BRANCH"
   echo "tasktmp=$TASK_TMP"
   [ -z "$BASE_BRANCH" ] || echo "base_branch=$BASE_BRANCH"
+  # The task's output folder (bin/fm-task-output-lib.sh); a relaunch preserves
+  # the recorded lines below instead of writing them again.
+  [ -z "$TASK_OUTPUT_DIR" ] || printf 'output_build=%s/build\noutput_proof=%s/proof\n' "$TASK_OUTPUT_DIR" "$TASK_OUTPUT_DIR"
   [ -z "$UPSTREAM_CONSENT" ] || echo "upstream_consent=$UPSTREAM_CONSENT"
   # Read by bin/fm-dod-lib.sh's ready-report gate; absent on every other forge.
   [ "$EXTERNAL_REVIEW" = 0 ] || echo "forge=external"
@@ -7646,7 +7694,7 @@ else
   LAUNCH=${LAUNCH//__CLAUDEATTRIBUTION__/,'"attribution":{"commit":"","pr":"","sessionUrl":false}'}
 fi
 if [ "$HARNESS" = rovo ]; then
-  ROVOCONFIGOVERRIDE=$(rovo_config_override_flag "$EFFORT" "$DATA" "$STATE" "$ID") || {
+  ROVOCONFIGOVERRIDE=$(rovo_config_override_flag "$EFFORT" "$DATA" "$STATE" "$ID" "$TASK_OUTPUT_GRANT") || {
     echo "error: could not resolve this task's home paths for rovo's allowedExternalPaths grant" >&2
     exit 1
   }
@@ -7744,7 +7792,7 @@ case "$LAUNCH" in
 esac
 case "$LAUNCH" in
 *__CLAUDEADDDIRS__*)
-  CLAUDE_ADD_DIRS=$(claude_add_dirs_flag "$KIND" "$STATE" "$DATA" "$FM_ROOT" "$ID") || {
+  CLAUDE_ADD_DIRS=$(claude_add_dirs_flag "$KIND" "$STATE" "$DATA" "$FM_ROOT" "$ID" "$TASK_OUTPUT_GRANT") || {
     echo "error: could not resolve the task-channel directories for $ID's claude --add-dir grant" >&2
     exit 1
   }
