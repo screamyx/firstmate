@@ -183,10 +183,15 @@ fm_task_output_other_record() {
 # fm_task_output_held <real-dir>: 0 when a process holds anything inside it or
 # the holders cannot be listed (the safe answer), 1 when nothing does.
 fm_task_output_held() {
-  local dir=$1 out line rc=0
+  local dir=$1 out line rc=0 errf
   command -v lsof >/dev/null 2>&1 || return 0
-  out=$(lsof -w -F n 2>/dev/null) || rc=$?
-  [ "$rc" -le 1 ] && [ -n "$out" ] || return 0
+  errf=$(mktemp 2>/dev/null) || return 0
+  out=$(lsof -w -F n 2>"$errf") || rc=$?
+  if [ "$rc" -gt 1 ] || [ -s "$errf" ] || [ -z "$out" ]; then
+    rm -f -- "$errf"
+    return 0
+  fi
+  rm -f -- "$errf"
   while IFS= read -r line; do
     case "$line" in
       n"$dir"|n"$dir"/*) return 0 ;;

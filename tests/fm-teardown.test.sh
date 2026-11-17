@@ -826,10 +826,14 @@ test_output_guard_refusals_leave_folders_alone() {
   out=$(run_teardown "$case_dir") || fail "teardown failed on an outside record: $out"
   [ -f "$case_dir/elsewhere/a/b/f" ] || fail "a folder outside every output root was deleted"
   printf '%s\n' "$out" | grep -F "outside the output roots" >/dev/null || fail "no outside line: $out"
-  case_dir=$(output_case output-guard-shallow)
-  printf '%s\n' "output_build=$case_dir/data/outroot/task-x1" >> "$case_dir/state/task-x1.meta"
+  case_dir=$(make_case output-guard-shallow)
+  mkdir -p "$case_dir/data/lonely/deep"
+  printf 'x\n' > "$case_dir/data/lonely/deep/f"
+  write_meta "$case_dir" no-mistakes ship
+  printf '%s\n' 'pr=https://github.com/example/repo/pull/7' "output_build=$case_dir/data/lonely" >> "$case_dir/state/task-x1.meta"
   out=$(run_teardown "$case_dir") || fail "teardown failed on a shallow record: $out"
-  [ -f "$case_dir/data/outroot/task-x1/proof/shot.png" ] || fail "an id folder was deleted as a build folder"
+  [ -f "$case_dir/data/lonely/deep/f" ] || fail "a one-level folder under a root was deleted as a build folder"
+  printf '%s\n' "$out" | grep -F "fewer than two levels deep" >/dev/null || fail "no depth refusal line: $out"
   pass "the delete guard keeps shared, symlinked, outside-root and too-shallow records"
 }
 
@@ -846,6 +850,29 @@ output_sweep_with_store() {  # <case_dir> <scratch-store> [sweep args]: the swee
 
 output_dir_in_store() {  # <case_dir> <scratch-store>: fm_task_output_dir for task-x1 with the store pointed at a scratch dir in this process only
   ( unset FM_TASK_OUTPUT_NO_STORE; . "$ROOT/bin/fm-task-output-lib.sh"; FM_TASK_OUTPUT_STORE_ROOT=$2; fm_task_output_dir "$1/data" task-x1 )
+}
+
+test_output_incomplete_holder_listing_keeps_the_folder() {
+  local case_dir out mode real_lsof
+  real_lsof=$(command -v lsof) || { pass "skipped: lsof is not installed"; return; }
+  for mode in stderr status ok; do
+    case_dir=$(output_case "output-lsof-$mode")
+    case "$mode" in
+      stderr) body='echo "n/somewhere/else"; echo "lsof: cannot read another user" >&2; exit 0' ;;
+      status) body='echo "n/somewhere/else"; exit 2' ;;
+      ok) body='echo "n/somewhere/else"; exit 0' ;;
+    esac
+    printf '#!/bin/sh\nif [ "$*" = "-w -F n" ]; then %s; fi\nexec %s "$@"\n' "$body" "$real_lsof" > "$case_dir/fakebin/lsof"
+    chmod +x "$case_dir/fakebin/lsof"
+    out=$(run_teardown "$case_dir" --force 2>&1) || fail "$mode: teardown failed: $out"
+    if [ "$mode" = ok ]; then
+      assert_absent "$case_dir/data/outroot/task-x1/build" "a complete listing with no holder did not allow the delete"
+    else
+      [ -f "$case_dir/data/outroot/task-x1/build/deep/artifact" ] || fail "$mode: a folder was deleted though the holder listing was incomplete"
+      printf '%s\n' "$out" | grep -F "holders could not be listed" >/dev/null || fail "$mode: no held line: $out"
+    fi
+  done
+  pass "an lsof listing with diagnostics or a failing status keeps the folder; a complete one allows the delete"
 }
 
 test_output_sweep_lists_unrecorded_siblings_in_a_home_folder() {
@@ -6754,6 +6781,7 @@ test_retained_sources_still_reach_the_ordinary_refusal
 test_local_only_fork_remote_allows
 test_teardown_closes_the_backlog_item_itself
 test_output_build_is_removed_and_proof_is_kept
+test_output_incomplete_holder_listing_keeps_the_folder
 test_output_sweep_lists_unrecorded_siblings_in_a_home_folder
 test_output_failed_record_write_keeps_the_task_record
 test_output_redirected_home_key_is_never_used_or_scanned

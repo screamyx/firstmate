@@ -6381,9 +6381,12 @@ mkdir -p "$TASK_TMP/gotmp"
 # Per-task output folder outside the worktree (bin/fm-task-output-lib.sh owns
 # the layout and the delete guard): <root>/<id>/build holds rebuildable output
 # and teardown deletes it, <root>/<id>/proof holds files a PR cites and stays.
-# A relaunch keeps the recorded values, so nothing is resolved or created again.
+# A relaunch keeps the recorded values; one without a record (spawned before
+# this feature) is assigned a folder like a fresh spawn.
 TASK_OUTPUT_DIR=
-if [ "$RELAUNCH" -eq 0 ] && [ "$KIND" != secondmate ]; then
+TASK_OUTPUT_RECORDED=
+[ "$RELAUNCH" -eq 0 ] || TASK_OUTPUT_RECORDED=$(fm_meta_get "$RELAUNCH_META" output_build)
+if [ -z "$TASK_OUTPUT_RECORDED" ] && [ "$KIND" != secondmate ]; then
   TASK_OUTPUT_DIR=$(fm_task_output_dir "$DATA" "$ID") \
     || { echo "error: the output folder for task $ID is a symlink; remove it, then retry" >&2; exit 1; }
   fm_task_output_prepare "$TASK_OUTPUT_DIR" \
@@ -6391,9 +6394,8 @@ if [ "$RELAUNCH" -eq 0 ] && [ "$KIND" != secondmate ]; then
 fi
 
 TASK_OUTPUT_GRANT=$TASK_OUTPUT_DIR
-if [ "$RELAUNCH" -eq 1 ] && [ "$KIND" != secondmate ]; then
-  TASK_OUTPUT_GRANT=$(fm_meta_get "$RELAUNCH_META" output_build)
-  [ -z "$TASK_OUTPUT_GRANT" ] || TASK_OUTPUT_GRANT=${TASK_OUTPUT_GRANT%/build}
+if [ -n "$TASK_OUTPUT_RECORDED" ]; then
+  TASK_OUTPUT_GRANT=${TASK_OUTPUT_RECORDED%/build}
 fi
 if [ -n "$TASK_OUTPUT_GRANT" ] && [ "$HARNESS" = rovo ]; then
   printf '\n# Task output folder\nThis section is the assignment recorded for this task and overrides any other output folder or build-output instruction named above.\nYour bash is confined to the worktree: build inside the worktree, with CARGO_TARGET_DIR, CARGO_HOME, node_modules and build dirs there, and write no build output outside it.\nPut proof files a PR body cites (screenshots, videos, logs) under `%s/proof/` with your file tools; teardown keeps that folder.\n' \
