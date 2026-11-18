@@ -6305,6 +6305,27 @@ fi
 spawn_enter_recorded_worktree
 spawn_assert_agent_worktree
 
+# Per-task output folder outside the worktree (bin/fm-task-output-lib.sh owns
+# the layout and the delete guard): <root>/<id>/build holds rebuildable output
+# and teardown deletes it, <root>/<id>/proof holds files a PR cites and stays.
+# A relaunch keeps the recorded values; one without a record (spawned before
+# this feature) is assigned a folder like a fresh spawn. Resolved before the
+# claude trust call below because that call registers this folder too.
+TASK_OUTPUT_DIR=
+TASK_OUTPUT_RECORDED=
+[ "$RELAUNCH" -eq 0 ] || TASK_OUTPUT_RECORDED=$(fm_meta_get "$RELAUNCH_META" output_build)
+if [ -z "$TASK_OUTPUT_RECORDED" ] && [ "$KIND" != secondmate ]; then
+  TASK_OUTPUT_DIR=$(fm_task_output_dir "$DATA" "$ID") \
+    || { echo "error: the output folder for task $ID is a symlink; remove it, then retry" >&2; exit 1; }
+  fm_task_output_prepare "$TASK_OUTPUT_DIR" \
+    || { echo "error: task output folder $TASK_OUTPUT_DIR (build/ and proof/) could not be created as real, writable directories; check $FM_TASK_OUTPUT_STORE_ROOT and $DATA, then retry" >&2; exit 1; }
+fi
+
+TASK_OUTPUT_GRANT=$TASK_OUTPUT_DIR
+if [ -n "$TASK_OUTPUT_RECORDED" ]; then
+  TASK_OUTPUT_GRANT=${TASK_OUTPUT_RECORDED%/build}
+fi
+
 # Pre-register Claude's workspace trust for the directory this launch starts in,
 # at the first point that directory is known and before any per-task state is
 # created below. The dialog gates the pane before the brief is ever read, and it
@@ -6338,6 +6359,14 @@ claude*)
   fi
   if ! "$FM_ROOT/bin/fm-claude-trust.sh" "${spawn_trust_args[@]}" >/dev/null; then
     echo "error: could not pre-register Claude workspace trust for $WT; refusing to launch a claude worker that would wedge on the trust dialog; $(spawn_endpoint_hint)" >&2
+    exit 1
+  fi
+  # The launch's --add-dir <task output folder> raises its own dialog, so that
+  # exact folder is registered too. A folder inside data/<id> is already covered
+  # by the home and is not added (claude_add_dirs_flag), so it is skipped here.
+  if [ -n "$TASK_OUTPUT_GRANT" ] && [ "$TASK_OUTPUT_GRANT" != "${DATA%/}/$ID" ] &&
+    ! "$FM_ROOT/bin/fm-claude-trust.sh" --output-dir "$TASK_OUTPUT_GRANT" "$DATA" "$STATE" "$ID" >/dev/null; then
+    echo "error: could not pre-register Claude workspace trust for the task output folder $TASK_OUTPUT_GRANT; refusing to launch a claude worker that would wedge on the trust dialog; $(spawn_endpoint_hint)" >&2
     exit 1
   fi
   ;;
@@ -6378,25 +6407,6 @@ else
 fi
 mkdir -p "$TASK_TMP/gotmp"
 
-# Per-task output folder outside the worktree (bin/fm-task-output-lib.sh owns
-# the layout and the delete guard): <root>/<id>/build holds rebuildable output
-# and teardown deletes it, <root>/<id>/proof holds files a PR cites and stays.
-# A relaunch keeps the recorded values; one without a record (spawned before
-# this feature) is assigned a folder like a fresh spawn.
-TASK_OUTPUT_DIR=
-TASK_OUTPUT_RECORDED=
-[ "$RELAUNCH" -eq 0 ] || TASK_OUTPUT_RECORDED=$(fm_meta_get "$RELAUNCH_META" output_build)
-if [ -z "$TASK_OUTPUT_RECORDED" ] && [ "$KIND" != secondmate ]; then
-  TASK_OUTPUT_DIR=$(fm_task_output_dir "$DATA" "$ID") \
-    || { echo "error: the output folder for task $ID is a symlink; remove it, then retry" >&2; exit 1; }
-  fm_task_output_prepare "$TASK_OUTPUT_DIR" \
-    || { echo "error: task output folder $TASK_OUTPUT_DIR (build/ and proof/) could not be created as real, writable directories; check $FM_TASK_OUTPUT_STORE_ROOT and $DATA, then retry" >&2; exit 1; }
-fi
-
-TASK_OUTPUT_GRANT=$TASK_OUTPUT_DIR
-if [ -n "$TASK_OUTPUT_RECORDED" ]; then
-  TASK_OUTPUT_GRANT=${TASK_OUTPUT_RECORDED%/build}
-fi
 # shellcheck disable=SC2016 # backticks are literal brief markdown
 if [ -n "$TASK_OUTPUT_GRANT" ] && [ "$HARNESS" = rovo ]; then
   printf '\n# Task output folder\nThis section is the assignment recorded for this task and overrides any other output folder or build-output instruction named above.\nYour bash is confined to the worktree: build inside the worktree, with CARGO_TARGET_DIR, CARGO_HOME, node_modules and build dirs there, and write no build output outside it.\nPut proof files a PR body cites (screenshots, videos, logs) under `%s/proof/` with your file tools; teardown keeps that folder.\n' \
