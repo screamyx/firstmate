@@ -108,4 +108,25 @@ test_host_settles_a_bare_idle_alert_for_an_unchanged_working_status() {
   [ "$(settle_case settle-after-signal 'stale: firstmate:fm-demo' '' working 'signal: firstmate:fm-demo')" = "1 1 0" ] \
     || fail "settle: the first idle alert after an outcome recorded for a signal must keep its turn"
   pass "host: a bare idle alert for an unchanged working status is consumed without an engine turn, unless the recorded outcome was for a signal"
+  test_host_does_not_credit_a_mixed_claim_as_idle_evidence
+}
+
+test_host_does_not_credit_a_mixed_claim_as_idle_evidence() {
+  local home="$TMP_ROOT/turn-wake" out
+  mkdir -p "$home/state" "$home/config"
+  out=$(FM_HOME="$home" FM_ROOT="$ROOT" bash -c '
+    SCRIPT_DIR=$FM_ROOT/bin
+    . "$SCRIPT_DIR/fm-wake-lib.sh"
+    . "$SCRIPT_DIR/fm-outcome-index-lib.sh"
+    . "$SCRIPT_DIR/fm-supervision-host-repeat-lib.sh"
+    fm_wake_append stale firstmate:fm-a "stale: firstmate:fm-a" || exit 9
+    fm_wake_append stale firstmate:fm-c "stale: firstmate:fm-c" || exit 9
+    fm_wake_append signal firstmate:fm-b "signal: fm-b working" || exit 9
+    printf "%s|%s|%s\n" "$(fm_host_repeat_turn_wake 1 "stale: firstmate:fm-a")" \
+      "$(fm_host_repeat_turn_wake "1 2" "stale: firstmate:fm-a")" \
+      "$(fm_host_repeat_turn_wake "1 3" "stale: firstmate:fm-a")"
+  ' 2>/dev/null | tail -n 1)
+  [ "$out" = "stale: firstmate:fm-a|stale: firstmate:fm-a|mixed claim: stale: firstmate:fm-a" ] \
+    || fail "turn wake: a claim holding a signal row must not be recorded as a stale wake (got: $out)"
+  pass "host: a turn's recorded wake is stale only when every claimed row is an idle alert"
 }

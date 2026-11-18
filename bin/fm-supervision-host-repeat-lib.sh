@@ -6,6 +6,11 @@
 # whatever the status (bin/fm-outcome-index-lib.sh fm_idle_repeat_recorded), is settled
 # without an engine turn.
 #
+# fm_host_repeat_turn_wake names the wake a turn records for its outcomes: the
+# first wake line when every claimed row is a stale alert, else that line
+# prefixed "mixed claim: ", so only an outcome whose own wake was an idle alert
+# counts as stale evidence for the task it reports.
+#
 # Needs from the host: SCRIPT_DIR, STATE, GEN, log_line, and the grant already
 # published for the claimed rows.
 #
@@ -25,6 +30,19 @@ fm_host_repeat_claim_is_bare_stale() {  # <rows>
     NF >= 5 && ($2 in want) { seen++; if ($3 != "stale" || $5 !~ /^stale: [^ ]+$/) bad = 1 }
     END { exit !(seen == n && !bad) }
   ' "$FM_WAKE_QUEUE" 2>/dev/null
+}
+
+fm_host_repeat_turn_wake() {  # <rows> <first wake line>
+  local rows=$1 first=$2
+  if [ -f "$FM_WAKE_QUEUE" ] && awk -F '\t' -v rows="$rows" '
+    BEGIN { n = split(rows, list, " "); for (i = 1; i <= n; i++) want[list[i]] = 1 }
+    NF >= 5 && ($2 in want) { seen++; if ($3 != "stale") bad = 1 }
+    END { exit !(seen > 0 && !bad) }
+  ' "$FM_WAKE_QUEUE" 2>/dev/null; then
+    printf '%s' "$first"
+  else
+    printf 'mixed claim: %s' "$first"
+  fi
 }
 
 fm_host_repeat_settle() {  # <rows> <tasks> <unscoped> <wake-line>

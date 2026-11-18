@@ -298,7 +298,7 @@ publish_outcome_index_ready() { # <seq>
 }
 
 rebuild_outcome_indexes() {
-  local rows task seq epoch endpoint ident wake f mtime
+  local rows task seq epoch endpoint ident f mtime
   rm -f -- "$OUTCOME_INDEX_READY" || return 1
   [ -s "$STORE" ] || { publish_outcome_index_ready 0; return; }
   rows=$(jq -r -s '
@@ -306,11 +306,10 @@ rebuild_outcome_indexes() {
     | group_by(.task)
     | map(.[-1])[]
     | [.task, (.seq | tostring), (.epoch | tostring),
-       ((.wake // "") | if startswith("stale:") then "stale" else "other" end),
        ((.statusEndpoint // "") | tostring), (.statusIdent // "")]
     | @tsv
   ' "$STORE") || return 1
-  while IFS=$(printf '\t') read -r task seq epoch wake endpoint ident; do
+  while IFS=$(printf '\t') read -r task seq epoch endpoint ident; do
     [ -n "$task" ] || continue
     if [ -z "$endpoint" ] || [ -z "$ident" ]; then
       f="$STATE/$task.status"
@@ -333,7 +332,7 @@ rebuild_outcome_indexes() {
         esac
       fi
     fi
-    write_outcome_index "$task" "$seq" "$wake" "$endpoint" "$ident" || return 1
+    write_outcome_index "$task" "$seq" other "$endpoint" "$ident" || return 1
   done <<EOF
 $rows
 EOF
