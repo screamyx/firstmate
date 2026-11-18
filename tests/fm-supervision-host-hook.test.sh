@@ -42,7 +42,6 @@ test_lost_boundary_handoff() { assert_lost_handoff_keeps_watching boundary; }
 
 test_lost_pass_through_handoff() { assert_lost_handoff_keeps_watching pass-through; }
 
-
 # A close that turns main-only at its turn hands back through the same opt-in
 # path and must keep its pass-through row too. The hand-back stops the successor
 # this turn confirmed, and the owner replaces that stopped arm within its poll,
