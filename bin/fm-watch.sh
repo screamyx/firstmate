@@ -2853,10 +2853,10 @@ stale_wait_record() {  # <window-key>
 # While the away-posture record exists the bound is absolute: nobody is there to
 # answer an open captain call and the return brief lists it. A needs-decision or
 # blocked status whose outcome is already recorded never re-alarms until it changes.
-captain_call_stale_bound() {  # <window-key> <task>
-  local key=$1 task=$2
+captain_call_stale_bound() {  # <window-key> <task> [dialog-name]
+  local key=$1 task=$2 dialog=${3-}
   STALE_WAIT_DECLARATION=
-  fm_open_question_recorded "$task" && return 0
+  [ -z "$dialog" ] && fm_open_question_recorded "$task" && return 0
   task_captain_call_open "$task" || return 1
   STALE_WAIT_DECLARATION=$(captain_call_declaration "$task" "$CAPTAIN_CALL_IDENTITY")
   away_record_present && return 0
@@ -2912,7 +2912,7 @@ surface_nonterminal_stale() {  # <window> <hash> [dialog-name]
     else
       stale_wait_throttled "$key" "$STALE_WAIT_DECLARATION" && throttled=0
     fi
-  elif captain_call_stale_bound "$key" "$task"; then
+  elif captain_call_stale_bound "$key" "$task" "$dialog"; then
     bounded=0
     throttled=0
   elif [ -z "$STALE_WAIT_DECLARATION" ] && unknown_alive_stale_bound "$win" "$task"; then
@@ -4345,7 +4345,7 @@ EOF
               date +%s > "$ssf"
               clear_write_tracking "$key"
               triage_log "absorbed stale (provably working, overriding a stale captain-relevant status): $w"
-            elif captain_call_stale_bound "$key" "$task"; then
+            elif captain_call_stale_bound "$key" "$task" "$dialog"; then
               # The line is captain-relevant and stays so, but the backlog says
               # the captain already holds this work: further NEW pane hashes with
               # the same status-log state have nothing to add while they are

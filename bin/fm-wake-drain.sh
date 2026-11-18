@@ -16,6 +16,8 @@
 # locked drain rotates such leftovers away before doing anything else.
 # FM_STATUS_PRESENTATION_LOCK_TIMEOUT sets the positive whole-second wait for
 # presentation-path locks (default 10); queue mutation locks remain blocking.
+# FM_WAKE_DRAIN_SETTLE_ONLY=1 (supervision host repeat skip) claims rows without
+# presenting status, so no undelivered status line is marked read.
 set -u
 
 SCRIPT_DIR="$(d=${BASH_SOURCE[0]%/*}; [ "$d" != "${BASH_SOURCE[0]}" ] || d=.; cd "${d:-/}" && pwd)"
@@ -1045,7 +1047,7 @@ DRAIN_LOCK_HELD=false
 printf 'WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through %s --recovery-generation %s\n' \
   "$ACK_THROUGH" "${RECOVERY_MARKER_TOKEN##*:}" >&2
 
-(print_status_presentation "$RAW_ROWS") || true
+[ "${FM_WAKE_DRAIN_SETTLE_ONLY:-0}" = 1 ] || (print_status_presentation "$RAW_ROWS") || true
 print_branch_outcomes_section || BRANCH_OUTCOMES_RC=1
 assert_watcher_liveness
 exit "$BRANCH_OUTCOMES_RC"

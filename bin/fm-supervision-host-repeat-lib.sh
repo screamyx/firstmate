@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 # fm-supervision-host-repeat-lib.sh - sourced by bin/fm-supervision-host.sh. The
 # repeat idle alert skip (docs/supervision-host.md "Repeat idle alerts"): a
-# claim made only of bare "stale: <pane>" rows for workers parked at an open
-# needs-decision or blocked event whose outcome is already recorded at the
-# status file's present position (bin/fm-outcome-index-lib.sh
-# fm_open_question_recorded) is settled without an engine turn.
+# claim made only of bare "stale: <pane>" rows for workers whose last outcome
+# is already recorded at the status file's present position, whatever the
+# status (bin/fm-outcome-index-lib.sh fm_status_position_recorded), is settled
+# without an engine turn.
 #
 # Needs from the host: SCRIPT_DIR, STATE, GEN, log_line, and the grant already
 # published for the claimed rows.
 #
 # fm_host_repeat_settle <rows> <tasks> <unscoped> <wake-line> returns 0 only
-# after it has consumed every claimed row through the branch drain and
-# acknowledgement the engine would have run, and logged one skip line. Anything
+# after it has consumed every claimed row through the branch drain (without presenting
+# status) and acknowledgement the engine would have run, and logged one skip line. Anything
 # short of that returns 1 with nothing acknowledged, and the caller runs the
 # turn as before. Decorated stale reasons (wedge escalations, unread
 # instructions, dialogs, dead agents) are never skipped.
@@ -32,9 +32,9 @@ fm_host_repeat_settle() {  # <rows> <tasks> <unscoped> <wake-line>
   [ "$unscoped" != 1 ] && [ -n "$tasks" ] || return 1
   fm_host_repeat_claim_is_bare_stale "$rows" || return 1
   for task in $tasks; do
-    fm_open_question_recorded "$task" || return 1
+    fm_status_position_recorded "$task" || return 1
   done
-  drain=$(FM_SUPERVISION_ACTOR=branch "$SCRIPT_DIR/fm-wake-drain.sh" 2>&1) || return 1
+  drain=$(FM_WAKE_DRAIN_SETTLE_ONLY=1 FM_SUPERVISION_ACTOR=branch "$SCRIPT_DIR/fm-wake-drain.sh" 2>&1) || return 1
   ack=$(printf '%s\n' "$drain" | sed -n 's/^WAKE_ACK_REQUIRED: after handling completes run bin\/fm-wake-drain.sh //p' | tail -1)
   [ -n "$ack" ] || return 1
   # shellcheck disable=SC2086 # the printed acknowledgement arguments
@@ -42,5 +42,5 @@ fm_host_repeat_settle() {  # <rows> <tasks> <unscoped> <wake-line>
   # shellcheck disable=SC2086 # rows is a space-separated list of sequence numbers.
   left=$(fm_wake_rows_queued $rows) || return 1
   [ -z "$left" ] || return 1
-  log_line "skipped-repeat	$wake	$tasks	no engine turn: the status is unchanged since the outcome already recorded for this open question"
+  log_line "skipped-repeat	$wake	$tasks	no engine turn: the status is unchanged since the outcome already recorded"
 }

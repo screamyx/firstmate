@@ -58,13 +58,13 @@ test_parked_question_is_not_raised_again_while_its_status_is_unchanged() {
 # a claim of bare idle alerts for a question whose outcome is recorded at the
 # status file's present position is consumed with no engine; anything else is
 # left untouched for the turn.
-# settle_case <name> <queued wake text> <status line after the outcome or ''>
+# settle_case <name> <queued wake text> <status line after the outcome or ''> [<status verb>]
 # prints "<settle rc> <rows left> <skip lines logged>".
 settle_case() {
   local home="$TMP_ROOT/$1"
   mkdir -p "$home/state" "$home/config"
   printf 'window=firstmate:fm-demo\nproject=demo\nkind=ship\nharness=pi\nbackend=tmux\n' > "$home/state/demo.meta"
-  append_status "$home" 'which schema do you want' blocked
+  append_status "$home" 'which schema do you want' "${4:-blocked}"
   FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append --task demo --verdict routine \
     --summary 'still waiting on the captain' >/dev/null || fail "$1: could not record the outcome"
   [ -z "${3:-}" ] || append_status "$home" "$3" blocked
@@ -97,5 +97,13 @@ test_host_leaves_every_other_idle_alert_for_its_turn() {
     || fail "settle: an alert after a newer status line must keep its turn (got: $r)"
   [ "$(settle_case settle-decorated 'stale: firstmate:fm-demo (idle 300s, possible wedge, escalation 1)' '')" = "1 1 0" ] \
     || fail "settle: a decorated idle alert must keep its turn"
+  [ "$(settle_case settle-working-escalated 'stale: firstmate:fm-demo (idle 300s, possible wedge, escalation 1)' '' working)" = "1 1 0" ] \
+    || fail "settle: an escalated idle alert for an unchanged working status must keep its turn"
   pass "host: an alert after a newer status line, or a decorated one, keeps its engine turn"
+}
+
+test_host_settles_a_bare_idle_alert_for_an_unchanged_working_status() {
+  [ "$(settle_case settle-working 'stale: firstmate:fm-demo' '' working)" = "0 0 1" ] \
+    || fail "settle: a bare idle alert for an unchanged working status was not consumed without a turn"
+  pass "host: a bare idle alert for an unchanged working status is consumed without an engine turn"
 }

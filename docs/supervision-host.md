@@ -186,8 +186,8 @@ The host counts the wake handled only when all three hold:
 
 A worker parked at an open `needs-decision` or `blocked` line raises one idle alert, and its first turn records an outcome.
 `bin/fm-outcome-index-lib.sh` `fm_open_question_recorded` answers whether that outcome was captured at the status file's present size and identity.
-While it holds, the watcher absorbs every further idle alert for that worker instead of queueing it, so a pane whose content keeps changing no longer costs a turn per change.
-A claim made only of bare `stale: <pane>` rows for such workers is also settled by the host without an engine turn: it runs the branch drain and acknowledgement, writes one `skipped-repeat` log line, and records no outcome (`bin/fm-supervision-host-repeat-lib.sh`).
+While it holds, and unless the pane shows a blocking dialog, the watcher absorbs every further idle alert for that worker instead of queueing it, so a pane whose content keeps changing no longer costs a turn per change.
+A claim made only of bare `stale: <pane>` rows for workers whose status file is still at the position of their last recorded outcome, whatever the status (`fm_status_position_recorded`), is also settled by the host without an engine turn: it runs the branch drain (presenting no status, so no unread note is marked read) and acknowledgement, writes one `skipped-repeat` log line, and records no outcome (`bin/fm-supervision-host-repeat-lib.sh`).
 Any new status line, a decorated stale reason (wedge escalation, unread instruction, dialog, dead agent), a signal, check, or heartbeat row in the claim, or an unreadable fingerprint runs the turn as before.
 
 ### Where a handled wake's outcome goes

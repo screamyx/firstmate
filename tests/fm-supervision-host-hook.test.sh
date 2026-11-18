@@ -567,4 +567,5 @@ fm_test_run \
   test_unrecorded_successor_is_stopped_rather_than_left_for_main \
   test_parked_question_is_not_raised_again_while_its_status_is_unchanged \
   test_host_settles_a_bare_idle_alert_for_a_recorded_question \
-  test_host_leaves_every_other_idle_alert_for_its_turn
+  test_host_leaves_every_other_idle_alert_for_its_turn \
+  test_host_settles_a_bare_idle_alert_for_an_unchanged_working_status

@@ -11,9 +11,10 @@
 # the file is unreadable or changed while read. The identity alone is a file
 # identity, not a content fingerprint, so a status position is the pair.
 #
-# fm_open_question_recorded <task> returns 0 only when the task's newest status
-# line is an open needs-decision or blocked event and the task's latest recorded
-# outcome was captured at exactly the status file's present position. Any
+# fm_status_position_recorded <task> returns 0 only when the task's latest
+# recorded outcome was captured at exactly the status file's present position
+# (any status verb). fm_open_question_recorded <task> adds that the newest status
+# line is an open needs-decision or blocked event. Any
 # missing, unreadable, or unready piece returns 1, so the caller treats the
 # question as new: a repeat alert or a paid turn costs less than a missed one.
 
@@ -86,17 +87,22 @@ capture_status_position() { # <task>
   CAPTURED_STATUS_IDENT=$ident
 }
 
-fm_open_question_recorded() {  # <task>
-  local task=$1 line verb
+fm_status_position_recorded() {  # <task>
+  local task=$1
   case "$task" in ''|*[!A-Za-z0-9._-]*) return 1 ;; esac
   outcome_index_ready_ok "$STATE/.branch-outcome-index-ready" || return 1
   load_branch_outcome_index "$task"
   [ "$BRANCH_OUTCOME_INDEX_STATE" = ok ] && [ -n "$BRANCH_OUTCOME_INDEX_ENDPOINT" ] || return 1
   [ "$BRANCH_OUTCOME_INDEX_ENDPOINT" -gt 0 ] && [ "$BRANCH_OUTCOME_INDEX_IDENT" != - ] || return 1
-  line=$(last_status_line "$STATE/$task.status") || return 1
-  verb=$(status_line_verb "$line")
-  case "$verb" in needs-decision|blocked) ;; *) return 1 ;; esac
   capture_status_position "$task"
   [ "$CAPTURED_STATUS_ENDPOINT" = "$BRANCH_OUTCOME_INDEX_ENDPOINT" ] \
     && [ "$CAPTURED_STATUS_IDENT" = "$BRANCH_OUTCOME_INDEX_IDENT" ]
+}
+
+fm_open_question_recorded() {  # <task>
+  local task=$1 line verb
+  line=$(last_status_line "$STATE/$task.status") || return 1
+  verb=$(status_line_verb "$line")
+  case "$verb" in needs-decision|blocked) ;; *) return 1 ;; esac
+  fm_status_position_recorded "$task"
 }
