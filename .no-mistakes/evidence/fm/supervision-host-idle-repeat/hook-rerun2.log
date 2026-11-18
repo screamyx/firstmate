@@ -1,0 +1,21 @@
+1..28
+ok - host+watch: an unchanged recorded question raises no further idle alert and a changed status still does
+ok - host: a bare idle alert for an already recorded question is consumed without an engine turn
+ok - host: an alert after a newer status line, or a decorated one, keeps its engine turn
+ok - host: a bare idle alert for an unchanged working status is consumed without an engine turn, unless the recorded outcome was for a signal
+ok - host: a task claimed together with a signal row of its own is not credited as idle evidence, its neighbour's idle alert is
+ok - host+hook: a main-only close after a handled turn restores inherited handling and rewakes main
+ok - host+hook: a refused inherited handling restore delivers a failure instead of silent success
+ok - host+hook: a driver returning to an idle worker is stale-handled while attended
+ok - host+hook: a driver returning to an idle worker is stale-handled while away
+grep: /tmp/fm-supervision-host.gqXsNk/lost-handoff-boundary/state/.supervision-handoff.log: No such file or directory
+grep: /tmp/fm-supervision-host.gqXsNk/lost-handoff-boundary/state/.supervision-handoff.log: No such file or directory
+grep: /tmp/fm-supervision-host.gqXsNk/lost-handoff-boundary/state/.supervision-handoff.log: No such file or directory
+ok - host+hook: boundary survives a lost continuation, retries, and transfers one watcher after acknowledgement
+grep: /tmp/fm-supervision-host.gqXsNk/lost-handoff-pass-through/state/.supervision-handoff.log: No such file or directory
+grep: /tmp/fm-supervision-host.gqXsNk/lost-handoff-pass-through/state/.supervision-handoff.log: No such file or directory
+grep: /tmp/fm-supervision-host.gqXsNk/lost-handoff-pass-through/state/.supervision-handoff.log: No such file or directory
+ok - host+hook: pass-through survives a lost continuation, retries, and transfers one watcher after acknowledgement
+not ok - ack turns-main-only: the hand-back left no watcher: arm_pid=4161708	watcher_pid=4161746	origin=started	started_at=1795024991	ended_at=1795024991	exit_code=0	signal=none	reason=actionable-signal	beacon_age=0	lock_before=pid:4161746|identity:linux-starttime=235782742 cmdline-hex=62617368002f746d702f666d2d7375706572766973696f6e2d686f73742e677158734e6b2f686f6f6b2d7475726e732d6d61696e2d6f6e6c792d61636b2f62696e2f666d2d77617463682e736800	lock_after=pid:none|identity:none	successor=started:4163495
+arm_pid=4163466	watcher_pid=4163495	origin=started	started_at=1795024991	ended_at=1795024992	exit_code=143	signal=TERM	reason=arm-interrupted	beacon_age=0	lock_before=pid:4163495|identity:linux-starttime=235782827 cmdline-hex=62617368002f746d702f666d2d7375706572766973696f6e2d686f73742e677158734e6b2f686f6f6b2d7475726e732d6d61696e2d6f6e6c792d61636b2f62696e2f666d2d77617463682e736800	lock_after=pid:none|identity:none	successor=started:4164851
+arm_pid=4164835	watcher_pid=4164851	origin=started	started_at=1795024993	ended_at=1795024993	exit_code=0	signal=none	reason=actionable-signal	beacon_age=0	lock_before=pid:4164851|identity:linux-starttime=235782958 cmdline-hex=62617368002f746d702f666d2d7375706572766973696f6e2d686f73742e677158734e6b2f686f6f6b2d7475726e732d6d61696e2d6f6e6c792d61636b2f62696e2f666d2d77617463682e736800	lock_after=pid:none|identity:none	successor=none
