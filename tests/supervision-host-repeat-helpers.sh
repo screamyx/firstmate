@@ -71,8 +71,6 @@ settle_case() {
   FM_HOME="$home" FM_ROOT="$ROOT" WAKE_TEXT="$2" bash -c '
     SCRIPT_DIR=$FM_ROOT/bin
     . "$SCRIPT_DIR/fm-wake-lib.sh"
-    . "$SCRIPT_DIR/fm-classify-lib.sh"
-    . "$SCRIPT_DIR/fm-outcome-index-lib.sh"
     . "$SCRIPT_DIR/fm-supervision-host-repeat-lib.sh"
     HOST_LOG=$STATE/.supervision-host.log
     log_line() { printf "%s\t%s\n" "$(date +%s)" "$1" >> "$HOST_LOG"; }
@@ -114,19 +112,19 @@ test_host_settles_a_bare_idle_alert_for_an_unchanged_working_status() {
 test_host_does_not_credit_a_mixed_claim_as_idle_evidence() {
   local home="$TMP_ROOT/turn-wake" out
   mkdir -p "$home/state" "$home/config"
+  printf 'window=firstmate:fm-a\nproject=demo\nkind=ship\nharness=pi\nbackend=tmux\n' > "$home/state/a.meta"
+  printf 'window=firstmate:fm-b\nproject=demo\nkind=ship\nharness=pi\nbackend=tmux\n' > "$home/state/b.meta"
+  printf 'window=firstmate:fm-c\nproject=demo\nkind=ship\nharness=pi\nbackend=tmux\n' > "$home/state/c.meta"
   out=$(FM_HOME="$home" FM_ROOT="$ROOT" bash -c '
     SCRIPT_DIR=$FM_ROOT/bin
     . "$SCRIPT_DIR/fm-wake-lib.sh"
-    . "$SCRIPT_DIR/fm-outcome-index-lib.sh"
-    . "$SCRIPT_DIR/fm-supervision-host-repeat-lib.sh"
     fm_wake_append stale firstmate:fm-a "stale: firstmate:fm-a" || exit 9
+    fm_wake_append signal b.status "signal: b working" || exit 9
     fm_wake_append stale firstmate:fm-c "stale: firstmate:fm-c" || exit 9
-    fm_wake_append signal firstmate:fm-b "signal: fm-b working" || exit 9
-    printf "%s|%s|%s\n" "$(fm_host_repeat_turn_wake 1 "stale: firstmate:fm-a")" \
-      "$(fm_host_repeat_turn_wake "1 2" "stale: firstmate:fm-a")" \
-      "$(fm_host_repeat_turn_wake "1 3" "stale: firstmate:fm-a")"
+    fm_wake_append signal c.status "signal: c working" || exit 9
+    node "$SCRIPT_DIR/fm-branch-dispatch.mjs" scope --afk | sed -n "s/^staletasks=//p"
   ' 2>/dev/null | tail -n 1)
-  [ "$out" = "stale: firstmate:fm-a|stale: firstmate:fm-a|mixed claim: stale: firstmate:fm-a" ] \
-    || fail "turn wake: a claim holding a signal row must not be recorded as a stale wake (got: $out)"
-  pass "host: a turn's recorded wake is stale only when every claimed row is an idle alert"
+  [ "$out" = "a" ] \
+    || fail "turn scope: only a task whose every claimed row is an idle alert counts as stale evidence (got: $out)"
+  pass "host: a task claimed together with a signal row of its own is not credited as idle evidence, its neighbour's idle alert is"
 }

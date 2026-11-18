@@ -118,7 +118,12 @@ if [ "$(turn_field unscoped)" != 1 ]; then
   esac
 fi
 
-[ "$WAKE_SET" -eq 1 ] || WAKE=$(turn_field wake)
+if [ "$WAKE_SET" -ne 1 ]; then
+  WAKE=$(turn_field wake)
+  case "$WAKE" in
+    stale:*) case " $(turn_field staletasks) " in *" $TASK "*) ;; *) WAKE="mixed claim: $WAKE" ;; esac ;;
+  esac
+fi
 
 set -- append --task "$TASK" --verdict "$VERDICT" --summary "$SUMMARY" --silent "$SILENT"
 [ -z "$WAKE" ] || set -- "$@" --wake "$WAKE"

@@ -142,6 +142,8 @@ export interface UnreadWakeScope {
    * non-heartbeat wake claims it in the away posture.
    */
   heartbeatSeqs: string[];
+  /** Tasks whose every eligible row is a stale alert (no signal row for the same task). */
+  staleTasks: string[];
   taskByWakeKey: Record<string, string>;
 }
 
@@ -155,6 +157,7 @@ const EMPTY_SCOPE: UnreadWakeScope = {
   needsDecisionKeys: [],
   checkSeqs: [],
   heartbeatSeqs: [],
+  staleTasks: [],
   taskByWakeKey: {},
 };
 const UNSAFE_SCOPE: UnreadWakeScope = {
@@ -167,6 +170,7 @@ const UNSAFE_SCOPE: UnreadWakeScope = {
   needsDecisionKeys: [],
   checkSeqs: [],
   heartbeatSeqs: [],
+  staleTasks: [],
   taskByWakeKey: {},
 };
 
@@ -418,6 +422,8 @@ export function scopeForUnreadWake(state: string, heartbeat: boolean, afk = fals
   const needsDecisionKeys: string[] = [];
   const checkSeqs: string[] = [];
   const heartbeatSeqs: string[] = [];
+  const staleOnly = new Set<string>();
+  const signalTasks = new Set<string>();
   const staleDecisionOwnership = new Map<string, boolean>();
   const resolveVerb = process.env.FM_CLASSIFY_RESOLVE_VERB || "resolved";
   const heldVerb = process.env.FM_CLASSIFY_CAPTAIN_HELD_VERB || "captain-held";
@@ -549,6 +555,7 @@ export function scopeForUnreadWake(state: string, heartbeat: boolean, afk = fals
     }
     projects.add(project);
     eligibleTasks.add(task);
+    (kind === "stale" ? staleOnly : signalTasks).add(task);
     eligibleSeqs.push(seq);
   }
   const eligible = eligibleSeqs.length > 0;
@@ -569,6 +576,7 @@ export function scopeForUnreadWake(state: string, heartbeat: boolean, afk = fals
     needsDecisionKeys,
     checkSeqs,
     heartbeatSeqs,
+    staleTasks: [...staleOnly].filter((task) => !signalTasks.has(task)),
     taskByWakeKey: Object.fromEntries(taskByKey),
   };
 }
