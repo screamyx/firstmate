@@ -39,6 +39,14 @@ fm_away_handback_ident() {  # <task>
   status_open_decisions "$STATE/$1.status" 2>/dev/null | cut -f1 | sort | paste -sd, - | tr -d '\r'
 }
 
+fm_away_handback_digest() {
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 2>/dev/null
+  else
+    sha256sum 2>/dev/null
+  fi | cut -c1-16
+}
+
 fm_away_handback_prepare() {  # <turn>
   local seqs rows row task ident digest fresh_rows='' seq
   AWAY_HANDBACK_SEQS=
@@ -58,12 +66,16 @@ fm_away_handback_prepare() {  # <turn>
     task=$(printf '%s' "$row" | jq -r '.task' | tr -d '\r\t\n')
     ident=$(fm_away_handback_ident "$task")
     ident=${ident:--}
-    digest=$(printf '%s' "$row" | jq -r '.summary // ""' | tr -d '\r' | sha256sum | cut -c1-16)
-    ! fm_away_handback_seen "$task" "$ident" "$digest" || continue
+    digest=$(printf '%s' "$row" | jq -r '.summary // ""' | tr -d '\r' | fm_away_handback_digest)
+    case "$digest" in
+      [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f])
+        ! fm_away_handback_seen "$task" "$ident" "$digest" || continue ;;
+      *) digest= ;;
+    esac
     seq=$(printf '%s' "$row" | jq -r '.seq')
     AWAY_HANDBACK_SEQS=${AWAY_HANDBACK_SEQS:+$AWAY_HANDBACK_SEQS, }$seq
     fresh_rows=${fresh_rows:+$fresh_rows$'\n'}$row
-    AWAY_HANDBACK_IDENTS=${AWAY_HANDBACK_IDENTS:+$AWAY_HANDBACK_IDENTS$'\n'}$task$'\t'$ident$'\t'$digest
+    AWAY_HANDBACK_IDENTS=${AWAY_HANDBACK_IDENTS:+$AWAY_HANDBACK_IDENTS$'\n'}$task$'\t'$ident$'\t'${digest:-unhashed}
   done <<< "$rows"
   [ -n "$fresh_rows" ] || return 1
   AWAY_HANDBACK_LINES=$(printf '%s\n' "$fresh_rows" \
@@ -75,19 +87,25 @@ fm_away_handback_prepare() {  # <turn>
 # settled and the watcher stopped, which publishes downtime exactly as at a
 # boundary, and main's drain acknowledges it before the owner's next host
 # starts. Uses the host's own acknowledged_handback, emit, retire_successor,
-# and ledger.
-fm_away_handback_exit() {  # [further lines]
-  local why="away-outcome: the supervision session handled this wake and recorded outcomes that need the captain (store rows $AWAY_HANDBACK_SEQS, listed next); drain and acknowledge as usual, then pass them to the channel the away words name, else leave them for the return"
+# and ledger. The ledger lines are written only after the hand-back is emitted
+# (fm_away_handback_record), so an undelivered outcome is never marked seen.
+fm_away_handback_record() {
   local task ident digest
-  ARM_TEXT=
   while IFS=$'\t' read -r task ident digest; do
-    [ -z "$task" ] || log_line "away-handback	$task	$ident	$digest"
+    [ -z "$task" ] || [ "$digest" = unhashed ] || log_line "away-handback	$task	$ident	$digest"
   done <<< "$AWAY_HANDBACK_IDENTS"
+  AWAY_HANDBACK_IDENTS=
+}
+
+fm_away_handback_exit() {  # [further lines]
+  local why="away-outcome: the supervision session handled this wake and recorded outcomes that need the captain (store rows $AWAY_HANDBACK_SEQS, listed next); pass them to the channel the away words name, else leave them for the return, and only then drain and acknowledge"
+  ARM_TEXT=
   HANDBACK_DETAIL=$(printf '%s' "$AWAY_HANDBACK_LINES" | tr '\n\t\r' '   ' | sed 's/  */ /g')
   acknowledged_handback "supervision-host: $why" "$AWAY_HANDBACK_LINES" "${1:-}"
   fm_recovery_marker_handling_settled "$STATE/.watcher-down" || log_line "handling-settle-failed	away-handback"
   retire_successor
   log_line "to-main	$why"
   emit "supervision-host: $why" "$AWAY_HANDBACK_LINES" "${1:-}"
+  fm_away_handback_record
   exit 0
 }

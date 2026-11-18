@@ -760,6 +760,7 @@ acknowledged_handback() {  # [extra output lines]; returns only when disabled
       rm -f "$out"
       log_line "handoff	$GEN"
       emit "$@"
+      ! declare -F fm_away_handback_record >/dev/null || fm_away_handback_record
       exit 0
     fi
     sleep 0.2
