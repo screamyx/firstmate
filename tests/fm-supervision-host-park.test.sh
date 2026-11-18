@@ -509,7 +509,7 @@ test_first_cycle_status_streams_and_owner_options_reach_it() {
 }
 
 test_unchanged_held_outcome_reaches_the_captain_once_until_a_new_event() {
-  local home cycle old pid watcher
+  local home cycle old watcher
   home=$(make_home away-held-once away)
   echo captain > "$home/stub-mode"
   mkdir -p "$home/projects/held"
@@ -535,6 +535,12 @@ test_unchanged_held_outcome_reaches_the_captain_once_until_a_new_event() {
   assert_grep 'child=held' "$home/state/branch-outcomes.jsonl" "held: the escalation did not name the held task's outcome: $(cat "$home"/engine-drain.* "$home/state/.supervision-host.log")"
   wait_until 150 handled_at_least "$home" 1 || fail "held: the escalating turn never finished"
   assert_no_grep '	inactive-outcome:' "$home/state/.wake-queue" "held: the branch acknowledgement left the presentation row queued"
+  # Away, the first escalation wakes main once; main drains, then the next host parks.
+  wait_until_deadline 60 host_exited "$home" || fail "held: the escalation did not wake main: $(cat "$home/state/.supervision-host.log")"
+  assert_re '^supervision-host: away-outcome: ' "$home/host.out" "held: the escalation must reach main as an away outcome"
+  main_drain_and_ack "$home"
+  start_host "$home"
+  wait_until 150 watcher_live "$home" || fail "held: the next host never parked"
 
   for cycle in 1 2 3 4; do
     old=$(( $(date +%s) - 120 ))
@@ -551,17 +557,15 @@ test_unchanged_held_outcome_reaches_the_captain_once_until_a_new_event() {
   printf 'needs-decision [key=merge-153]: merge PR 153 now or hold it for the return?\n' >> "$home/state/held.status"
   wait_until 250 captain_rows_at_least "$home" 2 \
     || fail "held: the new decision never reached the captain path: $(cat "$home/state/branch-outcomes.jsonl")"
+  wait_until_deadline 60 host_exited "$home" || fail "held: the new decision did not wake main again"
   [ "$(captain_rows "$home")" -eq 2 ] || fail "held: the decision escalated $(captain_rows "$home") rows, not one"
   [ "$(FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" list --recent 1 | sed -n 's/.*"task":"\([^"]*\)".*"verdict":"\([a-z]*\)".*/\1 \2/p')" = 'held captain' ] \
     || fail "held: the decision was not recorded as a captain outcome for the held task: $(cat "$home/state/branch-outcomes.jsonl")"
   unset FM_FAKE_CREW_STATE_held FM_INACTIVE_CREW_STATE_BIN FM_INACTIVE_RECONCILE_SECS
   # Stop the host and its watcher here, so no cadence scan is still writing
   # into this home while the suite's cleanup removes it.
-  pid=$(awk -F '\t' '$1 == "host" { print $2 }' "$home/state/.supervision-host")
-  watcher=$(cat "$home/state/.watch.lock/pid")
-  kill -TERM "$pid"
-  wait_until_deadline 60 host_exited "$home" || fail "held: the host did not stop on TERM"
-  wait_until 100 sh -c '! kill -0 "$1" 2>/dev/null' _ "$watcher" || fail "held: a stopped host left its watcher running"
+  watcher=$(cat "$home/state/.watch.lock/pid" 2>/dev/null || true)
+  wait_until 100 sh -c '[ -z "$1" ] || ! kill -0 "$1" 2>/dev/null' _ "$watcher" || fail "held: a handed-back host left its watcher running"
   pass "host: an unchanged held outcome reaches the captain once across cadences, and a later decision on the task still does"
 }
 
