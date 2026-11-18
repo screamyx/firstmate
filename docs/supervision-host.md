@@ -188,11 +188,19 @@ Away, a handled wake with only routine outcomes never reaches main.
 A handled wake that recorded a non-silent captain outcome exits to main, without the close it handled, with one `supervision-host: away-outcome:` line naming the store rows and one `supervision-host: outcome <seq> for <task> [captain]: <summary>` line per row, so main can pass the question to the channel the away words name, or leave it for the return.
 The exit is once per distinct outcome: the host appends one `away-handback` line per row, with the task, its open decision keys (`-` when it has none), and a digest of the outcome summary, to its log (`state/.supervision-host.log`) and skips a row whose three it already handed back since the current away record was entered, so the same outcome resurfacing does not wake main twice, while a newly opened decision, a different outcome on the same task, or a failed row lookup, does.
 Each such outcome is also a durable `away-outcome` check wake that only main is granted: the branch's report queues it, and the host queues it when the turn started attended or the captain left after the report, before it writes the ledger line; the host drops the queued wake of an outcome it suppresses as already handed back, and an outcome whose wake could not be queued is handed back without a ledger line.
-The queue keeps the outcome for main's next drain across a lost host output or a host restart, but it does not wake a stopped Claude, Cursor, agy, or Codex owner: when the last supervised task ends and supervision is no longer needed, main sees the outcome only at its next wake.
-The ledger lives in the bounded host log, so after the log rotates an occasional repeat hand-back is possible.
 The exit stops the successor watcher as a park boundary does, and main starts the next park as the table in [At the boundary](#at-the-boundary) says: at its next turn end on Claude, Cursor, agy, and the Codex Stop park, at once on OpenCode and omp, at the re-arm of the same background host call on Grok, and at the next checkpoint on a foreground Codex checkpoint.
 The outcome also stays in the store: the drain's `BRANCH OUTCOMES` section presents it after the return, and the return brief (`bin/fm-afk-return.sh`) counts it and points there.
 Attended, see [Captain outcomes](#captain-outcomes).
+
+#### Known limits
+
+The queued wake keeps an outcome for main's next drain, but it alone does not guarantee that main hears of it promptly.
+
+- When the last supervised task ends, a Claude, Cursor, agy, or Codex owner may already have stopped, so a queued away outcome waits until the next wake.
+- After a host restart with lost output, a pending away outcome may not be handed to main until the next hand-back.
+- When an attended-start turn reports after the captain left and the host dies before the hand-back, the outcome is only visible after the return.
+- If the captain leaves between an attended turn's report and its hand-back, the outcome may have no queued wake for main.
+- The hand-back ledger lives in the bounded host log, so after the log rotates an occasional repeat hand-back is possible.
 
 ### A captain who returns during a turn
 
