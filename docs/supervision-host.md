@@ -136,7 +136,7 @@ The engine turn runs beside a captain who is present, so its guarded actions tak
 
 ### Away
 
-Every close goes to the engine; a handled wake that recorded a captain outcome wakes main once per question, and the outcome also remains in the store for the return drain (see [Captain outcomes](#captain-outcomes) and [Where a handled wake's outcome goes](#where-a-handled-wakes-outcome-goes)).
+Every close goes to the engine; a handled wake that recorded a captain outcome wakes main once per distinct outcome, and the outcome also remains in the store for the return drain (see [Captain outcomes](#captain-outcomes) and [Where a handled wake's outcome goes](#where-a-handled-wakes-outcome-goes)).
 Every turn that starts attended meets the attended rule again at its start, and the offer's scan is the scope the turn claims: a close accepted away whose turn starts attended, because the captain returned in between, or an attended close whose task turned main-only (a decision appeared) while the successor started, reaches main unchanged and leaves that successor cycle running, with the handoff that turn had confirmed handed back to downtime as already announced, so that successor does not announce the same close again.
 A captain who leaves while an attended turn runs turns its captain outcomes into away outcomes: they are handed to main like any away captain outcome.
 
@@ -186,9 +186,9 @@ The host counts the wake handled only when all three hold:
 
 Away, a handled wake with only routine outcomes never reaches main.
 A handled wake that recorded a non-silent captain outcome exits to main, without the close it handled, with one `supervision-host: away-outcome:` line naming the store rows and one `supervision-host: outcome <seq> for <task> [captain]: <summary>` line per row, so main can pass the question to the channel the away words name, or leave it for the return.
-The exit is once per question: the host appends one `away-handback`, task, and open-decision-keys line per row to its log (`state/.supervision-host.log`) and skips a row whose task and keys it already handed back since the current away record was entered, so a question that resurfaces does not wake main twice, while a newly opened decision, or a failed row lookup, does.
-A task with no open decision is identified by the task alone.
-The exit stops the successor watcher as a park boundary does, and the next host starts at main's turn end.
+The exit is once per distinct outcome: the host appends one `away-handback` line per row, with the task, its open decision keys (`-` when it has none), and a digest of the outcome summary, to its log (`state/.supervision-host.log`) and skips a row whose three it already handed back since the current away record was entered, so the same outcome resurfacing does not wake main twice, while a newly opened decision, a different outcome on the same task, or a failed row lookup, does.
+With [acknowledged hand-back](#acknowledged-hand-back) enabled, the queued `supervision-handoff` check carries the same outcome lines, so a retry after a lost exit still shows main the outcomes.
+The exit stops the successor watcher as a park boundary does, and main starts the next park as the table in [At the boundary](#at-the-boundary) says: at its next turn end on Claude, Cursor, agy, and the Codex Stop park, at once on OpenCode and omp, at the re-arm of the same background host call on Grok, and at the next checkpoint on a foreground Codex checkpoint.
 The outcome also stays in the store: the drain's `BRANCH OUTCOMES` section presents it after the return, and the return brief (`bin/fm-afk-return.sh`) counts it and points there.
 Attended, see [Captain outcomes](#captain-outcomes).
 

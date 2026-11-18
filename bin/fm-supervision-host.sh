@@ -84,7 +84,7 @@
 # with only routine outcomes never wakes main. A handled wake that recorded a
 # captain outcome exits, without the close it handled, with one "supervision-host:
 # branch-outcome:" line attended (main drains BRANCH OUTCOMES, bin/fm-wake-drain.sh)
-# or, away, one "away-outcome:" line plus one line per row, once per question
+# or, away, one "away-outcome:" line plus one line per row, once per distinct outcome
 # (fm-supervision-host-away-lib.sh). Otherwise the host parks on the successor.
 # Every other outcome exits with the close's own reason line plus one
 # "supervision-host:" line saying why main has this wake, after stopping the
@@ -739,7 +739,7 @@ acknowledged_handback() {  # [extra output lines]; returns only when disabled
   tmp=$(mktemp "$STATE/.supervision-handoff-pending.XXXXXX") || exit 1
   printf '%s\n' "$GEN" > "$tmp" && mv -f "$tmp" "$STATE/.supervision-handoff-pending" || exit 1
   if ! fm_wake_append check "supervision-handoff:$GEN" \
-    "check: supervision-handoff - the host handed supervision to main; drain, handle, and acknowledge this hand-back" \
+    "check: supervision-handoff - the host handed supervision to main; drain, handle, and acknowledge this hand-back${HANDBACK_DETAIL:+; ${HANDBACK_DETAIL}}" \
     || ! fm_recovery_marker_publish "$STATE/.watcher-down" downtime >/dev/null; then
     emit "$@" 'supervision-host: the acknowledged hand-back could not be recorded'
     exit 1
@@ -1362,7 +1362,7 @@ while :; do
     exit_to_main "the captain returned while the away session was handling this wake, but the recorded outcomes could not be verified; main must review them" \
       "$(turn_outcome_lookup_warning)"
   fi
-  # Captain outcomes are main's: attended via the drain, away once per question.
+  # Captain outcomes are main's: attended via the drain, away once per distinct outcome.
   if [ -n "$LAST_TURN" ]; then
     if ! fm_afk_contract_away_present "$STATE"; then
       CAPTAIN_SEQS=$(turn_captain_seqs "$LAST_TURN")

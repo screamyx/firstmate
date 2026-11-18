@@ -183,6 +183,7 @@ test_away_captain_outcome_wakes_main_once_per_question_and_supervision_resumes()
   local home
   home=$(make_home away-captain away)
   echo captain > "$home/stub-mode"
+  echo 'which option' > "$home/stub-summary"
   start_host "$home"
   wait_until 150 watcher_live "$home" || fail "away-captain: the host never started a watcher cycle"
   printf 'needs-decision [at=%s] [key=q1]: which colour\n' "$(date +%s)" >> "$home/state/demo.status"
@@ -191,7 +192,7 @@ test_away_captain_outcome_wakes_main_once_per_question_and_supervision_resumes()
   assert_re '^supervision-host: away-outcome: .*\(store rows 1,' "$home/host.out" "the exit must name the outcome's store row"
   assert_re '^supervision-host: outcome 1 for demo \[captain\]: stub escalated' "$home/host.out" "the exit must carry the row's summary"
   assert_no_re '^signal:' "$home/host.out" "the close the engine handled must not reach main as a wake"
-  assert_re '	away-handback	demo	q1$' "$home/state/.supervision-host.log" "the exit must write its ledger line"
+  assert_re '	away-handback	demo	q1	[0-9a-f]{16}$' "$home/state/.supervision-host.log" "the exit must write its ledger line"
   watcher_live "$home" && fail "away-captain: the host left its successor cycle running when it woke main"
 
   # Main drains and acknowledges, then the owner starts the next host at its turn end.
@@ -200,10 +201,10 @@ test_away_captain_outcome_wakes_main_once_per_question_and_supervision_resumes()
   wait_until 150 watcher_live "$home" || fail "away-captain: the next host never parked"
   printf 'needs-decision [at=%s] [key=q2]: which size\n' "$(date +%s)" >> "$home/state/demo.status"
   wait_until_deadline 60 host_exited "$home" || fail "away-captain: a new question did not wake main"
-  assert_re '	away-handback	demo	q1,q2$' "$home/state/.supervision-host.log" "a new decision on the task must be handed back"
+  assert_re '	away-handback	demo	q1,q2	[0-9a-f]{16}$' "$home/state/.supervision-host.log" "a new decision on the task must be handed back"
   [ "$(handled_count "$home")" -eq 2 ] || fail "away-captain: supervision did not resume after the hand-back"
 
-  # The same open decisions again: handled, but main is not woken twice.
+  # The same open decisions and the same outcome again: handled, but main is not woken twice.
   main_drain_and_ack "$home"
   start_host "$home"
   wait_until 150 watcher_live "$home" || fail "away-captain: the third host never parked"
@@ -215,6 +216,41 @@ test_away_captain_outcome_wakes_main_once_per_question_and_supervision_resumes()
   kill -TERM "$(awk -F '\t' '$1 == "host" { print $2 }' "$home/state/.supervision-host")"
   wait_until_deadline 60 host_exited "$home" || fail "away-captain: the host did not stop on TERM"
   pass "host: away, a captain outcome wakes main once per open decision and supervision resumes after it"
+}
+
+# Two different outcomes on one task, neither with an open decision, are two
+# questions: a secondmate reporting two children's finished PRs wakes main for
+# each, while the same outcome repeated does not.
+test_away_distinct_outcomes_on_one_task_each_wake_main() {
+  local home
+  home=$(make_home away-distinct away)
+  echo captain > "$home/stub-mode"
+  echo 'child-a PR 11 is green' > "$home/stub-summary"
+  start_host "$home"
+  wait_until 150 watcher_live "$home" || fail "distinct: the host never started a watcher cycle"
+  append_status "$home" 'child-a finished'
+  wait_until_deadline 60 host_exited "$home" || fail "distinct: the first outcome did not wake main: $(cat "$home/state/.supervision-host.log")"
+  assert_re '^supervision-host: outcome 1 for demo \[captain\]: stub escalated: child-a PR 11' "$home/host.out" "distinct: the first outcome must reach main"
+  assert_re '	away-handback	demo	-	[0-9a-f]{16}$' "$home/state/.supervision-host.log" "distinct: a task with no open decision is keyed by the dash"
+  main_drain_and_ack "$home"
+
+  echo 'child-b PR 12 is green' > "$home/stub-summary"
+  start_host "$home"
+  wait_until 150 watcher_live "$home" || fail "distinct: the next host never parked"
+  append_status "$home" 'child-b finished'
+  wait_until_deadline 60 host_exited "$home" || fail "distinct: a different outcome on the same task did not wake main: $(cat "$home/state/.supervision-host.log")"
+  assert_re '^supervision-host: outcome 2 for demo \[captain\]: stub escalated: child-b PR 12' "$home/host.out" "distinct: the second outcome must reach main"
+  main_drain_and_ack "$home"
+
+  start_host "$home"
+  wait_until 150 watcher_live "$home" || fail "distinct: the third host never parked"
+  append_status "$home" 'child-b finished again'
+  wait_until 250 handled_at_least "$home" 3 || fail "distinct: the repeat was not handled"
+  sleep 1
+  [ ! -s "$home/host.rc" ] || fail "distinct: the same outcome woke main twice: $(cat "$home/host.out")"
+  kill -TERM "$(awk -F '\t' '$1 == "host" { print $2 }' "$home/state/.supervision-host")"
+  wait_until_deadline 60 host_exited "$home" || fail "distinct: the host did not stop on TERM"
+  pass "host: away, two different outcomes on one task with no open decision each wake main, and a repeat does not"
 }
 
 # A quiet record left without its daemon (no state/.afk) is a present captain,
@@ -964,6 +1000,7 @@ fm_test_run \
   test_attended_captain_outcome_reaches_main_through_branch_outcomes \
   test_captain_leaving_mid_turn_hands_its_captain_outcome_to_main_and_keeps_it_for_the_return \
   test_away_captain_outcome_wakes_main_once_per_question_and_supervision_resumes \
+  test_away_distinct_outcomes_on_one_task_each_wake_main \
   test_quiet_record_without_its_daemon_is_a_present_captain \
   test_attended_main_only_close_passes_straight_to_main \
   test_off_written_while_parked_passes_the_next_attended_close_to_main \

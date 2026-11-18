@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # fm-supervision-host-away-lib.sh - sourced by bin/fm-supervision-host.sh. The
 # away hand-back: while an away record exists, a finished engine turn that
-# recorded a non-silent captain outcome wakes main once per question, so main
+# recorded a non-silent captain outcome wakes main once per distinct outcome, so main
 # can pass it to the channel the away words name (docs/supervision-host.md
 # "Away hand-back").
 #
@@ -9,26 +9,27 @@
 #
 # fm_away_handback_prepare <turn> sets AWAY_HANDBACK_SEQS (store rows, comma
 # separated), AWAY_HANDBACK_LINES (one "supervision-host:" line per row) and
-# AWAY_HANDBACK_IDENTS (one "<task><TAB><identity>" per row), and returns 0 only
-# when at least one non-silent captain row has not been handed back already.
-# The identity is the task's open decision keys when it has any, else the task
-# alone, so one question never wakes main twice while a newly opened decision
-# on the same task does.
+# AWAY_HANDBACK_IDENTS (one "<task><TAB><keys><TAB><digest>" per row), and
+# returns 0 only when at least one non-silent captain row has not been handed
+# back already. The identity is the task, its open decision keys ("-" when it
+# has none), and a digest of the outcome summary, so one question never wakes
+# main twice while a newly opened decision, or a different outcome on the same
+# task, does.
 # A store lookup that fails counts as new: suppressing a question costs more
 # than waking main twice.
 #
 # fm_away_handback_exit writes the ledger the check reads: one
-# "away-handback<TAB>task<TAB>identity" line per row in the host log
+# "away-handback<TAB>task<TAB>keys<TAB>digest" line per row in the host log
 # (bin/fm-supervision-host.sh log_line), counted only from the current away
 # record's entry on, so no state lives in the host's memory (the hand-back
 # exits the host process), then exits to main.
 
-fm_away_handback_seen() {  # <task> <identity>
+fm_away_handback_seen() {  # <task> <keys> <digest>
   local since
   since=$(fm_afk_contract_read_field "$(fm_afk_contract_path "$STATE")" entered_epoch 2>/dev/null)
   case "$since" in ''|*[!0-9]*) since=0 ;; esac
-  awk -F '\t' -v since="$since" -v task="$1" -v ident="$2" \
-    '$1 >= since && $2 == "away-handback" && $3 == task && $4 == ident { found = 1 } END { exit !found }' \
+  awk -F '\t' -v since="$since" -v task="$1" -v ident="$2" -v digest="$3" \
+    '$1 >= since && $2 == "away-handback" && $3 == task && $4 == ident && $5 == digest { found = 1 } END { exit !found }' \
     "$HOST_LOG" 2>/dev/null
 }
 
@@ -39,7 +40,7 @@ fm_away_handback_ident() {  # <task>
 }
 
 fm_away_handback_prepare() {  # <turn>
-  local seqs rows row task ident fresh_rows='' seq
+  local seqs rows row task ident digest fresh_rows='' seq
   AWAY_HANDBACK_SEQS=
   AWAY_HANDBACK_LINES=
   AWAY_HANDBACK_IDENTS=
@@ -56,11 +57,13 @@ fm_away_handback_prepare() {  # <turn>
     [ -n "$row" ] || continue
     task=$(printf '%s' "$row" | jq -r '.task' | tr -d '\r\t\n')
     ident=$(fm_away_handback_ident "$task")
-    ! fm_away_handback_seen "$task" "$ident" || continue
+    ident=${ident:--}
+    digest=$(printf '%s' "$row" | jq -r '.summary // ""' | tr -d '\r' | sha256sum | cut -c1-16)
+    ! fm_away_handback_seen "$task" "$ident" "$digest" || continue
     seq=$(printf '%s' "$row" | jq -r '.seq')
     AWAY_HANDBACK_SEQS=${AWAY_HANDBACK_SEQS:+$AWAY_HANDBACK_SEQS, }$seq
     fresh_rows=${fresh_rows:+$fresh_rows$'\n'}$row
-    AWAY_HANDBACK_IDENTS=${AWAY_HANDBACK_IDENTS:+$AWAY_HANDBACK_IDENTS$'\n'}$task$'\t'$ident
+    AWAY_HANDBACK_IDENTS=${AWAY_HANDBACK_IDENTS:+$AWAY_HANDBACK_IDENTS$'\n'}$task$'\t'$ident$'\t'$digest
   done <<< "$rows"
   [ -n "$fresh_rows" ] || return 1
   AWAY_HANDBACK_LINES=$(printf '%s\n' "$fresh_rows" \
@@ -75,11 +78,12 @@ fm_away_handback_prepare() {  # <turn>
 # and ledger.
 fm_away_handback_exit() {  # [further lines]
   local why="away-outcome: the supervision session handled this wake and recorded outcomes that need the captain (store rows $AWAY_HANDBACK_SEQS, listed next); drain and acknowledge as usual, then pass them to the channel the away words name, else leave them for the return"
-  local task ident
+  local task ident digest
   ARM_TEXT=
-  while IFS=$'\t' read -r task ident; do
-    [ -z "$task" ] || log_line "away-handback	$task	$ident"
+  while IFS=$'\t' read -r task ident digest; do
+    [ -z "$task" ] || log_line "away-handback	$task	$ident	$digest"
   done <<< "$AWAY_HANDBACK_IDENTS"
+  HANDBACK_DETAIL=$(printf '%s' "$AWAY_HANDBACK_LINES" | tr '\n\t\r' '   ' | sed 's/  */ /g')
   acknowledged_handback "supervision-host: $why" "$AWAY_HANDBACK_LINES" "${1:-}"
   fm_recovery_marker_handling_settled "$STATE/.watcher-down" || log_line "handling-settle-failed	away-handback"
   retire_successor
