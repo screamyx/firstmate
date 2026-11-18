@@ -919,6 +919,7 @@ A build folder teardown had to keep is written to `data/<id>/output.record`, and
 The sweep lists, and never deletes, folders under the two roots that no record names, and tasks that ended before this feature left no record.
 [`bin/fm-task-output-lib.sh`](../bin/fm-task-output-lib.sh) owns the delete guard (output roots, depth, symlinks, held files, overlap with live tasks), which `--force` does not relax.
 The spawn adds the folder to the Claude `--add-dir` and Rovo `allowedExternalPaths` grants.
+For Claude the spawn also pre-registers that exact folder (the `data/<task-id>/` fallback too) as trusted through `bin/fm-claude-trust.sh --output-dir`, so the "Adding a new directory" dialog does not stop the launch.
 Rovo's bash stays confined to the worktree, so a Rovo worker builds inside its worktree and uses the folder only for proof through its file tools; its briefs say so.
 A secondmate home is not retired while a finished child's `proof/` files or `output.record` still sit inside it; move them out first.
 The held-file check uses `lsof`, which only sees the calling user's processes, and a folder is treated as held when `lsof` is missing or fails; a live-task check reads only this home's `state/`.

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Pre-register Claude Code's workspace trust for the directory a claude spawn is
 # about to launch into - the isolated task worktree of a ship or scout crewmate,
-# or the seeded home of a secondmate - so the agent reaches its brief or charter
-# instead of wedging on the trust dialog. In worktree mode it also carries
+# or the seeded home of a secondmate - and for the task output folder it adds
+# with --add-dir, so the agent reaches its brief or charter instead of wedging
+# on the trust dialog. In worktree mode it also carries
 # forward the external-CLAUDE.md-import approval, but only when the primary
 # checkout already holds standing consent for it - see the consent-gating
 # block below for why that dialog is otherwise left for the worker to wedge
@@ -11,12 +12,16 @@
 # Usage: fm-claude-trust.sh <worktree> <project>
 #        fm-claude-trust.sh --secondmate-home <home> <id>
 #        fm-claude-trust.sh --lab-home <home>
+#        fm-claude-trust.sh --output-dir <dir> <data> <state> <id>
 #   <worktree>  the isolated task worktree this spawn launches into
 #   <project>   the primary checkout that worktree belongs to
 #   <home>      the seeded secondmate home this spawn launches into
 #   <id>        the secondmate id that home must already be marked for
 #   --lab-home  the disposable lab home bin/fm-live-lab.sh launches a lab
 #               primary in
+#   --output-dir  the task output folder <dir> a launch grants with --add-dir;
+#               <data> and <state> are the home's data/ and state/ folders and
+#               <id> the task
 # Prints one line naming what it registered; refuses loudly on anything else.
 #
 # WHY THIS EXISTS. Claude Code gates a folder it has never seen behind an
@@ -25,10 +30,11 @@
 # non-interactive mode (-p, or a non-TTY stdout), and a spawned pane is
 # interactive. Every fresh task worktree therefore hits it, and so does every
 # secondmate home the operator has not opened by hand. The dialog renders
-# with the cursor on "No, exit" and firstmate's steering plane carries only
-# Enter, Escape and C-c with no arrow navigation, so firstmate cannot answer it
-# and must not try - pressing Enter would select exit. The agent wedges before
-# it ever reads the brief. Registering the trust before launch is the only
+# with the cursor on "No, exit", so a plain Enter from firstmate's steering plane
+# would select exit; the dialog can be answered by hand with Down then Enter,
+# but that answer persists nothing (Claude Code 2.1.327 left the store
+# unchanged), so every launch would meet it again. The agent wedges before it
+# ever reads the brief. Registering the trust before launch is the only
 # control that reaches an interactive pane. The same reasoning covers Claude
 # Code's separate "Allow external CLAUDE.md file imports?" dialog, which
 # `--setting-sources project,local` (passed only by bin/fm-live-lab.sh; an
@@ -158,12 +164,25 @@
 # trust-only for the same reason as a secondmate home, and bin/fm-live-lab.sh
 # removes the entry again when it tears the lab down.
 #
+# OUTPUT-DIR MODE. A launch's --add-dir <task output folder> raises the same
+# kind of dialog ("Adding a new directory ... one you trust?") for a folder
+# Claude Code has not seen, outside the worktree and its checkout. Claude Code
+# 2.1.327 skips it when that folder, or any folder above it, carries
+# hasTrustDialogAccepted in the store, so the one folder is registered, never
+# the shared home-<key> root above it. The scope test reuses the output-folder
+# delete guard (bin/fm-task-output-lib.sh fm_task_output_root_of): a listed
+# output root, the real path at least two levels below it, the literal path
+# leading to it (or this home's data/<id> fallback, one level below its root),
+# not a symlink, and named for this task id - either the folder
+# a fresh spawn assigns or the one state/<id>.meta already records. It is
+# trust-only, like a secondmate home.
+#
 # Only the launching user's own store is written. In worktree mode: the
 # projects entries for the worktree path and the resolved canonical project
 # path in ${CLAUDE_CONFIG_DIR:-$HOME}/.claude.json, which must be a regular
 # file this uid owns; every unrelated key and project entry is preserved, and
-# both entries land in one atomic replacement. In secondmate-home and lab-home
-# mode: the single projects entry for the registered home path, same store,
+# both entries land in one atomic replacement. In secondmate-home, lab-home and
+# output-dir mode: the single projects entry for the registered path, same store,
 # same atomic replacement. fm-spawn.sh forwards CLAUDE_CONFIG_DIR onto the
 # claude launch verbatim rather than resolving it, and the pane starts in the
 # registered directory, so only an absolute value names the same store on both sides; a
@@ -189,6 +208,7 @@ usage() {
   echo "usage: fm-claude-trust.sh <worktree> <project>" >&2
   echo "       fm-claude-trust.sh --secondmate-home <home> <id>" >&2
   echo "       fm-claude-trust.sh --lab-home <home>" >&2
+  echo "       fm-claude-trust.sh --output-dir <dir> <data> <state> <id>" >&2
   exit 2
 }
 
@@ -211,6 +231,16 @@ case "${1:-}" in
     SUB_ID=
     PROJ_ARG=
     SCOPE_NOUN="lab home"
+    ;;
+  --output-dir)
+    [ "$#" -eq 5 ] || usage
+    MODE=output-dir
+    TARGET_ARG=$2
+    OUT_DATA=$3
+    OUT_STATE=$4
+    SUB_ID=$5
+    PROJ_ARG=
+    SCOPE_NOUN="task output folder"
     ;;
   '' | -h | --help)
     usage
@@ -329,6 +359,26 @@ if [ "$MODE" = worktree ]; then
     [ -n "$CANON_GIT_DIR" ] && [ "$CANON_GIT_DIR" = "$PROJ_COMMON" ] \
       || refuse "project '$PROJ_REAL' is a linked worktree whose primary checkout could not be resolved"
   fi
+elif [ "$MODE" = output-dir ]; then
+  # Same guard the output-folder delete uses, so only a folder that guard would
+  # accept is ever registered: a listed output root, the real path two levels
+  # below it, and the literal path leading to that real path.
+  # shellcheck source=bin/fm-task-output-lib.sh
+  . "$(dirname "${BASH_SOURCE[0]}")/fm-task-output-lib.sh"
+  [ -n "$SUB_ID" ] || refuse "no task id was supplied, so '$TARGET_REAL' cannot be matched to a task"
+  fm_task_output_normalized "$TARGET_ARG" || refuse "'$TARGET_ARG' is not a normalized absolute path"
+  [ ! -L "$TARGET_ARG" ] || refuse "'$TARGET_ARG' is a symlink, not a $SCOPE_NOUN"
+  if [ "$TARGET_REAL" != "$(fm_task_output_real "${OUT_DATA%/}" 2>/dev/null)/$SUB_ID" ]; then
+    fm_task_output_root_of "$OUT_DATA" "$TARGET_ARG" "$TARGET_REAL" >/dev/null \
+      || refuse "'$TARGET_REAL' is outside the output roots or fewer than two levels below one"
+  fi
+  # Recorded for this task: the folder must be the one named for this id - the
+  # assignment a fresh spawn derives, or the one state/<id>.meta already records.
+  [ "$(basename -- "$TARGET_REAL")" = "$SUB_ID" ] || refuse "'$TARGET_REAL' is not the output folder of task '$SUB_ID'"
+  if [ "$(fm_task_output_dir "$OUT_DATA" "$SUB_ID" 2>/dev/null)" != "$TARGET_ARG" ] \
+    && ! grep -qxF "output_build=$TARGET_ARG/build" "${OUT_STATE%/}/$SUB_ID.meta" 2>/dev/null; then
+    refuse "'$TARGET_REAL' is neither the assigned nor the recorded output folder of task '$SUB_ID'"
+  fi
 elif [ "$MODE" = lab-home ]; then
   LAB_MARKER="$TARGET_REAL/$FM_GATE_LAB_MARKER"
   [ ! -L "$LAB_MARKER" ] || refuse "'$LAB_MARKER' is a symlink; a lab home carries the marker as a regular file"
@@ -406,53 +456,9 @@ if [ -e "$STORE" ]; then
   [ -w "$STORE" ] || refuse "'$STORE' is not writable"
 fi
 
-# Read-modify-write, then read back and confirm. fm-spawn runs from a live
-# firstmate Claude Code session that writes this same file, so the store can move
-# under us in both directions and each needs its own answer.
-#
-# Losing the VENDOR's write is the serious one: this renames a whole
-# re-serialisation over the file, so anything Claude changed since the read -
-# oauthAccount, user-scope mcpServers, another project's history - would be gone,
-# in a format this does not own. So the bytes read are fingerprinted and
-# re-checked immediately before the rename, and a store that moved is not
-# overwritten: the whole read-modify-write is retried once, and a second move
-# refuses rather than clobbering.
-#
-# That narrows the window; it does not close it. Rename cannot be conditioned on
-# content, so a write landing between the final check and the rename is still
-# lost, and this claims no more than that.
-#
-# Losing OUR entry is the mild one: a vendor rewrite that drops it only resurrects
-# the dialog this registration removes, which reaches firstmate as an ordinary
-# stale wake and a relaunch registers again. The readback catches it within these
-# attempts, and it must fail loudly rather than report a trust it did not leave.
-# ponytail: fingerprint-and-refuse, not a lock; flock is absent on macOS and
-# cannot stop a vendor session's own rewrite anyway.
-#
-# In worktree mode every flag lands on both the worktree entry and the project
-# entry in the same read-modify-write attempt, so a single rename either
-# records all of it or none of it - there is no state where the worktree entry
-# is fresh and the project entry stale, or the other way round. In
-# secondmate-home mode only the single home entry is written.
-#
-# The two external-imports flags (worktree mode only) are gated separately
-# from the trust flag, because they are a CONSENT grant, not a pre-approval
-# this script is allowed to manufacture. Claude Code only ever writes
-# hasClaudeMdExternalIncludesApproved===true itself, on an explicit interactive
-# answer; this script's own job is to keep a worker from wedging on a dialog,
-# never to answer that dialog on the human's behalf. So the import flags land
-# on the project entry - the only place the imports check ever reads (see the
-# disassembly note above) - only when that entry ALREADY carries
-# hasClaudeMdExternalIncludesApproved===true, i.e. the human already said yes
-# at some point and this write is a same-value refresh, not new consent from
-# an absent flag. When it is not already true (including plain absent, the
-# common case for a project claude has never asked about), the import flags
-# are left untouched on both entries: writing them to the worktree entry alone
-# would be a pure no-op (the imports check never reads it) that only obscures
-# the real state, so trust still registers normally but the import dialog is
-# left exactly as undecided as it already was - the worker wedges on it, the
-# same honest outcome as an explicit decline, rather than a spawn spending
-# consent the human was never asked for.
+# The read-modify-write, its concurrent-writer handling and the external-imports
+# consent gating live in bin/fm-claude-trust-store.mjs, which every mode calls once
+# per registration so a single rename records all of it or none of it.
 TRUST_FLAG='hasTrustDialogAccepted'
 IMPORT_FLAGS='["hasClaudeMdExternalIncludesApproved","hasClaudeMdExternalIncludesWarningShown"]'
 if [ "$MODE" = worktree ]; then
@@ -460,126 +466,7 @@ if [ "$MODE" = worktree ]; then
 else
   WRITE_ARGS=("$STORE" "$MODE" "$TARGET_REAL" "" "$TRUST_FLAG" "$IMPORT_FLAGS")
 fi
-if ! node - "${WRITE_ARGS[@]}" <<'NODE'
-const fs = require("node:fs");
-const path = require("node:path");
-const crypto = require("node:crypto");
-const [store, mode, target, project, trustFlag, importFlagsJson] = process.argv.slice(2);
-const importFlags = JSON.parse(importFlagsJson);
-const readStore = () => {
-  try {
-    return fs.readFileSync(store);
-  } catch (err) {
-    if (err.code === "ENOENT") return null;
-    throw err;
-  }
-};
-const fingerprint = (buf) =>
-  buf === null ? "absent" : crypto.createHash("sha256").update(buf).digest("hex");
-const setFlags = (projects, key, flags) => {
-  let entry = projects[key];
-  if (entry === undefined || entry === null || typeof entry !== "object" || Array.isArray(entry)) {
-    entry = {};
-  }
-  for (const flag of flags) entry[flag] = true;
-  projects[key] = entry;
-};
-const flagsLanded = (projects, key, flags) =>
-  flags.every((flag) => projects?.[key]?.[flag] === true);
-// The project entry is the launching user's OWN interactive config, not a
-// throwaway worktree, so a spawn must never silently reverse a decision the
-// human already recorded there. hasClaudeMdExternalIncludesApproved===false
-// together with hasClaudeMdExternalIncludesWarningShown===true is exactly that
-// decision (the dialog's "No, disable" answer writes that pair; Claude Code's
-// default project entry carries Approved===false with WarningShown===false,
-// which means never asked, not declined); flipping it to true would grant every future
-// interactive session in that checkout silent external-file inclusion the
-// human declined. Refuse the whole registration instead of overriding it -
-// the worktree entry is not written either, so the spawn wedges on the
-// dialog rather than the human's consent being spent without being asked.
-const declinedExternalImports = (projects, key) =>
-  projects?.[key]?.hasClaudeMdExternalIncludesApproved === false &&
-  projects?.[key]?.hasClaudeMdExternalIncludesWarningShown === true;
-// True only on an explicit prior "Yes, allow" answer - the sole state this
-// script may treat as standing consent to refresh. Absent, or any other
-// value, is NOT consent (see the block comment above this script's node call).
-const approvedExternalImports = (projects, key) =>
-  projects?.[key]?.hasClaudeMdExternalIncludesApproved === true;
-const attempt = () => {
-  const original = readStore();
-  const before = fingerprint(original);
-  let root = {};
-  if (original !== null) {
-    const raw = original.toString("utf8");
-    if (raw.trim() !== "") {
-      root = JSON.parse(raw);
-      if (root === null || typeof root !== "object" || Array.isArray(root)) {
-        throw new Error(`${store} is not a JSON object`);
-      }
-    }
-  }
-  if (root.projects === undefined) root.projects = {};
-  const projects = root.projects;
-  if (projects === null || typeof projects !== "object" || Array.isArray(projects)) {
-    throw new Error(`${store} has a non-object "projects" value`);
-  }
-  let keys;
-  if (mode === "worktree") {
-    if (declinedExternalImports(projects, project)) {
-      throw new Error(
-        `project entry for ${project} in ${store} already declined external CLAUDE.md imports; refusing to override that consent. To recover, remove hasClaudeMdExternalIncludesApproved and hasClaudeMdExternalIncludesWarningShown from that project entry and approve the imports dialog interactively once`,
-      );
-    }
-    const carryImportConsent = approvedExternalImports(projects, project);
-    const targetFlags = carryImportConsent ? [trustFlag, ...importFlags] : [trustFlag];
-    const projectFlags = carryImportConsent ? [trustFlag, ...importFlags] : [trustFlag];
-    setFlags(projects, target, targetFlags);
-    setFlags(projects, project, projectFlags);
-    keys = [[target, targetFlags], [project, projectFlags]];
-  } else {
-    setFlags(projects, target, [trustFlag]);
-    keys = [[target, [trustFlag]]];
-  }
-  // Unpredictable name plus an exclusive create: the config directory may be
-  // writable by another local account, and a predictable path could be
-  // pre-created there as a symlink that a plain write would follow into some
-  // other file this user owns. "wx" refuses an existing path outright.
-  const unique = `${process.pid}.${crypto.randomBytes(8).toString("hex")}`;
-  const tmp = path.join(path.dirname(store), `.claude.json.fm-trust.${unique}`);
-  // Two-space pretty-printed, because that is the format Claude Code itself
-  // writes: the store on the box this was measured on begins "{\n  " and runs
-  // 9646 lines. Compact would reformat the operator's whole config on every
-  // spawn and the vendor's next write would expand it again, so this must not
-  // be "simplified" to JSON.stringify(root) without re-measuring the vendor.
-  fs.writeFileSync(tmp, `${JSON.stringify(root, null, 2)}\n`, { mode: 0o600, flag: "wx" });
-  let renamed = false;
-  try {
-    if (fingerprint(readStore()) !== before) return "moved";
-    fs.renameSync(tmp, store);
-    renamed = true;
-  } finally {
-    if (!renamed) fs.rmSync(tmp, { force: true });
-  }
-  const back = JSON.parse(fs.readFileSync(store, "utf8"));
-  const landed = keys.every(([key, flags]) => flagsLanded(back.projects, key, flags));
-  return landed ? "recorded" : "dropped";
-};
-try {
-  for (let i = 0; i < 3; i += 1) {
-    const result = attempt();
-    if (result === "recorded") process.exit(0);
-    if (result === "moved" && i >= 1) {
-      console.error(`error: ${store} was modified while trust was being recorded; refusing to overwrite it`);
-      process.exit(1);
-    }
-  }
-} catch (err) {
-  console.error(`error: ${err.message}`);
-  process.exit(1);
-}
-console.error(`error: ${store} did not retain trust for ${target}${project ? ` and ${project}` : ""} after 3 attempts`);
-process.exit(1);
-NODE
+if ! node "$(dirname "${BASH_SOURCE[0]}")/fm-claude-trust-store.mjs" "${WRITE_ARGS[@]}"
 then
   if [ "$MODE" = worktree ]; then
     refuse "could not record trust for '$TARGET_REAL' and project '$PROJ_CANON' in '$STORE'"

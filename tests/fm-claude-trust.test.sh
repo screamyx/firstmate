@@ -636,6 +636,109 @@ claude_launch_doorbell() {  # <launch command>
   )
 }
 
+# run_output_trust <config> <dir> <data> <state> <id>: invoke the output-dir mode
+# against an isolated store.
+run_output_trust() {
+  local config=$1 dir=$2 data=$3 state=$4 id=$5
+  CLAUDE_CONFIG_DIR="$config" HOME="$config" "$TRUST" --output-dir "$dir" "$data" "$state" "$id" 2>&1
+}
+
+# make_output_case <name> <id>: a data root holding a task folder two levels
+# below it (the shape the output-folder guard accepts) and a live task record
+# naming it. Echoes "<case>|<data>|<state>|<config>|<folder>".
+make_output_case() {
+  local name=$1 id=$2 case_dir data state config folder
+  case_dir="$TMP_ROOT/$name"
+  data="$case_dir/data"
+  state="$case_dir/state"
+  config="$case_dir/claude-config"
+  folder="$data/outroot/$id"
+  mkdir -p "$config" "$state" "$folder/build" "$folder/proof"
+  printf 'output_build=%s/build\noutput_proof=%s/proof\n' "$folder" "$folder" > "$state/$id.meta"
+  printf '%s|%s|%s|%s|%s\n' "$case_dir" "$data" "$state" "$config" "$folder"
+}
+
+# Claude Code 2.1.327 raises "Adding a new directory ... trust?" for the
+# --add-dir task output folder and skips it when that exact folder carries
+# hasTrustDialogAccepted. Answering the dialog persists nothing, so the folder is
+# registered before launch - the one task folder, never the shared root above it.
+test_output_folder_is_trusted_exactly() {
+  local rec out case_dir data state config folder
+  rec=$(make_output_case out-ok task-o1)
+  IFS='|' read -r case_dir data state config folder <<EOF
+$rec
+EOF
+  out=$(run_output_trust "$config" "$folder" "$data" "$state" task-o1)
+  expect_code 0 $? "a recorded task output folder must be trusted: $out"
+  assert_trusted "$config/.claude.json" "$folder" "the task output folder was not recorded as trusted"
+  assert_not_trusted "$config/.claude.json" "$data/outroot" "the shared folder above the task folder must not be trusted"
+  assert_not_trusted "$config/.claude.json" "$data" "the output root must not be trusted"
+  [ "$(trusted_paths "$config/.claude.json" | wc -l)" -eq 1 ] || fail "output-dir mode registered more than the one folder"
+  assert_trust_only_no_import_consent "$config/.claude.json" "$folder" "the output folder entry gained keys beyond the trust flag"
+  pass "fm-claude-trust.sh: --output-dir trusts exactly the task output folder"
+}
+
+test_output_folder_scope_is_refused_outside_the_guard() {
+  local rec case_dir data state config folder out
+  rec=$(make_output_case out-bad task-o2)
+  IFS='|' read -r case_dir data state config folder <<EOF
+$rec
+EOF
+  # One level below the root is only the task's own data/<id> fallback.
+  mkdir -p "$data/task-other"
+  out=$(run_output_trust "$config" "$data/task-other" "$data" "$state" task-o2)
+  expect_code 1 $? "another task's folder one level below the root must be refused: $out"
+  # Outside every listed root.
+  mkdir -p "$case_dir/elsewhere/a/task-o2"
+  out=$(run_output_trust "$config" "$case_dir/elsewhere/a/task-o2" "$data" "$state" task-o2)
+  expect_code 1 $? "a folder outside the output roots must be refused: $out"
+  # A symlinked task folder, and a symlinked parent redirecting out of the root.
+  mkdir -p "$data/outroot/real-target"
+  ln -s "$data/outroot/real-target" "$data/outroot/task-link"
+  printf 'output_build=%s/build\n' "$data/outroot/task-link" > "$state/task-link.meta"
+  out=$(run_output_trust "$config" "$data/outroot/task-link" "$data" "$state" task-link)
+  expect_code 1 $? "a symlinked task folder must be refused: $out"
+  ln -s "$case_dir/elsewhere" "$data/escape"
+  mkdir -p "$case_dir/elsewhere/x/task-o2"
+  printf 'output_build=%s/build\n' "$data/escape/x/task-o2" > "$state/task-o2.meta"
+  out=$(run_output_trust "$config" "$data/escape/x/task-o2" "$data" "$state" task-o2)
+  expect_code 1 $? "a path reaching outside the root through a symlinked parent must be refused: $out"
+  # Not normalized, not named for the task, not recorded for it.
+  out=$(run_output_trust "$config" "$folder/../task-o2" "$data" "$state" task-o2)
+  expect_code 1 $? "a non-normalized path must be refused: $out"
+  out=$(run_output_trust "$config" "$folder" "$data" "$state" other-task)
+  expect_code 1 $? "a folder named for a different task must be refused: $out"
+  rm -f "$state/task-o2.meta"
+  out=$(run_output_trust "$config" "$folder" "$data" "$state" task-o2)
+  expect_code 1 $? "a folder no task record names must be refused: $out"
+  [ -z "$(trusted_paths "$config/.claude.json" 2>/dev/null)" ] || fail "a refused output folder left a trust entry behind"
+  pass "fm-claude-trust.sh: --output-dir refuses anything the output-folder guard would not accept"
+}
+
+# A fresh spawn whose output folder is the data/<id> fallback adds no output
+# --add-dir (it sits under the trusted home), so nothing extra is registered.
+test_spawn_fallback_output_folder_is_trusted() {
+  local case_dir home proj wt config fakebin out
+  case_dir="$TMP_ROOT/spawn-fallback"
+  home="$case_dir/home"
+  proj="$case_dir/project"
+  wt="$case_dir/wt"
+  config="$case_dir/claude-config"
+  mkdir -p "$config"
+  fakebin=$(make_spawn_fakebin "$case_dir/fake" claude)
+  fm_test_spawn_home "$home" claude
+  fm_git_worktree "$proj" "$wt" wt-fallback
+  fm_test_spawn_brief "$home" trustfallback
+  out=$(FM_TEST_CLAUDE_CONFIG_DIR="$config" FM_FAKE_LAUNCH_LOG="$case_dir/launch.log" \
+    fm_test_run_spawn "$home" "$wt" "$fakebin" trustfallback "$proj" claude \
+    --mode no-mistakes --yolo off)
+  expect_code 0 $? "the claude spawn must succeed: $out"
+  assert_trusted "$config/.claude.json" "$home/data/trustfallback" \
+    "the data/<id> fallback folder is granted by --add-dir and must be registered"
+  pass "fm-spawn.sh: a claude spawn with the data/<id> output folder registers it as trusted"
+}
+
+
 # The spawn half: a real fm-spawn of a claude worker must pre-register the
 # worktree AND deliver a record-backed doorbell for the brief, with no dialog to
 # answer and no human in the loop.
@@ -869,3 +972,6 @@ test_secondmate_leased_worktree_home_is_trusted
 test_secondmate_home_trust_refuses_everything_unseeded
 test_worktree_mode_still_refuses_a_secondmate_home
 test_secondmate_spawn_fails_closed_when_home_trust_cannot_be_recorded
+test_output_folder_is_trusted_exactly
+test_output_folder_scope_is_refused_outside_the_guard
+test_spawn_fallback_output_folder_is_trusted

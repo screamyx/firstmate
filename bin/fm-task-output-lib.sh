@@ -19,7 +19,9 @@
 #      launch brief; bin/fm-brief.sh names it through the same resolver.
 #
 #   2. The delete guard. fm_task_output_reclaim <delete|list> ... removes or
-#      lists ONE recorded build folder, and only when every rule holds:
+#      lists ONE recorded build folder, and only when every rule holds (its root
+#      rules are fm_task_output_root_of, which bin/fm-claude-trust.sh also uses
+#      to scope the trust it registers for a task output folder):
 #        - the recorded path is absolute, normalized (no ".", "..", doubled or
 #          trailing slash), non-empty, and is itself not a symlink;
 #        - its resolved real path sits under a listed output root
@@ -213,10 +215,38 @@ fm_task_output_remove() {
   rm -rf ${flag:+"$flag"} -- "$dir" 2>/dev/null
 }
 
+# fm_task_output_root_of <data> <path> <real>: print the real output root that
+# holds <path> when <real> (its resolved path) sits at least two levels below a
+# listed root and the literal text of <path> leads to <real>; else return 1.
+# The one root guard: the delete and the Claude trust registration both use it.
+fm_task_output_root_of() {
+  local data=$1 build=$2 real=$3 roots entry rl rr rel lit_real
+  roots=$(fm_task_output_roots "$data")
+  while IFS= read -r entry; do
+    [ -n "$entry" ] || continue
+    rl=${entry%%|*}
+    rr=${entry#*|}
+    case "$real" in "$rr"/*) ;; *) continue ;; esac
+    rel=${real#"$rr"/}
+    case "$rel" in */?*) ;; *) continue ;; esac   # two levels below the root
+    # The text of the path must lead to the same place it names.
+    if [ "$build" = "$real" ]; then
+      printf '%s' "$rr"; return 0
+    fi
+    case "$build" in "$rl"/*) ;; *) continue ;; esac
+    lit_real="$rr/${build#"$rl"/}"
+    [ "$lit_real" = "$real" ] || continue
+    printf '%s' "$rr"; return 0
+  done <<EOF
+$roots
+EOF
+  return 1
+}
+
 # fm_task_output_reclaim <delete|list> <task-id> <state> <data> <build> [<proof>]
 fm_task_output_reclaim() {
   local mode=$1 task=$2 state=$3 data=$4 build=$5 proof=${6:-}
-  local real roots entry rl rr rel lit_real holder kb after root_real=
+  local real holder kb after root_real
   [ -n "$build" ] || return 0
   if ! fm_task_output_normalized "$build"; then
     printf 'kept\tnot a normalized absolute path\t%s\n' "$build"; return 0
@@ -231,27 +261,7 @@ fm_task_output_reclaim() {
   real=$(fm_task_output_real "$build") || {
     printf 'kept\tcannot be resolved\t%s\n' "$build"; return 0
   }
-  roots=$(fm_task_output_roots "$data")
-  while IFS= read -r entry; do
-    [ -n "$entry" ] || continue
-    rl=${entry%%|*}
-    rr=${entry#*|}
-    case "$real" in "$rr"/*) ;; *) continue ;; esac
-    rel=${real#"$rr"/}
-    case "$rel" in */?*) ;; *) continue ;; esac   # two levels below the root
-    # The text of the path must lead to the same place it names.
-    if [ "$build" = "$real" ]; then
-      root_real=$rr
-    else
-      case "$build" in "$rl"/*) ;; *) continue ;; esac
-      lit_real="$rr/${build#"$rl"/}"
-      [ "$lit_real" = "$real" ] || continue
-      root_real=$rr
-    fi
-    break
-  done <<EOF
-$roots
-EOF
+  root_real=$(fm_task_output_root_of "$data" "$build" "$real") || root_real=
   if [ -z "$root_real" ]; then
     printf 'kept\toutside the output roots or fewer than two levels deep\t%s\n' "$build"; return 0
   fi
