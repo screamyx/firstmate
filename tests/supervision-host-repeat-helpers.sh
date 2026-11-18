@@ -65,7 +65,8 @@ settle_case() {
   mkdir -p "$home/state" "$home/config"
   printf 'window=firstmate:fm-demo\nproject=demo\nkind=ship\nharness=pi\nbackend=tmux\n' > "$home/state/demo.meta"
   append_status "$home" 'which schema do you want' "${4:-blocked}"
-  FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append --task demo --verdict routine \
+  case "${5:-stale:}" in stale:*) printf 'turn=t1\nstaletasks=demo\n' ;; *) printf 'turn=t1\nstaletasks=\n' ;; esac > "$home/state/.supervision-host-turn"
+  FM_BRANCH_REPORT_TURN=t1 FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append --task demo --verdict routine \
     --summary 'still waiting on the captain' --wake "${5:-stale: firstmate:fm-demo}" >/dev/null || fail "$1: could not record the outcome"
   [ -z "${3:-}" ] || append_status "$home" "$3" blocked
   FM_HOME="$home" FM_ROOT="$ROOT" WAKE_TEXT="$2" bash -c '
@@ -131,7 +132,7 @@ test_host_does_not_credit_a_mixed_claim_as_idle_evidence() {
     : > "$home/state/$t.status"
     printf 'working\n' > "$home/state/$t.status"
     FM_HOME="$home" FM_SUPERVISION_ACTOR=branch FM_BRANCH_REPORT_TURN=g.1 "$ROOT/bin/fm-branch-report.sh" \
-      --task "$t" --verdict routine --summary "handled $t" >/dev/null 2>&1 || fail "turn scope: report for $t refused"
+      --task "$t" --verdict routine --summary "handled $t" --wake "stale: firstmate:fm-a" >/dev/null 2>&1 || fail "turn scope: report for $t refused"
   done
   out=$(FM_HOME="$home" FM_ROOT="$ROOT" bash -c '
     SCRIPT_DIR=$FM_ROOT/bin

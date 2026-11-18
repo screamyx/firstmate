@@ -532,7 +532,7 @@ case "$CMD" in
     # recreate the footprint teardown removed. The outcome itself is still
     # stored and delivered; only the reader-less cache is skipped.
     if { [ -e "$STATE/$TASK.meta" ] || [ -e "$STATE/$TASK.status" ]; } \
-        && ! write_outcome_index "$TASK" "$SEQ" "$(outcome_wake_kind "$WAKE")"; then
+        && ! write_outcome_index "$TASK" "$SEQ" "$(outcome_wake_kind "$TASK")"; then
       fm_lock_release "$LOCK"
       echo "error: outcome was stored but its bounded task index could not be updated" >&2
       exit 1

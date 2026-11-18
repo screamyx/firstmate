@@ -75,8 +75,13 @@ EOF
   BRANCH_OUTCOME_INDEX_KIND=$kind
 }
 
-outcome_wake_kind() { # <wake text> prints stale or other
-  case "$1" in stale:*) echo stale ;; *) echo other ;; esac
+outcome_wake_kind() { # <task> prints stale only for a task the current host turn claimed solely through idle alerts
+  local turn=${FM_BRANCH_REPORT_TURN:-} file="$STATE/.supervision-host-turn" tasks
+  case "$turn" in ''|*[!A-Za-z0-9._-]*) echo other; return 0 ;; esac
+  [ -f "$file" ] && [ ! -L "$file" ] || { echo other; return 0; }
+  [ "$(sed -n 's/^turn=//p' "$file" | head -n 1)" = "$turn" ] || { echo other; return 0; }
+  tasks=$(sed -n 's/^staletasks=//p' "$file" | head -n 1)
+  case " $tasks " in *" $1 "*) echo stale ;; *) echo other ;; esac
 }
 
 capture_status_position() { # <task>
