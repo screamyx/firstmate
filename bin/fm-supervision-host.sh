@@ -81,14 +81,11 @@
 # queue. Before parking after a handled turn, it settles the successor handoff;
 # docs/watcher-continuity.md "Durable queue and turn-end backstop" owns how
 # that transition makes rows still queued for main recoverable. A handled wake
-# with only routine outcomes never wakes main, and neither does any handled
-# wake while away: captain outcomes wait in
-# the outcome store for the return drain's BRANCH OUTCOMES section. A handled
-# attended wake that recorded a captain outcome exits with one "supervision-host: branch-outcome:"
-# line naming its store rows, without the close it handled; main drains, where
-# the BRANCH OUTCOMES section (bin/fm-wake-drain.sh) presents every
-# unprocessed captain outcome until main acknowledges it. Otherwise the host
-# parks on the successor.
+# with only routine outcomes never wakes main. A handled wake that recorded a
+# captain outcome exits, without the close it handled, with one "supervision-host:
+# branch-outcome:" line attended (main drains BRANCH OUTCOMES, bin/fm-wake-drain.sh)
+# or, away, one "away-outcome:" line plus one line per row, once per question
+# (fm-supervision-host-away-lib.sh). Otherwise the host parks on the successor.
 # Every other outcome exits with the close's own reason line plus one
 # "supervision-host:" line saying why main has this wake, after stopping the
 # successor cycle so main's next turn end starts from the same state as
@@ -214,6 +211,8 @@ CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
 . "$SCRIPT_DIR/fm-supervisor-target-lib.sh"
 # shellcheck source=bin/fm-warm-compact-lib.sh
 . "$SCRIPT_DIR/fm-warm-compact-lib.sh"
+# shellcheck source=bin/fm-supervision-host-away-lib.sh
+. "$SCRIPT_DIR/fm-supervision-host-away-lib.sh"
 
 FIRST_ARM_RESTART=0
 case "${1:-}" in
@@ -1363,15 +1362,13 @@ while :; do
     exit_to_main "the captain returned while the away session was handling this wake, but the recorded outcomes could not be verified; main must review them" \
       "$(turn_outcome_lookup_warning)"
   fi
-  # Attended captain outcomes are main's to process; away they wait for the
-  # return, including when the captain left while this turn ran. The close
-  # itself was handled, so only the host's lines reach main.
-  if [ -n "$LAST_TURN" ] && ! fm_afk_contract_away_present "$STATE"; then
-    CAPTAIN_SEQS=$(turn_captain_seqs "$LAST_TURN")
-    if [ -n "$CAPTAIN_SEQS" ]; then
-      ARM_TEXT=
-      exit_to_main "branch-outcome: the supervision session handled this wake and recorded captain outcomes for you (store rows $CAPTAIN_SEQS); run bin/fm-wake-drain.sh, act on its BRANCH OUTCOMES section, and acknowledge them as it prints" \
-        "$HEALTH_NOTE"
+  # Captain outcomes are main's: attended via the drain, away once per question.
+  if [ -n "$LAST_TURN" ]; then
+    if ! fm_afk_contract_away_present "$STATE"; then
+      CAPTAIN_SEQS=$(turn_captain_seqs "$LAST_TURN")
+      [ -z "$CAPTAIN_SEQS" ] || { ARM_TEXT=; exit_to_main "branch-outcome: the supervision session handled this wake and recorded captain outcomes for you (store rows $CAPTAIN_SEQS); run bin/fm-wake-drain.sh, act on its BRANCH OUTCOMES section, and acknowledge them as it prints" "$HEALTH_NOTE"; }
+    elif fm_away_handback_prepare "$LAST_TURN"; then
+      fm_away_handback_exit "$HEALTH_NOTE"
     fi
   fi
 
