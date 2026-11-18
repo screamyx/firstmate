@@ -52,8 +52,11 @@ fm_away_handback_drop_wake() {  # <seq>
   [ -f "$FM_WAKE_QUEUE" ] || return 0
   fm_lock_acquire_wait "$FM_WAKE_QUEUE_LOCK" || return 0
   if tmp=$(mktemp "$STATE/.wake-queue.drop.XXXXXX"); then
-    awk -F '\t' -v key="away-outcome:$1" '!(NF >= 5 && $3 == "check" && $4 == key)' "$FM_WAKE_QUEUE" > "$tmp" \
-      && _fm_atomic_replace "$tmp" "$FM_WAKE_QUEUE" || rm -f "$tmp"
+    if awk -F '\t' -v key="away-outcome:$1" '!(NF >= 5 && $3 == "check" && $4 == key)' "$FM_WAKE_QUEUE" > "$tmp"; then
+      _fm_atomic_replace "$tmp" "$FM_WAKE_QUEUE" || rm -f "$tmp"
+    else
+      rm -f "$tmp"
+    fi
   fi
   fm_lock_release "$FM_WAKE_QUEUE_LOCK"
 }
