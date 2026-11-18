@@ -126,5 +126,20 @@ test_host_does_not_credit_a_mixed_claim_as_idle_evidence() {
   ' 2>/dev/null | tail -n 1)
   [ "$out" = "a" ] \
     || fail "turn scope: only a task whose every claimed row is an idle alert counts as stale evidence (got: $out)"
+  for t in a b; do
+    printf 'turn=g.1\nrows=1 2\ntasks=a b\nunscoped=0\nwake=signal: b working\nposture=attended\nstaletasks=a\n' > "$home/state/.supervision-host-turn"
+    : > "$home/state/$t.status"
+    printf 'working\n' > "$home/state/$t.status"
+    FM_HOME="$home" FM_SUPERVISION_ACTOR=branch FM_BRANCH_REPORT_TURN=g.1 "$ROOT/bin/fm-branch-report.sh" \
+      --task "$t" --verdict routine --summary "handled $t" >/dev/null 2>&1 || fail "turn scope: report for $t refused"
+  done
+  out=$(FM_HOME="$home" FM_ROOT="$ROOT" bash -c '
+    SCRIPT_DIR=$FM_ROOT/bin
+    . "$SCRIPT_DIR/fm-wake-lib.sh"
+    . "$SCRIPT_DIR/fm-supervision-host-repeat-lib.sh"
+    for t in a b; do fm_idle_repeat_recorded "$t" && printf "%s " "$t"; done
+  ' 2>/dev/null)
+  [ "$out" = "a " ] \
+    || fail "turn scope: with a signal wake first, only the idle-claimed task's outcome counts as idle evidence (got: $out)"
   pass "host: a task claimed together with a signal row of its own is not credited as idle evidence, its neighbour's idle alert is"
 }

@@ -120,8 +120,9 @@ fi
 
 if [ "$WAKE_SET" -ne 1 ]; then
   WAKE=$(turn_field wake)
-  case "$WAKE" in
-    stale:*) case " $(turn_field staletasks) " in *" $TASK "*) ;; *) WAKE="mixed claim: $WAKE" ;; esac ;;
+  case " $(turn_field staletasks) " in
+    *" $TASK "*) case "$WAKE" in stale:*) ;; *) WAKE="stale: $TASK (claimed with: $WAKE)" ;; esac ;;
+    *) case "$WAKE" in stale:*) WAKE="mixed claim: $WAKE" ;; esac ;;
   esac
 fi
 
