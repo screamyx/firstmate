@@ -6362,9 +6362,9 @@ claude*)
     exit 1
   fi
   # The launch's --add-dir <task output folder> raises its own dialog, so that
-  # exact folder is registered too. A folder inside data/<id> is already covered
-  # by the home and is not added (claude_add_dirs_flag), so it is skipped here.
-  if [ -n "$TASK_OUTPUT_GRANT" ] && [ "$TASK_OUTPUT_GRANT" != "${DATA%/}/$ID" ] &&
+  # exact folder is registered too, including the data/<id> fallback, which the
+  # launch grants as well and whose home may carry no trust entry.
+  if [ -n "$TASK_OUTPUT_GRANT" ] &&
     ! "$FM_ROOT/bin/fm-claude-trust.sh" --output-dir "$TASK_OUTPUT_GRANT" "$DATA" "$STATE" "$ID" >/dev/null; then
     echo "error: could not pre-register Claude workspace trust for the task output folder $TASK_OUTPUT_GRANT; refusing to launch a claude worker that would wedge on the trust dialog; $(spawn_endpoint_hint)" >&2
     exit 1

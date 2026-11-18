@@ -172,7 +172,8 @@
 # the shared home-<key> root above it. The scope test reuses the output-folder
 # delete guard (bin/fm-task-output-lib.sh fm_task_output_root_of): a listed
 # output root, the real path at least two levels below it, the literal path
-# leading to it, not a symlink, and named for this task id - either the folder
+# leading to it (or this home's data/<id> fallback, one level below its root),
+# not a symlink, and named for this task id - either the folder
 # a fresh spawn assigns or the one state/<id>.meta already records. It is
 # trust-only, like a secondmate home.
 #
@@ -367,8 +368,10 @@ elif [ "$MODE" = output-dir ]; then
   [ -n "$SUB_ID" ] || refuse "no task id was supplied, so '$TARGET_REAL' cannot be matched to a task"
   fm_task_output_normalized "$TARGET_ARG" || refuse "'$TARGET_ARG' is not a normalized absolute path"
   [ ! -L "$TARGET_ARG" ] || refuse "'$TARGET_ARG' is a symlink, not a $SCOPE_NOUN"
-  fm_task_output_root_of "$OUT_DATA" "$TARGET_ARG" "$TARGET_REAL" >/dev/null \
-    || refuse "'$TARGET_REAL' is outside the output roots or fewer than two levels below one"
+  if [ "$TARGET_REAL" != "$(fm_task_output_real "${OUT_DATA%/}" 2>/dev/null)/$SUB_ID" ]; then
+    fm_task_output_root_of "$OUT_DATA" "$TARGET_ARG" "$TARGET_REAL" >/dev/null \
+      || refuse "'$TARGET_REAL' is outside the output roots or fewer than two levels below one"
+  fi
   # Recorded for this task: the folder must be the one named for this id - the
   # assignment a fresh spawn derives, or the one state/<id>.meta already records.
   [ "$(basename -- "$TARGET_REAL")" = "$SUB_ID" ] || refuse "'$TARGET_REAL' is not the output folder of task '$SUB_ID'"

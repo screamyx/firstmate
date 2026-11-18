@@ -684,10 +684,10 @@ test_output_folder_scope_is_refused_outside_the_guard() {
   IFS='|' read -r case_dir data state config folder <<EOF
 $rec
 EOF
-  # One level below the root: an id folder is never a registrable target.
-  mkdir -p "$data/task-o2"
-  out=$(run_output_trust "$config" "$data/task-o2" "$data" "$state" task-o2)
-  expect_code 1 $? "a folder one level below the root must be refused: $out"
+  # One level below the root is only the task's own data/<id> fallback.
+  mkdir -p "$data/task-other"
+  out=$(run_output_trust "$config" "$data/task-other" "$data" "$state" task-o2)
+  expect_code 1 $? "another task's folder one level below the root must be refused: $out"
   # Outside every listed root.
   mkdir -p "$case_dir/elsewhere/a/task-o2"
   out=$(run_output_trust "$config" "$case_dir/elsewhere/a/task-o2" "$data" "$state" task-o2)
@@ -717,7 +717,7 @@ EOF
 
 # A fresh spawn whose output folder is the data/<id> fallback adds no output
 # --add-dir (it sits under the trusted home), so nothing extra is registered.
-test_spawn_fallback_output_folder_registers_nothing_extra() {
+test_spawn_fallback_output_folder_is_trusted() {
   local case_dir home proj wt config fakebin out
   case_dir="$TMP_ROOT/spawn-fallback"
   home="$case_dir/home"
@@ -733,9 +733,9 @@ test_spawn_fallback_output_folder_registers_nothing_extra() {
     fm_test_run_spawn "$home" "$wt" "$fakebin" trustfallback "$proj" claude \
     --mode no-mistakes --yolo off)
   expect_code 0 $? "the claude spawn must succeed: $out"
-  assert_not_trusted "$config/.claude.json" "$home/data/trustfallback" \
-    "the data/<id> fallback folder must not be registered as its own trust entry"
-  pass "fm-spawn.sh: a claude spawn with the data/<id> output folder registers no extra trust entry"
+  assert_trusted "$config/.claude.json" "$home/data/trustfallback" \
+    "the data/<id> fallback folder is granted by --add-dir and must be registered"
+  pass "fm-spawn.sh: a claude spawn with the data/<id> output folder registers it as trusted"
 }
 
 
@@ -974,4 +974,4 @@ test_worktree_mode_still_refuses_a_secondmate_home
 test_secondmate_spawn_fails_closed_when_home_trust_cannot_be_recorded
 test_output_folder_is_trusted_exactly
 test_output_folder_scope_is_refused_outside_the_guard
-test_spawn_fallback_output_folder_registers_nothing_extra
+test_spawn_fallback_output_folder_is_trusted
