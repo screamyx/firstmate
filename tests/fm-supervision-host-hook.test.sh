@@ -15,36 +15,32 @@ set -u
 
 # shellcheck source=tests/supervision-host-helpers.sh
 . "$(dirname "${BASH_SOURCE[0]}")/supervision-host-helpers.sh"
-
+# shellcheck source=tests/supervision-host-repeat-helpers.sh
+. "$(dirname "${BASH_SOURCE[0]}")/supervision-host-repeat-helpers.sh"
 
 test_main_only_close_after_handled_turn_restores_inherited_handling() {
   assert_main_only_close_after_handled_turn restore
   pass "host+hook: a main-only close after a handled turn restores inherited handling and rewakes main"
 }
 
-
 test_main_only_close_after_handled_turn_delivers_restore_failure() {
   assert_main_only_close_after_handled_turn refuse
   pass "host+hook: a refused inherited handling restore delivers a failure instead of silent success"
 }
-
 
 test_returned_driver_is_caught_attended() {
   assert_returned_driver_is_caught attended
   pass "host+hook: a driver returning to an idle worker is stale-handled while attended"
 }
 
-
 test_returned_driver_is_caught_away() {
   assert_returned_driver_is_caught away
   pass "host+hook: a driver returning to an idle worker is stale-handled while away"
 }
 
-
 test_lost_boundary_handoff() { assert_lost_handoff_keeps_watching boundary; }
 
 test_lost_pass_through_handoff() { assert_lost_handoff_keeps_watching pass-through; }
-
 
 # A close that turns main-only at its turn hands back through the same opt-in
 # path and must keep its pass-through row too. The hand-back stops the successor
@@ -544,6 +540,10 @@ test_unrecorded_successor_is_stopped_rather_than_left_for_main() {
 }
 
 fm_test_run \
+  test_parked_question_is_not_raised_again_while_its_status_is_unchanged \
+  test_host_settles_a_bare_idle_alert_for_a_recorded_question \
+  test_host_leaves_every_other_idle_alert_for_its_turn \
+  test_host_settles_a_bare_idle_alert_for_an_unchanged_working_status \
   test_main_only_close_after_handled_turn_restores_inherited_handling \
   test_main_only_close_after_handled_turn_delivers_restore_failure \
   test_returned_driver_is_caught_attended \

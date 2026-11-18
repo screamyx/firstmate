@@ -16,6 +16,8 @@
 # locked drain rotates such leftovers away before doing anything else.
 # FM_STATUS_PRESENTATION_LOCK_TIMEOUT sets the positive whole-second wait for
 # presentation-path locks (default 10); queue mutation locks remain blocking.
+# FM_WAKE_DRAIN_SETTLE_ONLY=1 (supervision host repeat skip) claims rows without
+# presenting status, so no undelivered status line is marked read.
 set -u
 
 SCRIPT_DIR="$(d=${BASH_SOURCE[0]%/*}; [ "$d" != "${BASH_SOURCE[0]}" ] || d=.; cd "${d:-/}" && pwd)"
@@ -33,6 +35,8 @@ SCRIPT_DIR="$(d=${BASH_SOURCE[0]%/*}; [ "$d" != "${BASH_SOURCE[0]}" ] || d=.; cd
 . "$SCRIPT_DIR/fm-supervision-engine-lib.sh"
 # shellcheck source=bin/fm-afk-contract.sh
 . "$SCRIPT_DIR/fm-afk-contract.sh"
+# shellcheck source=bin/fm-outcome-index-lib.sh
+. "$SCRIPT_DIR/fm-outcome-index-lib.sh"
 
 DRAIN_TMP=
 DRAIN_VIEW_TMP=
@@ -278,58 +282,7 @@ acknowledge_inactive_outcomes() { # <mode> <newline-separated-fingerprints>
   done <<< "$fingerprints"
 }
 
-BRANCH_OUTCOME_INDEX_VERSION=fm-branch-outcome-index-v1
-BRANCH_OUTCOME_INDEX_MAX_BYTES=512
-BRANCH_OUTCOME_INDEX_STATE=ok
-BRANCH_OUTCOME_INDEX_ENDPOINT=
-BRANCH_OUTCOME_INDEX_IDENT=
 STATUS_OUTCOME_BACKSTOP_ACKNOWLEDGED=
-outcome_index_ready_ok() { # <ready-path>
-  local seq
-  [ -f "$1" ] && [ -r "$1" ] && [ ! -L "$1" ] || return 1
-  seq=$(LC_ALL=C command cat "$1" 2>/dev/null) || return 1
-  case "$seq" in ''|*[!0-9]*) return 1 ;; esac
-  return 0
-}
-
-load_branch_outcome_index() { # <task>
-  local task=$1 path data version seq endpoint ident extra size
-  BRANCH_OUTCOME_INDEX_STATE=ok
-  BRANCH_OUTCOME_INDEX_ENDPOINT=
-  BRANCH_OUTCOME_INDEX_IDENT=
-  case "$task" in ''|*[!A-Za-z0-9._-]*) return 0 ;; esac
-  path="$STATE/.$task.branch-outcome-index"
-  [ -e "$path" ] || [ -L "$path" ] || return 0
-  if [ ! -f "$path" ] || [ ! -r "$path" ] || [ -L "$path" ]; then
-    BRANCH_OUTCOME_INDEX_STATE=invalid
-    return 0
-  fi
-  size=$(_fm_status_file_size "$path") || { BRANCH_OUTCOME_INDEX_STATE=invalid; return 0; }
-  size=${size//[[:space:]]/}
-  case "$size" in ''|*[!0-9]*) BRANCH_OUTCOME_INDEX_STATE=invalid; return 0 ;; esac
-  if [ "$size" -gt "$BRANCH_OUTCOME_INDEX_MAX_BYTES" ]; then
-    BRANCH_OUTCOME_INDEX_STATE=invalid
-    return 0
-  fi
-  data=$(LC_ALL=C command cat "$path" 2>/dev/null) \
-    || { BRANCH_OUTCOME_INDEX_STATE=invalid; return 0; }
-  case "$data" in *$'\n'*) BRANCH_OUTCOME_INDEX_STATE=invalid; return 0 ;; esac
-  IFS=$(printf '\t') read -r version seq endpoint ident extra <<EOF
-$data
-EOF
-  if [ "$version" != "$BRANCH_OUTCOME_INDEX_VERSION" ] || [ -n "$extra" ]; then
-    BRANCH_OUTCOME_INDEX_STATE=invalid
-    return 0
-  fi
-  case "$seq:$endpoint" in *[!0-9:]*) BRANCH_OUTCOME_INDEX_STATE=invalid; return 0 ;; esac
-  [ -n "$seq" ] && [ -n "$endpoint" ] && [ -n "$ident" ] \
-    && [ "${#seq}" -le 16 ] && [ "${#endpoint}" -le 16 ] \
-    && [ "$seq" -le 9007199254740991 ] && [ "$endpoint" -le 9007199254740991 ] \
-    || { BRANCH_OUTCOME_INDEX_STATE=invalid; return 0; }
-  BRANCH_OUTCOME_INDEX_ENDPOINT=$endpoint
-  BRANCH_OUTCOME_INDEX_IDENT=$ident
-}
-
 print_status_outcome_backstop_section() {  # <task-and-endpoint-snapshot>
   local snapshot=$1 task endpoint ident event event_endpoint line verb key receipt store lock ready
   local output='' used=0 shown=0 omitted=0 bytes item_bytes=220 global_bytes=4000 rc=0
@@ -1094,7 +1047,7 @@ DRAIN_LOCK_HELD=false
 printf 'WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through %s --recovery-generation %s\n' \
   "$ACK_THROUGH" "${RECOVERY_MARKER_TOKEN##*:}" >&2
 
-(print_status_presentation "$RAW_ROWS") || true
+[ "${FM_WAKE_DRAIN_SETTLE_ONLY:-0}" = 1 ] || (print_status_presentation "$RAW_ROWS") || true
 print_branch_outcomes_section || BRANCH_OUTCOMES_RC=1
 assert_watcher_liveness
 exit "$BRANCH_OUTCOMES_RC"

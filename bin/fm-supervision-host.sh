@@ -213,6 +213,8 @@ CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
 . "$SCRIPT_DIR/fm-warm-compact-lib.sh"
 # shellcheck source=bin/fm-supervision-host-away-lib.sh
 . "$SCRIPT_DIR/fm-supervision-host-away-lib.sh"
+# shellcheck source=bin/fm-supervision-host-repeat-lib.sh
+. "$SCRIPT_DIR/fm-supervision-host-repeat-lib.sh"
 
 FIRST_ARM_RESTART=0
 case "${1:-}" in
@@ -1075,6 +1077,10 @@ handle_wake() {  # <reason-lines>
     HANDLE_WHY="this session no longer owns supervision"
     return 1
   fi
+  if fm_host_repeat_settle "$rows" "$tasks" "${unscoped:-0}" "$first"; then
+    "$SCRIPT_DIR/fm-wake-grant.sh" release "$GEN" >/dev/null 2>&1 || true
+    return 0
+  fi
   if ! choose_conversation; then
     "$SCRIPT_DIR/fm-wake-grant.sh" release "$GEN" >/dev/null 2>&1 || true
     HANDLE_WHY="the branch prompt or engine conversation could not be prepared"
@@ -1084,8 +1090,8 @@ handle_wake() {  # <reason-lines>
   turn="$GEN.$TURN_SEQ"
   LAST_TURN=$turn
   : > "$RECEIPTS"
-  printf 'turn=%s\nrows=%s\ntasks=%s\nunscoped=%s\nwake=%s\nposture=%s\n' \
-    "$turn" "$rows" "$tasks" "${unscoped:-0}" "$first" "$TURN_POSTURE" > "$TURN_FILE"
+  printf 'turn=%s\nrows=%s\ntasks=%s\nunscoped=%s\nwake=%s\nposture=%s\nstaletasks=%s\n' \
+    "$turn" "$rows" "$tasks" "${unscoped:-0}" "$first" "$TURN_POSTURE" "$(printf '%s\n' "$scope" | sed -n 's/^staletasks=//p')" > "$TURN_FILE"
   readback=
   if [ "$TURN_POSTURE" = away ]; then
     readback=$(mktemp "$STATE/.supervision-host-readback.XXXXXX") || readback=
@@ -1179,8 +1185,7 @@ handle_wake() {  # <reason-lines>
     log_line "handled	turn=$turn	posture=$TURN_POSTURE	rc=$rc	reports=$receipts	$usage	$first"
     return 0
   fi
-  # A turn that did not handle its wake starts the next one on a new
-  # conversation, so whatever went wrong in this one is not carried forward.
+  # A turn that did not handle its wake starts the next on a new conversation.
   rm -f "$ENGINE_RECORD"
   log_line "failed	turn=$turn	posture=$TURN_POSTURE	rc=$rc	reports=${receipts:-0}	unacked=${unacked:-none}	${usage:-no-result}	$(head -c 300 "$errors" 2>/dev/null | tr '\t\n' '  ')	$first"
   [ "$errors" = /dev/null ] || rm -f "$errors"
@@ -1257,10 +1262,9 @@ while :; do
   await_close || boundary_exit
   REASON=$(printf '%s\n' "$ARM_TEXT" | grep -E '^(signal:|stale:|check:|heartbeat($|:))' || true)
 
-  # The away daemon owns triage while its flag exists; the owner stands down.
-  # A close with no wake is the arm's own failure or attach result, which the
-  # owner judges exactly as it judges the arm's. Exit status 0 in both: a
-  # status above 128 tells the owner the host itself died.
+  # A close with no wake is the arm's own failure or attach result, judged by
+  # the owner as the arm's is; the away daemon owns triage while its flag
+  # exists. Exit 0 in both: a status above 128 tells the owner the host died.
   if [ -z "$REASON" ]; then
     log_line "pass-through	a close without a wake"
     emit
@@ -1271,8 +1275,7 @@ while :; do
     emit
     exit 0
   fi
-  # Attended: the close reaches main exactly as the plain arm delivers it,
-  # unless the supervision session may take it (attended_acceptor).
+  # Attended: the close reaches main unless attended_acceptor takes it.
   if ! fm_afk_contract_away_present "$STATE"; then
     if ! attended_acceptor "$(printf '%s\n' "$REASON" | head -n 1)"; then
       log_line "pass-through	attended	$ATTENDED_WHY	$(printf '%s\n' "$REASON" | head -n 1)"
@@ -1319,21 +1322,18 @@ while :; do
     fi
   fi
 
-  # The captain returned during that turn: the return brief was rendered
-  # before its visible outcomes existed, so main relays them now, handled or not.
+  # A captain who returned during the turn gets its visible outcomes via main.
   handle_wake "$REASON"
   HANDLE_RC=$?
   if [ "$HANDLE_RC" -eq 2 ]; then
     log_line "pass-through	attended	$ATTENDED_WHY	$(printf '%s\n' "$REASON" | head -n 1)"
     acknowledged_handback
-    # The successor this turn already started and confirmed stays up. Retiring
-    # it is what left no watcher after a close that became main-only.
+    # The confirmed successor stays up; retiring it left no watcher.
     detach_successor
-    # Main handles this close after all, so hand back the downtime the handoff
-    # above consumed: the re-arm owner delivers the close only while the
-    # recovery marker reads downtime (leave_successor_for_main). It is handed
-    # back as already announced, so the successor left running does not
-    # resurface the episode this very close delivers.
+    # Main handles this close after all, so hand back the consumed downtime
+    # (the re-arm owner delivers a close only while the marker reads downtime,
+    # leave_successor_for_main) as already announced, so the running successor
+    # does not resurface the episode this close delivers.
     if [ -n "$SUCCESSOR_GENERATION" ] \
       && ! fm_recovery_marker_handback "$STATE/.watcher-down" >/dev/null 2>&1; then
       log_line "pass-through	downtime-unrestored	$(printf '%s\n' "$REASON" | head -n 1)"

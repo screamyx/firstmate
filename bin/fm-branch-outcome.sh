@@ -50,6 +50,8 @@
 #     before append and published only after the cache update; processed-init
 #     rebuilds every cache before publishing it, so interruption or upgrade
 #     fails closed without making each drain scan lifetime history.
+#     bin/fm-outcome-index-lib.sh owns reading the cache and capturing the status
+#     position it records (the drain, the watcher, and the supervision host share it).
 #     bin/fm-teardown.sh removes a retired task's cache with its other records,
 #     and append skips the cache for a task that has neither a live meta nor a
 #     status log (the outcome itself is still stored), so the branch's report
@@ -141,6 +143,8 @@ SCRIPT_DIR="$(d=${BASH_SOURCE[0]%/*}; [ "$d" != "${BASH_SOURCE[0]}" ] || d=.; cd
 . "$SCRIPT_DIR/fm-wake-lib.sh"
 # shellcheck source=bin/fm-classify-lib.sh
 . "$SCRIPT_DIR/fm-classify-lib.sh"
+# shellcheck source=bin/fm-outcome-index-lib.sh
+. "$SCRIPT_DIR/fm-outcome-index-lib.sh"
 
 STORE="$STATE/branch-outcomes.jsonl"
 CURSOR="$STATE/.branch-outcomes-cursor"
@@ -274,29 +278,11 @@ outcome_index_path() { # <task>
   printf '%s/.%s.branch-outcome-index' "$STATE" "$1"
 }
 
-capture_status_position() { # <task>
-  local f="$STATE/$1.status" size ident size_after ident_after
-  CAPTURED_STATUS_ENDPOINT=0
-  CAPTURED_STATUS_IDENT=-
-  [ -f "$f" ] && [ -r "$f" ] && [ ! -L "$f" ] || return 0
-  size=$(_fm_status_file_size "$f") || return 0
-  size=${size//[[:space:]]/}
-  ident=$(_fm_open_decisions_file_ident "$f") || return 0
-  size_after=$(_fm_status_file_size "$f") || return 0
-  size_after=${size_after//[[:space:]]/}
-  ident_after=$(_fm_open_decisions_file_ident "$f") || return 0
-  case "$size:$size_after" in *[!0-9:]*) return 0 ;; esac
-  [ "$size" = "$size_after" ] && [ "$ident" = "$ident_after" ] || return 0
-  case "$ident" in *$'\t'*|*$'\n'*|'') return 0 ;; esac
-  CAPTURED_STATUS_ENDPOINT=$size
-  CAPTURED_STATUS_IDENT=$ident
-}
-
-write_outcome_index() { # <task> <seq> [<endpoint> <identity>]
-  local task=$1 seq=$2 endpoint=${3:-$CAPTURED_STATUS_ENDPOINT} ident=${4:-$CAPTURED_STATUS_IDENT} path tmp record
+write_outcome_index() { # <task> <seq> <stale|other> [<endpoint> <identity>]
+  local task=$1 seq=$2 kind=$3 endpoint=${4:-$CAPTURED_STATUS_ENDPOINT} ident=${5:-$CAPTURED_STATUS_IDENT} path tmp record
   path=$(outcome_index_path "$task") || return 1
-  record=$(printf '%s\t%s\t%s\t%s\n' "$OUTCOME_INDEX_VERSION" "$seq" \
-    "$endpoint" "$ident") || return 1
+  record=$(printf '%s\t%s\t%s\t%s\t%s\n' "$OUTCOME_INDEX_VERSION" "$seq" \
+    "$endpoint" "$ident" "$kind") || return 1
   [ "${#record}" -le "$OUTCOME_INDEX_MAX_BYTES" ] || return 1
   tmp=$(mktemp "$STATE/.branch-outcome-index.XXXXXX") || return 1
   chmod 0600 "$tmp" || { rm -f -- "$tmp"; return 1; }
@@ -346,7 +332,7 @@ rebuild_outcome_indexes() {
         esac
       fi
     fi
-    write_outcome_index "$task" "$seq" "$endpoint" "$ident" || return 1
+    write_outcome_index "$task" "$seq" other "$endpoint" "$ident" || return 1
   done <<EOF
 $rows
 EOF
@@ -546,7 +532,7 @@ case "$CMD" in
     # recreate the footprint teardown removed. The outcome itself is still
     # stored and delivered; only the reader-less cache is skipped.
     if { [ -e "$STATE/$TASK.meta" ] || [ -e "$STATE/$TASK.status" ]; } \
-        && ! write_outcome_index "$TASK" "$SEQ"; then
+        && ! write_outcome_index "$TASK" "$SEQ" "$(outcome_wake_kind "$TASK")"; then
       fm_lock_release "$LOCK"
       echo "error: outcome was stored but its bounded task index could not be updated" >&2
       exit 1

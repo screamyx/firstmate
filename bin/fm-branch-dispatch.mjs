@@ -19,6 +19,7 @@
 //       unscoped=0|1    1 when the claim names no task (a heartbeat review, or
 //                       a claimed heartbeat or check row), so a report on any
 //                       task or on fleet is in scope
+//       staletasks=<id> ...  the tasks whose every claimed row is a stale alert
 //     --heartbeat marks a heartbeat wake; --afk applies the away-posture
 //     collapse (docs/pi-supervision-branch.md "Postures").
 //   fm-branch-dispatch.mjs offer [--afk]
@@ -67,7 +68,8 @@ function scopeLines(scope, heartbeat) {
     `corrupted=${scope.corrupted ? 1 : 0}\n` +
     `rows=${scope.eligibleSeqs.join(" ")}\n` +
     `tasks=${scope.eligibleTasks.join(" ")}\n` +
-    `unscoped=${unscoped ? 1 : 0}\n`
+    `unscoped=${unscoped ? 1 : 0}\n` +
+    `staletasks=${scope.staleTasks.join(" ")}\n`
   );
 }
 
