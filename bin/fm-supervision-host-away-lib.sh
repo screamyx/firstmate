@@ -58,6 +58,17 @@ fm_away_handback_drop_wake() {  # <seq>
   fm_lock_release "$FM_WAKE_QUEUE_LOCK"
 }
 
+fm_away_handback_ensure_wake() {  # <row json>
+  local seq task summary
+  seq=$(printf '%s' "$1" | jq -r '.seq')
+  task=$(printf '%s' "$1" | jq -r '.task' | tr -d '\r\t\n')
+  summary=$(printf '%s' "$1" | jq -r '.summary // ""' | tr '\n\t\r' '   ')
+  ! awk -F '\t' -v key="away-outcome:$seq" 'NF >= 5 && $3 == "check" && $4 == key { found = 1 } END { exit !found }' \
+    "$FM_WAKE_QUEUE" 2>/dev/null || return 0
+  fm_wake_append check "away-outcome:$seq" \
+    "check: away-outcome $seq for $task [captain]: pass it to the channel the away words name, else leave it for the return, and only then acknowledge: $summary"
+}
+
 fm_away_handback_prepare() {  # <turn>
   local seqs rows row task ident digest fresh_rows='' seq
   AWAY_HANDBACK_SEQS=
@@ -89,6 +100,7 @@ fm_away_handback_prepare() {  # <turn>
     seq=$(printf '%s' "$row" | jq -r '.seq')
     AWAY_HANDBACK_SEQS=${AWAY_HANDBACK_SEQS:+$AWAY_HANDBACK_SEQS, }$seq
     fresh_rows=${fresh_rows:+$fresh_rows$'\n'}$row
+    fm_away_handback_ensure_wake "$row" || digest=
     AWAY_HANDBACK_IDENTS=${AWAY_HANDBACK_IDENTS:+$AWAY_HANDBACK_IDENTS$'\n'}$task$'\t'$ident$'\t'${digest:-unhashed}
   done <<< "$rows"
   [ -n "$fresh_rows" ] || return 1
@@ -100,10 +112,10 @@ fm_away_handback_prepare() {  # <turn>
 # boundary (bin/fm-supervision-host.sh boundary_exit): the handling episode is
 # settled and the watcher stopped, which publishes downtime exactly as at a
 # boundary, and main's drain acknowledges it before the owner's next host
-# starts. Each outcome is already a durable main-owned check wake
-# (away-outcome:<seq>, queued by bin/fm-branch-report.sh when it was
-# reported), and a row whose wake could not be queued has no receipt, so the
-# ledger lines are written only for rows main will see in its drain.
+# starts. Each outcome is a durable main-owned check wake (away-outcome:<seq>),
+# queued by bin/fm-branch-report.sh when an away turn reported it, or by
+# fm_away_handback_ensure_wake when the turn started attended or the captain left
+# after the report; the ledger lines are written only for rows whose wake is queued.
 fm_away_handback_exit() {  # [further lines]
   local why="away-outcome: the supervision session handled this wake and recorded outcomes that need the captain (store rows $AWAY_HANDBACK_SEQS, listed next); pass them to the channel the away words name, else leave them for the return, and only then drain and acknowledge"
   local task ident digest

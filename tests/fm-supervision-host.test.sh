@@ -168,6 +168,8 @@ test_captain_leaving_mid_turn_hands_its_captain_outcome_to_main_and_keeps_it_for
   [ -f "$home/state/.afk-contract" ] || fail "fixture: the stub did not record the away posture"
   assert_re '^supervision-host: away-outcome: .*\(store rows 1,' "$home/host.out" "the exit must name the away outcome's store row"
   assert_grep '"verdict":"captain"' "$home/state/branch-outcomes.jsonl" "fixture: the stub did not report a captain outcome"
+  assert_re 'away-outcome:1.*away-outcome 1 for demo \[captain\]' "$home/state/.wake-queue" "a hand-back after the captain left mid-turn must be queued as a durable wake"
+  assert_re '	away-handback	demo	-	[0-9a-f]{16}$' "$home/state/.supervision-host.log" "the ledger line must follow the queued wake"
   drained=$(FM_HOME="$home" "$FAKE_CLAUDE" -c '"$0" 2>&1' "$ROOT/bin/fm-wake-drain.sh")
   assert_not_contains "$drained" "BRANCH OUTCOMES" "the away drain must not present captain outcomes"
   FM_HOME="$home" "$CONTRACT" archive >/dev/null 2>&1 || fail "fixture: could not archive the away posture"
