@@ -58,7 +58,7 @@ test_parked_question_is_not_raised_again_while_its_status_is_unchanged() {
 # a claim of bare idle alerts for a question whose outcome is recorded at the
 # status file's present position is consumed with no engine; anything else is
 # left untouched for the turn.
-# settle_case <name> <queued wake text> <status line after the outcome or ''> [<status verb>]
+# settle_case <name> <queued wake text> <status line after the outcome or ''> [<status verb> [<wake the outcome was recorded for>]]
 # prints "<settle rc> <rows left> <skip lines logged>".
 settle_case() {
   local home="$TMP_ROOT/$1"
@@ -66,7 +66,7 @@ settle_case() {
   printf 'window=firstmate:fm-demo\nproject=demo\nkind=ship\nharness=pi\nbackend=tmux\n' > "$home/state/demo.meta"
   append_status "$home" 'which schema do you want' "${4:-blocked}"
   FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append --task demo --verdict routine \
-    --summary 'still waiting on the captain' >/dev/null || fail "$1: could not record the outcome"
+    --summary 'still waiting on the captain' --wake "${5:-stale: firstmate:fm-demo}" >/dev/null || fail "$1: could not record the outcome"
   [ -z "${3:-}" ] || append_status "$home" "$3" blocked
   FM_HOME="$home" FM_ROOT="$ROOT" WAKE_TEXT="$2" bash -c '
     SCRIPT_DIR=$FM_ROOT/bin
@@ -105,5 +105,7 @@ test_host_leaves_every_other_idle_alert_for_its_turn() {
 test_host_settles_a_bare_idle_alert_for_an_unchanged_working_status() {
   [ "$(settle_case settle-working 'stale: firstmate:fm-demo' '' working)" = "0 0 1" ] \
     || fail "settle: a bare idle alert for an unchanged working status was not consumed without a turn"
-  pass "host: a bare idle alert for an unchanged working status is consumed without an engine turn"
+  [ "$(settle_case settle-after-signal 'stale: firstmate:fm-demo' '' working 'signal: firstmate:fm-demo')" = "1 1 0" ] \
+    || fail "settle: the first idle alert after an outcome recorded for a signal must keep its turn"
+  pass "host: a bare idle alert for an unchanged working status is consumed without an engine turn, unless the recorded outcome was for a signal"
 }

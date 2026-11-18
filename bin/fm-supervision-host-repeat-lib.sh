@@ -2,8 +2,8 @@
 # fm-supervision-host-repeat-lib.sh - sourced by bin/fm-supervision-host.sh. The
 # repeat idle alert skip (docs/supervision-host.md "Repeat idle alerts"): a
 # claim made only of bare "stale: <pane>" rows for workers whose last outcome
-# is already recorded at the status file's present position, whatever the
-# status (bin/fm-outcome-index-lib.sh fm_status_position_recorded), is settled
+# is already recorded for a stale wake at the status file's present position,
+# whatever the status (bin/fm-outcome-index-lib.sh fm_idle_repeat_recorded), is settled
 # without an engine turn.
 #
 # Needs from the host: SCRIPT_DIR, STATE, GEN, log_line, and the grant already
@@ -32,7 +32,7 @@ fm_host_repeat_settle() {  # <rows> <tasks> <unscoped> <wake-line>
   [ "$unscoped" != 1 ] && [ -n "$tasks" ] || return 1
   fm_host_repeat_claim_is_bare_stale "$rows" || return 1
   for task in $tasks; do
-    fm_status_position_recorded "$task" || return 1
+    fm_idle_repeat_recorded "$task" || return 1
   done
   drain=$(FM_WAKE_DRAIN_SETTLE_ONLY=1 FM_SUPERVISION_ACTOR=branch "$SCRIPT_DIR/fm-wake-drain.sh" 2>&1) || return 1
   ack=$(printf '%s\n' "$drain" | sed -n 's/^WAKE_ACK_REQUIRED: after handling completes run bin\/fm-wake-drain.sh //p' | tail -1)

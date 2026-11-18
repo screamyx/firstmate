@@ -278,11 +278,11 @@ outcome_index_path() { # <task>
   printf '%s/.%s.branch-outcome-index' "$STATE" "$1"
 }
 
-write_outcome_index() { # <task> <seq> [<endpoint> <identity>]
-  local task=$1 seq=$2 endpoint=${3:-$CAPTURED_STATUS_ENDPOINT} ident=${4:-$CAPTURED_STATUS_IDENT} path tmp record
+write_outcome_index() { # <task> <seq> <stale|other> [<endpoint> <identity>]
+  local task=$1 seq=$2 kind=$3 endpoint=${4:-$CAPTURED_STATUS_ENDPOINT} ident=${5:-$CAPTURED_STATUS_IDENT} path tmp record
   path=$(outcome_index_path "$task") || return 1
-  record=$(printf '%s\t%s\t%s\t%s\n' "$OUTCOME_INDEX_VERSION" "$seq" \
-    "$endpoint" "$ident") || return 1
+  record=$(printf '%s\t%s\t%s\t%s\t%s\n' "$OUTCOME_INDEX_VERSION" "$seq" \
+    "$endpoint" "$ident" "$kind") || return 1
   [ "${#record}" -le "$OUTCOME_INDEX_MAX_BYTES" ] || return 1
   tmp=$(mktemp "$STATE/.branch-outcome-index.XXXXXX") || return 1
   chmod 0600 "$tmp" || { rm -f -- "$tmp"; return 1; }
@@ -298,7 +298,7 @@ publish_outcome_index_ready() { # <seq>
 }
 
 rebuild_outcome_indexes() {
-  local rows task seq epoch endpoint ident f mtime
+  local rows task seq epoch endpoint ident wake f mtime
   rm -f -- "$OUTCOME_INDEX_READY" || return 1
   [ -s "$STORE" ] || { publish_outcome_index_ready 0; return; }
   rows=$(jq -r -s '
@@ -306,10 +306,11 @@ rebuild_outcome_indexes() {
     | group_by(.task)
     | map(.[-1])[]
     | [.task, (.seq | tostring), (.epoch | tostring),
+       ((.wake // "") | if startswith("stale:") then "stale" else "other" end),
        ((.statusEndpoint // "") | tostring), (.statusIdent // "")]
     | @tsv
   ' "$STORE") || return 1
-  while IFS=$(printf '\t') read -r task seq epoch endpoint ident; do
+  while IFS=$(printf '\t') read -r task seq epoch wake endpoint ident; do
     [ -n "$task" ] || continue
     if [ -z "$endpoint" ] || [ -z "$ident" ]; then
       f="$STATE/$task.status"
@@ -332,7 +333,7 @@ rebuild_outcome_indexes() {
         esac
       fi
     fi
-    write_outcome_index "$task" "$seq" "$endpoint" "$ident" || return 1
+    write_outcome_index "$task" "$seq" "$wake" "$endpoint" "$ident" || return 1
   done <<EOF
 $rows
 EOF
@@ -532,7 +533,7 @@ case "$CMD" in
     # recreate the footprint teardown removed. The outcome itself is still
     # stored and delivered; only the reader-less cache is skipped.
     if { [ -e "$STATE/$TASK.meta" ] || [ -e "$STATE/$TASK.status" ]; } \
-        && ! write_outcome_index "$TASK" "$SEQ"; then
+        && ! write_outcome_index "$TASK" "$SEQ" "$(outcome_wake_kind "$WAKE")"; then
       fm_lock_release "$LOCK"
       echo "error: outcome was stored but its bounded task index could not be updated" >&2
       exit 1
