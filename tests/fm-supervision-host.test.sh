@@ -194,6 +194,7 @@ test_away_captain_outcome_wakes_main_once_per_question_and_supervision_resumes()
   assert_no_re '^signal:' "$home/host.out" "the close the engine handled must not reach main as a wake"
   assert_re '	away-handback	demo	q1	[0-9a-f]{16}$' "$home/state/.supervision-host.log" "the exit must write its ledger line"
   watcher_live "$home" && fail "away-captain: the host left its successor cycle running when it woke main"
+  assert_re 'away-outcome.*outcome 1 for demo \[captain\]: stub escalated: which option' "$home/state/.wake-queue" "the outcome must also be queued as a durable wake"
 
   # Main drains and acknowledges, then the owner starts the next host at its turn end.
   main_drain_and_ack "$home"

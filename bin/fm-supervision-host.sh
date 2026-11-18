@@ -739,7 +739,7 @@ acknowledged_handback() {  # [extra output lines]; returns only when disabled
   tmp=$(mktemp "$STATE/.supervision-handoff-pending.XXXXXX") || exit 1
   printf '%s\n' "$GEN" > "$tmp" && mv -f "$tmp" "$STATE/.supervision-handoff-pending" || exit 1
   if ! fm_wake_append check "supervision-handoff:$GEN" \
-    "check: supervision-handoff - the host handed supervision to main; drain, handle, and acknowledge this hand-back${HANDBACK_DETAIL:+; ${HANDBACK_DETAIL}}" \
+    "check: supervision-handoff - the host handed supervision to main; drain, handle, and acknowledge this hand-back" \
     || ! fm_recovery_marker_publish "$STATE/.watcher-down" downtime >/dev/null; then
     emit "$@" 'supervision-host: the acknowledged hand-back could not be recorded'
     exit 1
@@ -760,7 +760,6 @@ acknowledged_handback() {  # [extra output lines]; returns only when disabled
       rm -f "$out"
       log_line "handoff	$GEN"
       emit "$@"
-      ! declare -F fm_away_handback_record >/dev/null || fm_away_handback_record
       exit 0
     fi
     sleep 0.2

@@ -79,33 +79,32 @@ fm_away_handback_prepare() {  # <turn>
   done <<< "$rows"
   [ -n "$fresh_rows" ] || return 1
   AWAY_HANDBACK_LINES=$(printf '%s\n' "$fresh_rows" \
-    | jq -r '"supervision-host: outcome \(.seq) for \(.task) [\(.verdict)]: \(.summary)"' | tr -d '\r')
+    | jq -r '"supervision-host: outcome \(.seq) for \(.task) [\(.verdict)]: \(.summary | gsub("[\r\n\t]+"; " "))"' | tr -d '\r')
 }
 
 # Exit to main without the close the engine handled, then park like a cycle
 # boundary (bin/fm-supervision-host.sh boundary_exit): the handling episode is
 # settled and the watcher stopped, which publishes downtime exactly as at a
 # boundary, and main's drain acknowledges it before the owner's next host
-# starts. Uses the host's own acknowledged_handback, emit, retire_successor,
-# and ledger. The ledger lines are written only after the hand-back is emitted
-# (fm_away_handback_record), so an undelivered outcome is never marked seen.
-fm_away_handback_record() {
-  local task ident digest
-  while IFS=$'\t' read -r task ident digest; do
-    [ -z "$task" ] || [ "$digest" = unhashed ] || log_line "away-handback	$task	$ident	$digest"
-  done <<< "$AWAY_HANDBACK_IDENTS"
-  AWAY_HANDBACK_IDENTS=
-}
-
+# starts. The outcome lines are first queued as a durable check wake, which
+# survives a lost host output or a harness that stops supervising, and the
+# ledger lines are written only once that row is queued, so an undelivered
+# outcome is never marked seen.
 fm_away_handback_exit() {  # [further lines]
   local why="away-outcome: the supervision session handled this wake and recorded outcomes that need the captain (store rows $AWAY_HANDBACK_SEQS, listed next); pass them to the channel the away words name, else leave them for the return, and only then drain and acknowledge"
+  local task ident digest detail
   ARM_TEXT=
-  HANDBACK_DETAIL=$(printf '%s' "$AWAY_HANDBACK_LINES" | tr '\n\t\r' '   ' | sed 's/  */ /g')
+  detail=$(printf '%s' "$AWAY_HANDBACK_LINES" | tr '\n\t\r' '   ' | sed 's/  */ /g')
+  if fm_wake_append check "away-outcome:${AWAY_HANDBACK_SEQS// /}" \
+    "check: away-outcome - pass these to the channel the away words name, else leave them for the return, and only then acknowledge: $detail"; then
+    while IFS=$'\t' read -r task ident digest; do
+      [ -z "$task" ] || [ "$digest" = unhashed ] || log_line "away-handback	$task	$ident	$digest"
+    done <<< "$AWAY_HANDBACK_IDENTS"
+  fi
   acknowledged_handback "supervision-host: $why" "$AWAY_HANDBACK_LINES" "${1:-}"
   fm_recovery_marker_handling_settled "$STATE/.watcher-down" || log_line "handling-settle-failed	away-handback"
   retire_successor
   log_line "to-main	$why"
   emit "supervision-host: $why" "$AWAY_HANDBACK_LINES" "${1:-}"
-  fm_away_handback_record
   exit 0
 }
