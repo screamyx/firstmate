@@ -2856,7 +2856,8 @@ stale_wait_record() {  # <window-key>
 captain_call_stale_bound() {  # <window-key> <task> [dialog-name]
   local key=$1 task=$2 dialog=${3-}
   STALE_WAIT_DECLARATION=
-  [ -z "$dialog" ] && fm_open_question_recorded "$task" && return 0
+  [ -z "$dialog" ] || return 1
+  fm_open_question_recorded "$task" && return 0
   task_captain_call_open "$task" || return 1
   STALE_WAIT_DECLARATION=$(captain_call_declaration "$task" "$CAPTAIN_CALL_IDENTITY")
   away_record_present && return 0
@@ -2915,7 +2916,7 @@ surface_nonterminal_stale() {  # <window> <hash> [dialog-name]
   elif captain_call_stale_bound "$key" "$task" "$dialog"; then
     bounded=0
     throttled=0
-  elif [ -z "$STALE_WAIT_DECLARATION" ] && unknown_alive_stale_bound "$win" "$task"; then
+  elif [ -z "$STALE_WAIT_DECLARATION" ] && [ -z "$dialog" ] && unknown_alive_stale_bound "$win" "$task"; then
     bounded=0
     throttled=0
   elif [ -n "$STALE_WAIT_DECLARATION" ]; then
