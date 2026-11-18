@@ -50,6 +50,8 @@
 #     before append and published only after the cache update; processed-init
 #     rebuilds every cache before publishing it, so interruption or upgrade
 #     fails closed without making each drain scan lifetime history.
+#     bin/fm-outcome-index-lib.sh owns reading the cache and capturing the status
+#     position it records (the drain, the watcher, and the supervision host share it).
 #     bin/fm-teardown.sh removes a retired task's cache with its other records,
 #     and append skips the cache for a task that has neither a live meta nor a
 #     status log (the outcome itself is still stored), so the branch's report
@@ -141,6 +143,8 @@ SCRIPT_DIR="$(d=${BASH_SOURCE[0]%/*}; [ "$d" != "${BASH_SOURCE[0]}" ] || d=.; cd
 . "$SCRIPT_DIR/fm-wake-lib.sh"
 # shellcheck source=bin/fm-classify-lib.sh
 . "$SCRIPT_DIR/fm-classify-lib.sh"
+# shellcheck source=bin/fm-outcome-index-lib.sh
+. "$SCRIPT_DIR/fm-outcome-index-lib.sh"
 
 STORE="$STATE/branch-outcomes.jsonl"
 CURSOR="$STATE/.branch-outcomes-cursor"
@@ -272,24 +276,6 @@ record_seq() { # <jsonl-line>
 outcome_index_path() { # <task>
   case "$1" in ''|*[!A-Za-z0-9._-]*) return 1 ;; esac
   printf '%s/.%s.branch-outcome-index' "$STATE" "$1"
-}
-
-capture_status_position() { # <task>
-  local f="$STATE/$1.status" size ident size_after ident_after
-  CAPTURED_STATUS_ENDPOINT=0
-  CAPTURED_STATUS_IDENT=-
-  [ -f "$f" ] && [ -r "$f" ] && [ ! -L "$f" ] || return 0
-  size=$(_fm_status_file_size "$f") || return 0
-  size=${size//[[:space:]]/}
-  ident=$(_fm_open_decisions_file_ident "$f") || return 0
-  size_after=$(_fm_status_file_size "$f") || return 0
-  size_after=${size_after//[[:space:]]/}
-  ident_after=$(_fm_open_decisions_file_ident "$f") || return 0
-  case "$size:$size_after" in *[!0-9:]*) return 0 ;; esac
-  [ "$size" = "$size_after" ] && [ "$ident" = "$ident_after" ] || return 0
-  case "$ident" in *$'\t'*|*$'\n'*|'') return 0 ;; esac
-  CAPTURED_STATUS_ENDPOINT=$size
-  CAPTURED_STATUS_IDENT=$ident
 }
 
 write_outcome_index() { # <task> <seq> [<endpoint> <identity>]

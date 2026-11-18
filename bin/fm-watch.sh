@@ -246,6 +246,8 @@ WATCH_HOME_EXISTED=0
 . "$SCRIPT_DIR/fm-push-transition-lib.sh"
 # shellcheck source=bin/fm-pr-lib.sh
 . "$SCRIPT_DIR/fm-pr-lib.sh"
+# shellcheck source=bin/fm-outcome-index-lib.sh
+. "$SCRIPT_DIR/fm-outcome-index-lib.sh"
 # Only for the arm-time check on FM_PROCEVENT_LAUNCH_CONFIRM_SECONDS below;
 # the per-cycle reconcile itself runs as a separate process.
 # shellcheck source=bin/fm-procevent-lib.sh
@@ -2838,25 +2840,23 @@ stale_wait_throttled() {  # <window-key> <declaration>
 # and a failure alarm exactly as they do today.
 # Returns 0 to absorb this sighting; 1 to alarm, after which the caller records
 # the throttle through stale_wait_record once its own wake append has succeeded.
-# Record a fired wake against the bounded cadence, and ONLY after that wake was
-# durably appended. A marker written ahead of the append outlives a failed one:
-# the watcher exits with no wake queued, and the next sighting reads the fresh
-# marker and absorbs the retry, which is the single way this bound could swallow
-# an alarm outright rather than delay it.
+# Record a fired wake against the bounded cadence, ONLY after that wake was
+# durably appended: a marker written ahead of a failed append would make the
+# next sighting absorb the retry, the one way this bound could swallow an alarm.
 stale_wait_record() {  # <window-key>
   [ -n "$STALE_WAIT_DECLARATION" ] || return 0
   printf '%s' "$STALE_WAIT_DECLARATION" > "$STATE/.paused-resurfaced-$1"
 }
 
 # Bound a due stale alarm for an ordinary crew task held for the captain.
-# Backlog-only secondmate holds are outside this guard because the earlier gate
-# preserves their no-backlog-read hot path.
-# While the away-posture record exists the bound is absolute: an open captain
-# call is never rechecked, whatever the throttle says, because nobody is there
-# to answer it and the return brief lists it.
+# Backlog-only secondmate holds are outside this guard (no-backlog-read hot path).
+# While the away-posture record exists the bound is absolute: nobody is there to
+# answer an open captain call and the return brief lists it. A needs-decision or
+# blocked status whose outcome is already recorded never re-alarms until it changes.
 captain_call_stale_bound() {  # <window-key> <task>
   local key=$1 task=$2
   STALE_WAIT_DECLARATION=
+  fm_open_question_recorded "$task" && return 0
   task_captain_call_open "$task" || return 1
   STALE_WAIT_DECLARATION=$(captain_call_declaration "$task" "$CAPTAIN_CALL_IDENTITY")
   away_record_present && return 0
