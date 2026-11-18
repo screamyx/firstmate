@@ -446,7 +446,7 @@ export function scopeForUnreadWake(state: string, heartbeat: boolean, afk = fals
       // never a reason to reject the rest of the queue and never a reason to
       // send an otherwise-eligible heartbeat review to main. Away, the branch
       // is the only actor, so the row is claimed unscoped.
-      if (afk) {
+      if (afk && !key.startsWith("away-outcome:")) {
         eligibleSeqs.push(seq);
         checkSeqs.push(seq);
       }

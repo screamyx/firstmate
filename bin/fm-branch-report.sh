@@ -39,7 +39,10 @@
 # append, so every visible row is in the brief, queued, or both: the relay does
 # not depend on the host surviving its turn or on its owner delivering the
 # host's own handback. Silent outcomes remain in the store but are not queued
-# or relayed as notes. An attended turn queues nothing: its captain rows reach
+# or relayed as notes. An away turn's non-silent captain row is queued the same
+# way at report time as check wake away-outcome:<seq> (main-owned: the away
+# dispatcher never grants it to the branch), so the hand-back to main survives
+# a lost host output or a host stopped after the report. An attended turn queues nothing: its captain rows reach
 # MAIN through the host's branch-outcome exit and the drain's BRANCH OUTCOMES
 # section (bin/fm-wake-drain.sh), and its routine rows stay in the store.
 set -u
@@ -122,6 +125,16 @@ set -- append --task "$TASK" --verdict "$VERDICT" --summary "$SUMMARY" --silent 
 if ! SEQ=$("$SCRIPT_DIR/fm-branch-outcome.sh" "$@"); then
   echo "outcome store append failed (nothing recorded)" >&2
   exit 1
+fi
+if [ "$SILENT" != true ] && [ "$VERDICT" = captain ] && [ "$(turn_field posture)" != attended ] \
+  && fm_afk_contract_away_present "$STATE"; then
+  # shellcheck source=bin/fm-wake-lib.sh
+  . "$SCRIPT_DIR/fm-wake-lib.sh"
+  if ! fm_wake_append check "away-outcome:$SEQ" \
+    "check: away-outcome $SEQ for $TASK [captain]: pass it to the channel the away words name, else leave it for the return, and only then acknowledge: $(printf '%s' "$SUMMARY" | tr '\n\t\r' '   ')"; then
+    echo "recorded seq $SEQ, but its wake for MAIN could not be queued; the host will hand this wake to MAIN" >&2
+    exit 1
+  fi
 fi
 printf '%s\t%s\t%s\t%s\n' "$TURN" "$SEQ" "$VERDICT" "$TASK" >> "$RECEIPTS" || {
   echo "recorded seq $SEQ, but the host receipt could not be written; the host will hand this wake to MAIN" >&2

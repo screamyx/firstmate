@@ -47,6 +47,17 @@ fm_away_handback_digest() {
   fi | cut -c1-16
 }
 
+fm_away_handback_drop_wake() {  # <seq>
+  local tmp
+  [ -f "$FM_WAKE_QUEUE" ] || return 0
+  fm_lock_acquire_wait "$FM_WAKE_QUEUE_LOCK" || return 0
+  if tmp=$(mktemp "$STATE/.wake-queue.drop.XXXXXX"); then
+    awk -F '\t' -v key="away-outcome:$1" '!(NF >= 5 && $3 == "check" && $4 == key)' "$FM_WAKE_QUEUE" > "$tmp" \
+      && _fm_atomic_replace "$tmp" "$FM_WAKE_QUEUE" || rm -f "$tmp"
+  fi
+  fm_lock_release "$FM_WAKE_QUEUE_LOCK"
+}
+
 fm_away_handback_prepare() {  # <turn>
   local seqs rows row task ident digest fresh_rows='' seq
   AWAY_HANDBACK_SEQS=
@@ -69,7 +80,10 @@ fm_away_handback_prepare() {  # <turn>
     digest=$(printf '%s' "$row" | jq -r '.summary // ""' | tr -d '\r' | fm_away_handback_digest)
     case "$digest" in
       [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f])
-        ! fm_away_handback_seen "$task" "$ident" "$digest" || continue ;;
+        if fm_away_handback_seen "$task" "$ident" "$digest"; then
+          fm_away_handback_drop_wake "$(printf '%s' "$row" | jq -r '.seq')"
+          continue
+        fi ;;
       *) digest= ;;
     esac
     seq=$(printf '%s' "$row" | jq -r '.seq')
@@ -86,21 +100,17 @@ fm_away_handback_prepare() {  # <turn>
 # boundary (bin/fm-supervision-host.sh boundary_exit): the handling episode is
 # settled and the watcher stopped, which publishes downtime exactly as at a
 # boundary, and main's drain acknowledges it before the owner's next host
-# starts. The outcome lines are first queued as a durable check wake, which
-# survives a lost host output or a harness that stops supervising, and the
-# ledger lines are written only once that row is queued, so an undelivered
-# outcome is never marked seen.
+# starts. Each outcome is already a durable main-owned check wake
+# (away-outcome:<seq>, queued by bin/fm-branch-report.sh when it was
+# reported), and a row whose wake could not be queued has no receipt, so the
+# ledger lines are written only for rows main will see in its drain.
 fm_away_handback_exit() {  # [further lines]
   local why="away-outcome: the supervision session handled this wake and recorded outcomes that need the captain (store rows $AWAY_HANDBACK_SEQS, listed next); pass them to the channel the away words name, else leave them for the return, and only then drain and acknowledge"
-  local task ident digest detail
+  local task ident digest
   ARM_TEXT=
-  detail=$(printf '%s' "$AWAY_HANDBACK_LINES" | tr '\n\t\r' '   ' | sed 's/  */ /g')
-  if fm_wake_append check "away-outcome:${AWAY_HANDBACK_SEQS// /}" \
-    "check: away-outcome - pass these to the channel the away words name, else leave them for the return, and only then acknowledge: $detail"; then
-    while IFS=$'\t' read -r task ident digest; do
-      [ -z "$task" ] || [ "$digest" = unhashed ] || log_line "away-handback	$task	$ident	$digest"
-    done <<< "$AWAY_HANDBACK_IDENTS"
-  fi
+  while IFS=$'\t' read -r task ident digest; do
+    [ -z "$task" ] || [ "$digest" = unhashed ] || log_line "away-handback	$task	$ident	$digest"
+  done <<< "$AWAY_HANDBACK_IDENTS"
   acknowledged_handback "supervision-host: $why" "$AWAY_HANDBACK_LINES" "${1:-}"
   fm_recovery_marker_handling_settled "$STATE/.watcher-down" || log_line "handling-settle-failed	away-handback"
   retire_successor
