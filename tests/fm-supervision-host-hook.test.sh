@@ -541,6 +541,10 @@ test_unrecorded_successor_is_stopped_rather_than_left_for_main() {
 }
 
 fm_test_run \
+  test_parked_question_is_not_raised_again_while_its_status_is_unchanged \
+  test_host_settles_a_bare_idle_alert_for_a_recorded_question \
+  test_host_leaves_every_other_idle_alert_for_its_turn \
+  test_host_settles_a_bare_idle_alert_for_an_unchanged_working_status \
   test_main_only_close_after_handled_turn_restores_inherited_handling \
   test_main_only_close_after_handled_turn_delivers_restore_failure \
   test_returned_driver_is_caught_attended \
@@ -564,8 +568,4 @@ fm_test_run \
   test_pass_through_successor_survives_the_hook_process_group_teardown \
   test_next_park_takes_over_the_cycle_a_pass_through_left_for_main \
   test_a_park_stopped_mid_take_over_leaves_the_take_over_to_the_next_park \
-  test_unrecorded_successor_is_stopped_rather_than_left_for_main \
-  test_parked_question_is_not_raised_again_while_its_status_is_unchanged \
-  test_host_settles_a_bare_idle_alert_for_a_recorded_question \
-  test_host_leaves_every_other_idle_alert_for_its_turn \
-  test_host_settles_a_bare_idle_alert_for_an_unchanged_working_status
+  test_unrecorded_successor_is_stopped_rather_than_left_for_main
