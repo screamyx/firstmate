@@ -1822,9 +1822,9 @@ EOF
 }
 
 # A captain-facing wait needs its recheck once, not once per cadence (a pane
-# showing a blocking dialog keeps the cadence): after
-# a recheck has fired for this exact hold and status log, and the task's last
-# recorded outcome sits at the status file's present position
+# showing a blocking dialog keeps the cadence): after a recheck has fired for
+# this exact hold and status log, and the task's last recorded outcome sits at
+# the status file's present position
 # (bin/fm-outcome-index-lib.sh fm_status_position_recorded), a further recheck
 # has nothing to add until the worker writes a line or the hold changes.
 # The scope is the hold's identity: the status-log signature for a
