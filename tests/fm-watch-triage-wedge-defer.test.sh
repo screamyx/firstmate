@@ -320,9 +320,16 @@ test_wedge_threshold_defers_to_a_backlog_captain_hold() {
   pass "a backlog captain hold bounds the wedge ladder like a captain-held line, and stays silent while the captain is away"
 }
 
+# The outcome a handled stale wake leaves behind, recorded at the status file's
+# present position exactly as the supervision branch's report records it.
+record_handled_stale_outcome() {  # <dir> <wake>
+  printf 'turn=t1\nstaletasks=wedge\n' > "$1/state/.supervision-host-turn"
+  FM_BRANCH_REPORT_TURN=t1 FM_HOME="$1" "$ROOT/bin/fm-branch-outcome.sh" append --task wedge \
+    --verdict routine --summary 'still held for the captain, nothing changed' --wake "$2" >/dev/null 2>&1
+}
+
 # A task parked by the captain with its worker window kept open: the backlog
-# hold is rechecked on the long cadence, and the first recheck was acknowledged
-# by main alone, with no branch outcome. Every
+# hold is rechecked on the long cadence, and the first recheck was handled. Every
 # further recheck while the hold and the worker's status log stay as they were
 # has nothing new to say, so it queues nothing; a new status line rechecks again.
 test_wedge_captain_hold_recheck_is_not_repeated_for_an_unchanged_worker() {
@@ -343,7 +350,7 @@ test_wedge_captain_hold_recheck_is_not_repeated_for_an_unchanged_worker() {
   grep -F 'captain hold, awaiting the captain - held in the backlog' "$out" >/dev/null \
     || fail "the first recheck was not the captain-hold recheck: $(cat "$out")"
   ack_stopped_cycle "$state" || fail "could not acknowledge the first captain-hold recheck"
-  # Main acknowledged it directly: no branch outcome exists for this task.
+  record_handled_stale_outcome "$dir" "$(head -n 1 "$out")" || fail "could not record the handled recheck"
 
   # The cadence comes due again, as it did every four hours on the parked task.
   queued=$(wedge_stale_wakes "$state" "$window")
@@ -355,6 +362,8 @@ test_wedge_captain_hold_recheck_is_not_repeated_for_an_unchanged_worker() {
   [ "$(wedge_stale_wakes "$state" "$window")" -eq "$queued" ] \
     || fail "a due recheck for an unchanged held worker queued a wake: $(cat "$state/.wake-queue")"
   [ ! -s "$out" ] || fail "a due recheck for an unchanged held worker printed a wake: $(cat "$out")"
+  grep -F 'unchanged since its handled recheck' "$state/.watch-triage.log" >/dev/null \
+    || fail "the withheld recheck was not recorded in the triage log: $(cat "$state/.watch-triage.log")"
   [ ! -e "$state/.wedge-escalations-$key" ] \
     || fail "a withheld captain-hold recheck counted a wedge escalation"
 
@@ -463,8 +472,9 @@ test_wedge_escalation_step_is_not_reraised_for_an_unchanged_status() {
     || fail "a reset withheld other than one threshold: $(cat "$state/.watch-triage.log")"
   ack_stopped_cycle "$state" || fail "could not acknowledge escalation 3"
 
-  # A new status line is a changed worker: its ladder starts again at 1.
-  rm -f "$state/.wedge-escalations-$key" "$state/.stale-since-$key"
+  # A new status line is a changed worker: its ladder starts again at 1, even
+  # though the count file still holds the step the old status had reached.
+  rm -f "$state/.stale-since-$key"
   printf 'working [at=%s]: runner picked the job up\n' "$(date +%s)" >> "$statusf"
   printf '%s' "$(seen_sig "$statusf")" > "$state/.seen-wedge_status"
   : > "$out"
