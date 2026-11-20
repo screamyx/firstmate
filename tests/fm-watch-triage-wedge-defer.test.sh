@@ -382,6 +382,35 @@ test_wedge_captain_hold_recheck_is_not_repeated_for_an_unchanged_worker() {
     || fail "the recheck at a blocking dialog was not the captain-hold recheck: $(cat "$out")"
   ack_stopped_cycle "$state" || fail "could not acknowledge the recheck at a blocking dialog"
 
+  # The dialog closes: the unchanged hold is withheld again.
+  printf '%s' 'waiting at the gate' > "$capture"
+  printf '%s' "$(hash_text 'waiting at the gate')" > "$state/.hash-$key"
+  printf '%s' "$(hash_text 'waiting at the gate')" > "$state/.stale-$key"
+  set_mtime "$(( $(date +%s) - 1000 ))" "$state/.waiting-resurfaced-$key"
+  queued=$(wedge_stale_wakes "$state" "$window")
+  : > "$out"
+  FM_HOME="$dir" FM_DATA_OVERRIDE="$dir/data" FM_TEST_PAUSE_RESURFACE=240 \
+    wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$working" absorb \
+    || fail "an unchanged hold was rechecked again once its dialog closed: $(cat "$out")"
+  [ "$(wedge_stale_wakes "$state" "$window")" -eq "$queued" ] \
+    || fail "an unchanged hold queued a recheck once its dialog closed: $(cat "$state/.wake-queue")"
+
+  # Answered and released, then held again as a new captain call, with no
+  # status append: the new call is rechecked.
+  printf 'keep it parked\n' > "$dir/decision.txt"
+  run_hold "$dir" answer wedge --decision-file "$dir/decision.txt" --release \
+    || fail "could not record the captain's answer"
+  run_hold "$dir" hold wedge --reason 'awaiting the captain a second time' \
+    || fail "could not re-hold the task as a second captain call"
+  set_mtime "$(( $(date +%s) - 1000 ))" "$state/.waiting-resurfaced-$key"
+  : > "$out"
+  FM_HOME="$dir" FM_DATA_OVERRIDE="$dir/data" FM_TEST_PAUSE_RESURFACE=240 \
+    wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$working" exit \
+    || fail "a re-held captain call inherited the first call's settled recheck: $(cat "$out")"
+  grep -F 'captain hold, awaiting the captain' "$out" >/dev/null \
+    || fail "the re-held call's recheck was not the captain-hold recheck: $(cat "$out")"
+  ack_stopped_cycle "$state" || fail "could not acknowledge the re-held call's recheck"
+
   # The worker writes a new line: the hold is rechecked again.
   set_mtime "$(( $(date +%s) - 1000 ))" "$state/.waiting-resurfaced-$key"
   printf 'working [at=%s]: picked the task back up\n' "$(date +%s)" >> "$statusf"
@@ -392,7 +421,7 @@ test_wedge_captain_hold_recheck_is_not_repeated_for_an_unchanged_worker() {
   grep -F 'captain hold, awaiting the captain' "$out" >/dev/null \
     || fail "the recheck after a new status line was not the captain-hold recheck: $(cat "$out")"
   ack_stopped_cycle "$state" || fail "could not acknowledge the recheck after a new status line"
-  pass "a backlog captain hold is rechecked once for an unchanged worker, not on every cadence, and again once the worker writes"
+  pass "a backlog captain hold is rechecked once for an unchanged worker, not on every cadence, and again at a dialog, a new call, or a new status line"
 }
 
 # A worker waiting on a long CI run takes a short turn now and then, which ends
