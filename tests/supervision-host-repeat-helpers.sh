@@ -107,7 +107,22 @@ test_host_settles_a_bare_idle_alert_for_an_unchanged_working_status() {
   [ "$(settle_case settle-after-signal 'stale: firstmate:fm-demo' '' working 'signal: firstmate:fm-demo')" = "1 1 0" ] \
     || fail "settle: the first idle alert after an outcome recorded for a signal must keep its turn"
   pass "host: a bare idle alert for an unchanged working status is consumed without an engine turn, unless the recorded outcome was for a signal"
+  test_host_keeps_the_first_idle_alert_after_a_signal_at_a_resting_line
   test_host_does_not_credit_a_mixed_claim_as_idle_evidence
+}
+
+# The worker reported done (or declared a wait) and that signal's turn recorded
+# its outcome; the worker then went idle. Nothing proves the idle stop was the
+# one already handled (a validation may have started and stopped at a gate
+# without a new line), so the first idle alert keeps its turn.
+test_host_keeps_the_first_idle_alert_after_a_signal_at_a_resting_line() {
+  local verb r
+  for verb in 'done' paused needs-decision; do
+    r=$(settle_case "settle-after-signal-$verb" 'stale: firstmate:fm-demo' '' "$verb" 'signal: firstmate:fm-demo')
+    [ "$r" = "1 1 0" ] \
+      || fail "settle: the first idle alert after a handled signal at an unchanged $verb line must keep its turn (got: $r)"
+  done
+  pass "host: the first bare idle alert after a handled signal keeps its engine turn at a done, paused or needs-decision line"
 }
 
 test_host_does_not_credit_a_mixed_claim_as_idle_evidence() {

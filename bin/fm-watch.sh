@@ -34,7 +34,8 @@
 #                          terminal (captain-relevant) or non-terminal (no verb),
 #                          both surfaced at once. A provably-working stale past the
 #                          wedge threshold also surfaces, with an "escalation N"
-#                          count in the reason; at FM_WEDGE_DEMAND_INSPECT_COUNT
+#                          count in the reason, each step raised once per
+#                          unchanged status log; at FM_WEDGE_DEMAND_INSPECT_COUNT
 #                          consecutive escalations on the SAME pane, the reason
 #                          also carries a "demand-deep-inspection" marker so the
 #                          wake payload itself, not just repetition, forces a
@@ -1518,7 +1519,9 @@ _wedge_cap_rollback() {
 # <min-age> replaces the cadence as the absorb-age gate for one call (0 lets a
 # declared `until` time that has just passed re-surface at once), while the
 # throttle keeps the cadence between repeats.
-resurface_absorbed() {  # <window> <throttle-marker> <age> <reason> [scope] [min-age]
+# [settle-marker settle-scope] records what a fired re-surface was about, only
+# after its wake was durably appended (captain_wait_settled reads it back).
+resurface_absorbed() {  # <window> <throttle-marker> <age> <reason> [scope] [min-age] [settle-marker settle-scope]
   local win=$1 throttle=$2 age=$3 reason=$4 scope=${5-} min_age=${6:-$PAUSE_RESURFACE_SECS}
   if [ -z "$scope" ] || [ ! -e "$throttle" ] \
     || [ "$(cat "$throttle" 2>/dev/null || true)" = "$scope" ]; then
@@ -1526,6 +1529,7 @@ resurface_absorbed() {  # <window> <throttle-marker> <age> <reason> [scope] [min
     [ "$(age_of "$throttle")" -ge "$PAUSE_RESURFACE_SECS" ] || return 0   # 999999 when no prior re-surface
   fi
   fm_wake_append stale "$win" "$reason" || exit 1
+  [ -z "${7-}" ] || printf '%s' "${8-}" > "$7" 2>/dev/null || true
   if [ -n "$scope" ]; then printf '%s' "$scope" > "$throttle"; else date +%s > "$throttle"; fi
   wake "$reason"
 }
@@ -1746,9 +1750,9 @@ wedge_wait_evidence() {  # <task> -> one wait_record on stdout
 # The escalation counter is left alone, exactly as the write deferral leaves it:
 # this is not an escalation, and a later genuine one must keep the
 # demand-inspection history it had already earned.
-wedge_defer_wait() {  # <window> <since-file> <triage-label> <idle-age> <wait-record>
-  local win=$1 since_file=$2 label=$3 age=$4 record=$5
-  local kind subject whom action anchor key mtime wage min_age waited us ok
+wedge_defer_wait() {  # <window> <since-file> <triage-label> <idle-age> <wait-record> [task] [dialog-name]
+  local win=$1 since_file=$2 label=$3 age=$4 record=$5 task=${6-} dialog=${7-}
+  local kind subject whom action anchor key mtime wage min_age waited us ok settle=''
   us=$(printf '\037')
   IFS=$us read -r kind subject whom action anchor <<EOF
 $record
@@ -1783,6 +1787,13 @@ EOF
     triage_log "absorbed $label ($kind, never rechecked while the away-posture record exists): $win"
     return 0
   fi
+  if [ "$whom" = captain ] && [ -z "$dialog" ] && settle=$(captain_wait_scope "$task" "$kind") \
+    && captain_wait_settled "$key" "$task" "$settle"; then
+    date +%s > "$since_file"
+    clear_write_tracking "$key"
+    triage_log "absorbed $label ($kind, unchanged since its handled recheck, idle ${age}s): $win"
+    return 0
+  fi
   mtime=''
   [ -n "$anchor" ] && mtime=$(stat_mtime "$anchor")
   case "$mtime" in
@@ -1805,9 +1816,33 @@ EOF
   date +%s > "$since_file"
   resurface_absorbed "$win" "$STATE/.waiting-resurfaced-$key" "$wage" \
     "stale: $win (idle ${age}s${waited} - $kind, $subject, rechecked on a long cadence not a wedge; $action)" \
-    '' "$min_age"
+    '' "$min_age" "${settle:+$STATE/.waiting-settled-$key}" "$settle"
   triage_log "absorbed $label ($kind explains the quiet, idle ${age}s): $win"
   return 0
+}
+
+# A captain-facing wait needs its recheck once, not once per cadence (a pane
+# showing a blocking dialog keeps the cadence): after a recheck has fired for
+# this exact hold and status log, and the task's last recorded outcome sits at
+# the status file's present position
+# (bin/fm-outcome-index-lib.sh fm_status_position_recorded), a further recheck
+# has nothing to add until the worker writes a line or the hold changes.
+# The scope is the hold's identity: the status-log signature for a
+# captain-held line, plus the backlog call's lifecycle identity for a backlog
+# hold, so a released and re-held call is rechecked again.
+captain_wait_scope() {  # <task> <wait-kind> -> scope, 1 when none is provable
+  [ -n "$1" ] || return 1
+  if [ "$2" = "$WEDGE_BACKLOG_HOLD_KIND" ]; then
+    task_captain_call_open "$1" || return 1
+    captain_call_declaration "$1" "$CAPTAIN_CALL_IDENTITY"
+  else
+    stale_wait_declaration "$1"
+  fi
+}
+
+captain_wait_settled() {  # <window-key> <task> <scope>
+  [ "$(cat "$STATE/.waiting-settled-$1" 2>/dev/null || true)" = "$3" ] \
+    && fm_status_position_recorded "$2"
 }
 
 # Drop a window's write- and validating-deferral chains wherever its stale
@@ -2098,8 +2133,21 @@ wedge_write_escalation_count() {  # <window> <window-key> <escalation-file> <sin
 # above, immediately before the wake it authorized is published: a close, a
 # fresh progress write, or a replacement request during those reads cancels
 # that wake and its count instead of surfacing an obsolete observation.
+# The highest wedge step this window raised, and the status-log signature it
+# was raised at, outlive wedge_episode_end in .wedge-raised-<key>: 0 when step
+# <n> was already raised at <status-sig>.
+# A cap fire removes the record, because its count restart is a fresh ladder.
+wedge_step_raised() {  # <window-key> <n> <status-sig>
+  local raised step sig
+  raised=$(cat "$STATE/.wedge-raised-$1" 2>/dev/null) || return 1
+  step=${raised%%$'\t'*}
+  sig=${raised#*$'\t'}
+  case "$step" in ''|*[!0-9]*) return 1 ;; esac
+  [ "${#step}" -le 9 ] && [ "$sig" = "$3" ] && [ "$2" -le "$step" ]
+}
+
 wedge_timer_check() {  # <window> <since-file> <triage-label> <escalation-count-file> <task> <pane-hash> [dialog-name] [stream snapshot]
-  local win=$1 since_file=$2 label=$3 escalation_file=$4 task=$5 hash=$6 dialog=${7-} since age n prev reason evidence guard guard_note
+  local win=$1 since_file=$2 label=$3 escalation_file=$4 task=$5 hash=$6 dialog=${7-} since age n prev reason evidence guard guard_note status_sig=''
   local stream_snapshot=${8:-} stream_ts stream_detail='' append_status
   local _wkey _wrollback_sentinel _wrb_ts _wrb_cap_reason _wrb_cap_status _wrb_rm_status
   local _wrb_since _wrb_now _wrb_age _wrb_cap_ts _wrb_gate
@@ -2197,7 +2245,7 @@ wedge_timer_check() {  # <window> <since-file> <triage-label> <escalation-count-
           return 0
         fi
         if evidence=$(wedge_wait_evidence "$task") &&
-           wedge_defer_wait "$win" "$since_file" "$label" "$age" "$evidence"; then
+           wedge_defer_wait "$win" "$since_file" "$label" "$age" "$evidence" "$task" "$dialog"; then
           return 0
         fi
         if crew_worktree_written_since "$task" "$STATE" "$since_file"; then
@@ -2225,7 +2273,7 @@ wedge_timer_check() {  # <window> <since-file> <triage-label> <escalation-count-
           # those reads, immediately before this observation authorizes a wake.
           if ! busy_stream_snapshot_current "$task" "$stream_snapshot"; then
             wedge_episode_end "$_wkey"
-            rm -f "$STATE/.model-stream-episode-$_wkey"
+            rm -f "$STATE/.model-stream-episode-$_wkey" "$STATE/.wedge-raised-$_wkey"
             clear_write_tracking "$_wkey"
             return 0
           fi
@@ -2238,6 +2286,15 @@ wedge_timer_check() {  # <window> <since-file> <triage-label> <escalation-count-
         # arithmetic as whatever bytes a partial write left in it.
         prev=$(cat "$escalation_file" 2>/dev/null || true)
         _wedge_cap_int prev "$prev" 0 0
+        status_sig=''
+        if [ -z "$dialog" ] && [ -n "$task" ] && [ -f "$STATE/$task.status" ]; then
+          status_sig=$(fm_wake_signal_sig "$STATE/$task.status" 2>/dev/null || true)
+        fi
+        if [ -n "$status_sig" ] && [ -e "$STATE/.wedge-raised-$_wkey" ] \
+          && [ "$(cut -f2- "$STATE/.wedge-raised-$_wkey" 2>/dev/null)" != "$status_sig" ]; then
+          prev=0
+          rm -f "$STATE/.wedge-raised-$_wkey"
+        fi
         n=$(( prev + 1 ))
         # A stream observation writes its count only after the guarded append,
         # so a close, progress, or replacement during the publication lock wait
@@ -2275,7 +2332,7 @@ wedge_timer_check() {  # <window> <since-file> <triage-label> <escalation-count-
             # belongs to an observation that no longer stands: discard it and
             # its count exactly like a rejected escalation append.
             wedge_episode_end "$_wkey"
-            rm -f "$STATE/.model-stream-episode-$_wkey"
+            rm -f "$STATE/.model-stream-episode-$_wkey" "$STATE/.wedge-raised-$_wkey"
             clear_write_tracking "$_wkey"
             return 0
           fi
@@ -2320,8 +2377,25 @@ wedge_timer_check() {  # <window> <since-file> <triage-label> <escalation-count-
               *) triage_log "wedge escalation-counter reset FAILED on $win - escalation count rolled back; the cap marker stands, so this window stays silent until its horizon (FM_CAP_HORIZON_SECS) elapses or an episode-ending route releases it (an operator can delete the marker to re-engage at once)"; exit 1 ;;
             esac
           fi
+          rm -f "$STATE/.wedge-raised-$_wkey"
           triage_log "wedge permanently capped: $win (escalation $n, max $FM_WEDGE_MAX_ESCALATIONS, hash ${hash:0:12})"
           [ "$_wrb_cap_status" -eq 3 ] || wake "$_wrb_cap_reason"
+          return 0
+        fi
+        # A step this window already raised for the same status log is a
+        # repeat, not an escalation: an episode-ending absorb (provably working,
+        # turn-end churn) restarts the count, and the pane going quiet again
+        # would otherwise re-raise "escalation 1" for a worker that wrote
+        # nothing new. Steps up to the one already raised are withheld one
+        # threshold each while the count climbs its own rungs, so the next
+        # step still surfaces. A dialog or a task with no status file keeps
+        # its wake; a new status line or a foreground request's confirmed
+        # progress restarts the ladder at 1.
+        if [ -n "$status_sig" ] && wedge_step_raised "$_wkey" "$n" "$status_sig"; then
+          wedge_write_escalation_count "$win" "$_wkey" "$escalation_file" "$since_file" "$n"
+          date +%s > "$since_file"
+          clear_write_tracking "$_wkey"
+          triage_log "absorbed $label (escalation $n already raised for this unchanged status, idle ${age}s): $win"
           return 0
         fi
         reason=$(stale_reason_naming_dialog "$reason" "$dialog")
@@ -2330,7 +2404,7 @@ wedge_timer_check() {  # <window> <since-file> <triage-label> <escalation-count-
           fm_wake_append_guarded busy_stream_snapshot_current stale "$win" "$reason" "$task" "$stream_snapshot" || append_status=$?
           if [ "$append_status" -eq 3 ]; then
             wedge_episode_end "$_wkey"
-            rm -f "$STATE/.model-stream-episode-$_wkey"
+            rm -f "$STATE/.model-stream-episode-$_wkey" "$STATE/.wedge-raised-$_wkey"
             clear_write_tracking "$_wkey"
             return 0
           fi
@@ -2339,6 +2413,7 @@ wedge_timer_check() {  # <window> <since-file> <triage-label> <escalation-count-
         else
           fm_wake_append stale "$win" "$reason" || exit 1
         fi
+        [ -z "$status_sig" ] || printf '%s\t%s' "$n" "$status_sig" > "$STATE/.wedge-raised-$_wkey" 2>/dev/null || true
         # The ladder's own step, not an episode end: this pane is still wedged,
         # so the idle timer restarts for the next rung of the same escalation
         # count and the cap that fired stays exactly where it is.
@@ -2552,6 +2627,7 @@ busy_turn_bound_check() {  # <window> <task> <hash> <since-file> <escalation-fil
   if [ -n "$stream_snapshot" ]; then
     if [ "$(cat "$stream_episode" 2>/dev/null || true)" != "$stream_snapshot" ]; then
       wedge_episode_end "$(window_key "$win")"
+      rm -f "$STATE/.wedge-raised-$(window_key "$win")"
       clear_write_tracking "$(window_key "$win")"
       printf '%s' "$stream_snapshot" > "$stream_episode"
     fi
@@ -2559,6 +2635,7 @@ busy_turn_bound_check() {  # <window> <task> <hash> <since-file> <escalation-fil
   else
     if [ -e "$stream_episode" ]; then
       wedge_episode_end "$(window_key "$win")"
+      rm -f "$STATE/.wedge-raised-$(window_key "$win")"
       clear_write_tracking "$(window_key "$win")"
     fi
     rm -f "$stream_episode"
@@ -4460,7 +4537,7 @@ EOF
           busy_turn_bound_check "$w" "$task" "$h" "$ssf" "$ewf" "$dialog" && paused_bound=0
         else
           wedge_episode_end "$key"
-          rm -f "$STATE/.model-stream-episode-$key"
+          [ ! -e "$STATE/.model-stream-episode-$key" ] || rm -f "$STATE/.model-stream-episode-$key" "$STATE/.wedge-raised-$key"
           clear_write_tracking "$key"
         fi
         # A busy pane normally means real work resumed, so stale pause bookkeeping
@@ -4479,7 +4556,7 @@ EOF
         busy_turn_bound_check "$w" "$task" "$h" "$ssf" "$ewf" "$dialog" && paused_bound=0
       else
         wedge_episode_end "$key"
-        rm -f "$STATE/.model-stream-episode-$key"
+        [ ! -e "$STATE/.model-stream-episode-$key" ] || rm -f "$STATE/.model-stream-episode-$key" "$STATE/.wedge-raised-$key"
         clear_write_tracking "$key"
       fi
       task=$(window_to_task "$w" "$STATE")

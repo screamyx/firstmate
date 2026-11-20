@@ -188,8 +188,9 @@ A worker parked at an open `needs-decision` or `blocked` line raises one idle al
 `bin/fm-outcome-index-lib.sh` `fm_open_question_recorded` answers whether that outcome was captured at the status file's present size and identity.
 While it holds, and unless the pane shows a blocking dialog, the watcher absorbs every further idle alert for that worker instead of queueing it, so a pane whose content keeps changing no longer costs a turn per change.
 A claim made only of bare `stale: <pane>` rows for workers whose status file is still at the position of their last recorded outcome, whatever the status, when that outcome was itself recorded for a stale wake (`fm_idle_repeat_recorded`; the index's wake kind, unknown when absent), is also settled by the host without an engine turn: it runs the branch drain (presenting no status, so no unread note is marked read) and acknowledgement, writes one `skipped-repeat` log line, and records no outcome (`bin/fm-supervision-host-repeat-lib.sh`).
-The first idle alert after an outcome recorded for a signal, check, or heartbeat wake still runs the turn.
+The first idle alert after an outcome recorded for a signal, check, or heartbeat wake still runs the turn, whatever the newest status line says, because nothing proves that idle stop is the one already handled.
 Any new status line, a decorated stale reason (wedge escalation, unread instruction, dialog, dead agent), a signal, check, or heartbeat row in the claim, or an unreadable fingerprint runs the turn as before.
+The watcher withholds the decorated repeats itself: a wedge escalation step already raised for an unchanged status log, and a captain-hold recheck already raised for an unchanged hold and status log with a branch outcome recorded at that status ([architecture.md](architecture.md)); a recheck that reached main directly leaves no outcome, so the next one runs once more at the host and settles there.
 
 ### Where a handled wake's outcome goes
 
