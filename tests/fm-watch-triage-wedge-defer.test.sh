@@ -367,7 +367,23 @@ test_wedge_captain_hold_recheck_is_not_repeated_for_an_unchanged_worker() {
   [ ! -e "$state/.wedge-escalations-$key" ] \
     || fail "a withheld captain-hold recheck counted a wedge escalation"
 
+  # A held worker sitting at a blocking dialog keeps its recheck cadence.
+  printf '%s\n' 'Background work is running' 'The following will stop when you exit:' 'shell · sleep 300' \
+    '❯ 1. Exit and stop tasks' '  2. Move to background and exit' '  3. Stay' \
+    'Enter to confirm · Esc to cancel' > "$capture"
+  printf '%s' "$(hash_text "$(cat "$capture")")" > "$state/.hash-$key"
+  printf '%s' "$(hash_text "$(cat "$capture")")" > "$state/.stale-$key"
+  set_mtime "$(( $(date +%s) - 1000 ))" "$state/.waiting-resurfaced-$key"
+  : > "$out"
+  FM_HOME="$dir" FM_DATA_OVERRIDE="$dir/data" FM_TEST_PAUSE_RESURFACE=240 \
+    wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$working" exit \
+    || fail "a held worker at a blocking dialog lost its recheck: $(cat "$out")"
+  grep -F 'captain hold, awaiting the captain' "$out" >/dev/null \
+    || fail "the recheck at a blocking dialog was not the captain-hold recheck: $(cat "$out")"
+  ack_stopped_cycle "$state" || fail "could not acknowledge the recheck at a blocking dialog"
+
   # The worker writes a new line: the hold is rechecked again.
+  set_mtime "$(( $(date +%s) - 1000 ))" "$state/.waiting-resurfaced-$key"
   printf 'working [at=%s]: picked the task back up\n' "$(date +%s)" >> "$statusf"
   printf '%s' "$(seen_sig "$statusf")" > "$state/.seen-wedge_status"
   FM_HOME="$dir" FM_DATA_OVERRIDE="$dir/data" FM_TEST_PAUSE_RESURFACE=240 \
@@ -411,6 +427,20 @@ test_wedge_escalation_step_is_not_reraised_for_an_unchanged_status() {
   grep -F 'escalation 1 already raised for this unchanged status' "$state/.watch-triage.log" >/dev/null \
     || fail "the withheld repeat step was not recorded in the triage log: $(cat "$state/.watch-triage.log")"
   ack_stopped_cycle "$state" || fail "could not acknowledge escalation 2"
+
+  # Another short turn after the ladder reached 2: only one threshold is
+  # withheld, and the next raise is step 3, not 1 or 2 again.
+  rm -f "$state/.wedge-escalations-$key" "$state/.stale-since-$key"
+  : > "$out"
+  wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$working" exit \
+    || fail "a quiet lane stopped escalating after a reset at step 2: $(cat "$out")"
+  grep -E 'possible wedge, escalation [12]([^0-9]|$)' "$out" >/dev/null \
+    && fail "a step already raised was raised again after a reset at step 2: $(cat "$out")"
+  grep -F 'possible wedge, escalation 3' "$out" >/dev/null \
+    || fail "the step after a reset at step 2 was not escalation 3: $(cat "$out")"
+  [ "$(grep -c 'already raised for this unchanged status' "$state/.watch-triage.log")" -eq 2 ] \
+    || fail "a reset withheld other than one threshold: $(cat "$state/.watch-triage.log")"
+  ack_stopped_cycle "$state" || fail "could not acknowledge escalation 3"
 
   # A new status line is a changed worker: its ladder starts again at 1.
   rm -f "$state/.wedge-escalations-$key" "$state/.stale-since-$key"

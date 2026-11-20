@@ -1750,8 +1750,8 @@ wedge_wait_evidence() {  # <task> -> one wait_record on stdout
 # The escalation counter is left alone, exactly as the write deferral leaves it:
 # this is not an escalation, and a later genuine one must keep the
 # demand-inspection history it had already earned.
-wedge_defer_wait() {  # <window> <since-file> <triage-label> <idle-age> <wait-record> [task]
-  local win=$1 since_file=$2 label=$3 age=$4 record=$5 task=${6-}
+wedge_defer_wait() {  # <window> <since-file> <triage-label> <idle-age> <wait-record> [task] [dialog-name]
+  local win=$1 since_file=$2 label=$3 age=$4 record=$5 task=${6-} dialog=${7-}
   local kind subject whom action anchor key mtime wage min_age waited us ok settle=''
   us=$(printf '\037')
   IFS=$us read -r kind subject whom action anchor <<EOF
@@ -1787,7 +1787,7 @@ EOF
     triage_log "absorbed $label ($kind, never rechecked while the away-posture record exists): $win"
     return 0
   fi
-  if [ "$whom" = captain ] && settle=$(captain_wait_scope "$task" "$kind") \
+  if [ "$whom" = captain ] && [ -z "$dialog" ] && settle=$(captain_wait_scope "$task" "$kind") \
     && captain_wait_settled "$key" "$task" "$settle"; then
     date +%s > "$since_file"
     clear_write_tracking "$key"
@@ -1821,7 +1821,8 @@ EOF
   return 0
 }
 
-# A captain-facing wait needs its recheck once, not once per cadence: after
+# A captain-facing wait needs its recheck once, not once per cadence (a pane
+# showing a blocking dialog keeps the cadence): after
 # a recheck has fired for this exact hold and status log, and the task's last
 # recorded outcome sits at the status file's present position
 # (bin/fm-outcome-index-lib.sh fm_status_position_recorded), a further recheck
@@ -2134,14 +2135,18 @@ wedge_write_escalation_count() {  # <window> <window-key> <escalation-file> <sin
 # that wake and its count instead of surfacing an obsolete observation.
 # The highest wedge step this window raised, and the status-log signature it
 # was raised at, outlive wedge_episode_end in .wedge-raised-<key>: 0 when step
-# <n> was already raised at <status-sig>.
+# <n> was already raised at <status-sig>, with that step in WEDGE_RAISED_STEP.
+# A cap fire removes the record, because its count restart is a fresh ladder.
+WEDGE_RAISED_STEP=
 wedge_step_raised() {  # <window-key> <n> <status-sig>
   local raised step sig
+  WEDGE_RAISED_STEP=
   raised=$(cat "$STATE/.wedge-raised-$1" 2>/dev/null) || return 1
   step=${raised%%$'\t'*}
   sig=${raised#*$'\t'}
   case "$step" in ''|*[!0-9]*) return 1 ;; esac
-  [ "$sig" = "$3" ] && [ "$2" -le "$step" ]
+  [ "${#step}" -le 9 ] && [ "$sig" = "$3" ] && [ "$2" -le "$step" ] || return 1
+  WEDGE_RAISED_STEP=$step
 }
 
 wedge_timer_check() {  # <window> <since-file> <triage-label> <escalation-count-file> <task> <pane-hash> [dialog-name] [stream snapshot]
@@ -2243,7 +2248,7 @@ wedge_timer_check() {  # <window> <since-file> <triage-label> <escalation-count-
           return 0
         fi
         if evidence=$(wedge_wait_evidence "$task") &&
-           wedge_defer_wait "$win" "$since_file" "$label" "$age" "$evidence" "$task"; then
+           wedge_defer_wait "$win" "$since_file" "$label" "$age" "$evidence" "$task" "$dialog"; then
           return 0
         fi
         if crew_worktree_written_since "$task" "$STATE" "$since_file"; then
@@ -2366,6 +2371,7 @@ wedge_timer_check() {  # <window> <since-file> <triage-label> <escalation-count-
               *) triage_log "wedge escalation-counter reset FAILED on $win - escalation count rolled back; the cap marker stands, so this window stays silent until its horizon (FM_CAP_HORIZON_SECS) elapses or an episode-ending route releases it (an operator can delete the marker to re-engage at once)"; exit 1 ;;
             esac
           fi
+          rm -f "$STATE/.wedge-raised-$_wkey"
           triage_log "wedge permanently capped: $win (escalation $n, max $FM_WEDGE_MAX_ESCALATIONS, hash ${hash:0:12})"
           [ "$_wrb_cap_status" -eq 3 ] || wake "$_wrb_cap_reason"
           return 0
@@ -2374,8 +2380,10 @@ wedge_timer_check() {  # <window> <since-file> <triage-label> <escalation-count-
         # repeat, not an escalation: an episode-ending absorb (provably working,
         # turn-end churn) restarts the count, and the pane going quiet again
         # would otherwise re-raise "escalation 1" for a worker that wrote
-        # nothing new. The count still advances, so a genuinely hung worker
-        # raises the next step one STALE_ESCALATE_SECS later. A dialog, or a
+        # nothing new. The count jumps to the step already raised, so a
+        # genuinely hung worker raises the step after it one
+        # STALE_ESCALATE_SECS later: at most one threshold is withheld after
+        # any reset, however high the ladder had climbed. A dialog, or a
         # task with no status file to compare, keeps its wake. The record is
         # bound to the status log, not the episode, so episode and pause resets
         # deliberately leave it.
@@ -2384,7 +2392,7 @@ wedge_timer_check() {  # <window> <since-file> <triage-label> <escalation-count-
           status_sig=$(fm_wake_signal_sig "$STATE/$task.status" 2>/dev/null || true)
         fi
         if [ -n "$status_sig" ] && wedge_step_raised "$_wkey" "$n" "$status_sig"; then
-          [ -z "$stream_snapshot" ] || wedge_write_escalation_count "$win" "$_wkey" "$escalation_file" "$since_file" "$n"
+          wedge_write_escalation_count "$win" "$_wkey" "$escalation_file" "$since_file" "$WEDGE_RAISED_STEP"
           rm -f "$since_file"
           clear_write_tracking "$_wkey"
           triage_log "absorbed $label (escalation $n already raised for this unchanged status, idle ${age}s): $win"
