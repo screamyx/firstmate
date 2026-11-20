@@ -58,13 +58,13 @@ test_parked_question_is_not_raised_again_while_its_status_is_unchanged() {
 # a claim of bare idle alerts for a question whose outcome is recorded at the
 # status file's present position is consumed with no engine; anything else is
 # left untouched for the turn.
-# settle_case <name> <queued wake text> <status line after the outcome or ''> [<status verb> [<wake the outcome was recorded for> [<status text>]]]
+# settle_case <name> <queued wake text> <status line after the outcome or ''> [<status verb> [<wake the outcome was recorded for>]]
 # prints "<settle rc> <rows left> <skip lines logged>".
 settle_case() {
   local home="$TMP_ROOT/$1"
   mkdir -p "$home/state" "$home/config"
   printf 'window=firstmate:fm-demo\nproject=demo\nkind=ship\nharness=pi\nbackend=tmux\n' > "$home/state/demo.meta"
-  append_status "$home" "${6:-which schema do you want}" "${4:-blocked}"
+  append_status "$home" 'which schema do you want' "${4:-blocked}"
   case "${5:-stale:}" in stale:*) printf 'turn=t1\nstaletasks=demo\n' ;; *) printf 'turn=t1\nstaletasks=\n' ;; esac > "$home/state/.supervision-host-turn"
   FM_BRANCH_REPORT_TURN=t1 FM_HOME="$home" "$ROOT/bin/fm-branch-outcome.sh" append --task demo --verdict routine \
     --summary 'still waiting on the captain' --wake "${5:-stale: firstmate:fm-demo}" >/dev/null || fail "$1: could not record the outcome"
@@ -107,32 +107,22 @@ test_host_settles_a_bare_idle_alert_for_an_unchanged_working_status() {
   [ "$(settle_case settle-after-signal 'stale: firstmate:fm-demo' '' working 'signal: firstmate:fm-demo')" = "1 1 0" ] \
     || fail "settle: the first idle alert after an outcome recorded for a signal must keep its turn"
   pass "host: a bare idle alert for an unchanged working status is consumed without an engine turn, unless the recorded outcome was for a signal"
-  test_host_settles_the_first_idle_alert_after_a_signal_at_a_resting_line
+  test_host_keeps_the_first_idle_alert_after_a_signal_at_a_resting_line
   test_host_does_not_credit_a_mixed_claim_as_idle_evidence
 }
 
 # The worker reported done (or declared a wait) and that signal's turn recorded
-# its outcome; the worker then sat idle at that same line, and its first bare
-# idle alert arrived a minute later. Nothing changed since the handled signal.
-test_host_settles_the_first_idle_alert_after_a_signal_at_a_resting_line() {
+# its outcome; the worker then went idle. Nothing proves the idle stop was the
+# one already handled (a validation may have started and stopped at a gate
+# without a new line), so the first idle alert keeps its turn.
+test_host_keeps_the_first_idle_alert_after_a_signal_at_a_resting_line() {
   local verb r
   for verb in 'done' paused needs-decision; do
     r=$(settle_case "settle-after-signal-$verb" 'stale: firstmate:fm-demo' '' "$verb" 'signal: firstmate:fm-demo')
-    [ "$r" = "0 0 1" ] \
-      || fail "settle: the first idle alert after a handled signal at an unchanged $verb line still ran a turn (got: $r)"
+    [ "$r" = "1 1 0" ] \
+      || fail "settle: the first idle alert after a handled signal at an unchanged $verb line must keep its turn (got: $r)"
   done
-  r=$(settle_case settle-after-signal-newer 'stale: firstmate:fm-demo' 'a newer question' 'done' 'signal: firstmate:fm-demo')
-  [ "$r" = "1 1 0" ] \
-    || fail "settle: an idle alert after a status line newer than the handled signal must keep its turn (got: $r)"
-  r=$(settle_case settle-after-signal-paused-ahead 'stale: firstmate:fm-demo' '' paused 'signal: firstmate:fm-demo' \
-    "waiting on CI until $(date -u -d "@$(( $(date +%s) + 3600 ))" +%Y-%m-%dT%H:%MZ 2>/dev/null || date -u -r "$(( $(date +%s) + 3600 ))" +%Y-%m-%dT%H:%MZ)")
-  [ "$r" = "0 0 1" ] \
-    || fail "settle: an idle alert at a paused line whose clearing time is ahead still ran a turn (got: $r)"
-  r=$(settle_case settle-after-signal-paused-elapsed 'stale: firstmate:fm-demo' '' paused 'signal: firstmate:fm-demo' \
-    "waiting on CI until $(date -u -d "@$(( $(date +%s) - 3600 ))" +%Y-%m-%dT%H:%MZ 2>/dev/null || date -u -r "$(( $(date +%s) - 3600 ))" +%Y-%m-%dT%H:%MZ)")
-  [ "$r" = "1 1 0" ] \
-    || fail "settle: an idle alert at a paused line whose clearing time has passed must keep its turn (got: $r)"
-  pass "host: the first bare idle alert after a handled signal at an unchanged done, paused or needs-decision line is consumed without an engine turn"
+  pass "host: the first bare idle alert after a handled signal keeps its engine turn at a done, paused or needs-decision line"
 }
 
 test_host_does_not_credit_a_mixed_claim_as_idle_evidence() {

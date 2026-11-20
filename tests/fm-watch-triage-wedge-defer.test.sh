@@ -320,16 +320,9 @@ test_wedge_threshold_defers_to_a_backlog_captain_hold() {
   pass "a backlog captain hold bounds the wedge ladder like a captain-held line, and stays silent while the captain is away"
 }
 
-# The outcome a handled stale wake leaves behind, recorded at the status file's
-# present position exactly as the supervision branch's report records it.
-record_handled_stale_outcome() {  # <dir> <wake>
-  printf 'turn=t1\nstaletasks=wedge\n' > "$1/state/.supervision-host-turn"
-  FM_BRANCH_REPORT_TURN=t1 FM_HOME="$1" "$ROOT/bin/fm-branch-outcome.sh" append --task wedge \
-    --verdict routine --summary 'still held for the captain, nothing changed' --wake "$2" >/dev/null 2>&1
-}
-
 # A task parked by the captain with its worker window kept open: the backlog
-# hold is rechecked on the long cadence, and the first recheck was handled. Every
+# hold is rechecked on the long cadence, and the first recheck was acknowledged
+# by main alone, with no branch outcome. Every
 # further recheck while the hold and the worker's status log stay as they were
 # has nothing new to say, so it queues nothing; a new status line rechecks again.
 test_wedge_captain_hold_recheck_is_not_repeated_for_an_unchanged_worker() {
@@ -350,7 +343,7 @@ test_wedge_captain_hold_recheck_is_not_repeated_for_an_unchanged_worker() {
   grep -F 'captain hold, awaiting the captain - held in the backlog' "$out" >/dev/null \
     || fail "the first recheck was not the captain-hold recheck: $(cat "$out")"
   ack_stopped_cycle "$state" || fail "could not acknowledge the first captain-hold recheck"
-  record_handled_stale_outcome "$dir" "$(head -n 1 "$out")" || fail "could not record the handled recheck"
+  # Main acknowledged it directly: no branch outcome exists for this task.
 
   # The cadence comes due again, as it did every four hours on the parked task.
   queued=$(wedge_stale_wakes "$state" "$window")
@@ -362,8 +355,6 @@ test_wedge_captain_hold_recheck_is_not_repeated_for_an_unchanged_worker() {
   [ "$(wedge_stale_wakes "$state" "$window")" -eq "$queued" ] \
     || fail "a due recheck for an unchanged held worker queued a wake: $(cat "$state/.wake-queue")"
   [ ! -s "$out" ] || fail "a due recheck for an unchanged held worker printed a wake: $(cat "$out")"
-  grep -F 'unchanged since its handled recheck' "$state/.watch-triage.log" >/dev/null \
-    || fail "the withheld recheck was not recorded in the triage log: $(cat "$state/.watch-triage.log")"
   [ ! -e "$state/.wedge-escalations-$key" ] \
     || fail "a withheld captain-hold recheck counted a wedge escalation"
 
@@ -427,7 +418,8 @@ test_wedge_captain_hold_recheck_is_not_repeated_for_an_unchanged_worker() {
 # A worker waiting on a long CI run takes a short turn now and then, which ends
 # the wedge episode and restarts its escalation count. Its status log does not
 # move. The pane going quiet again must not re-raise the step already raised
-# for that status; a genuine hang still climbs to the next step, raised once.
+# for that status; the count climbs its own rungs and the next real step is
+# raised once.
 test_wedge_escalation_step_is_not_reraised_for_an_unchanged_status() {
   local dir state fakebin out capture window key statusf
   local working='state: working · source: run-step · ci running'
@@ -457,8 +449,8 @@ test_wedge_escalation_step_is_not_reraised_for_an_unchanged_status() {
     || fail "the withheld repeat step was not recorded in the triage log: $(cat "$state/.watch-triage.log")"
   ack_stopped_cycle "$state" || fail "could not acknowledge escalation 2"
 
-  # Another short turn after the ladder reached 2: only one threshold is
-  # withheld, and the next raise is step 3, not 1 or 2 again.
+  # Another short turn after the ladder reached 2: steps 1 and 2 are withheld
+  # a threshold each, and the next raise is step 3, not 1 or 2 again.
   rm -f "$state/.wedge-escalations-$key" "$state/.stale-since-$key"
   : > "$out"
   wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$working" exit \
@@ -467,7 +459,7 @@ test_wedge_escalation_step_is_not_reraised_for_an_unchanged_status() {
     && fail "a step already raised was raised again after a reset at step 2: $(cat "$out")"
   grep -F 'possible wedge, escalation 3' "$out" >/dev/null \
     || fail "the step after a reset at step 2 was not escalation 3: $(cat "$out")"
-  [ "$(grep -c 'already raised for this unchanged status' "$state/.watch-triage.log")" -eq 2 ] \
+  [ "$(grep -c 'already raised for this unchanged status' "$state/.watch-triage.log")" -eq 3 ] \
     || fail "a reset withheld other than one threshold: $(cat "$state/.watch-triage.log")"
   ack_stopped_cycle "$state" || fail "could not acknowledge escalation 3"
 
@@ -482,6 +474,35 @@ test_wedge_escalation_step_is_not_reraised_for_an_unchanged_status() {
     || fail "a new status line did not restart the ladder at escalation 1: $(cat "$out")"
   ack_stopped_cycle "$state" || fail "could not acknowledge the restarted escalation"
   pass "a wedge escalation step is raised once per unchanged status, while the next real step and a changed status still escalate"
+}
+
+# The same repeat on the overridden-terminal route: a worker whose last line is
+# `done: ready to validate` while CI runs. Withholding the repeated step must
+# keep that route's idle timer, or the stuck frame never raises its next step.
+test_wedge_terminal_status_repeat_still_raises_the_next_step() {
+  local dir state fakebin out capture window key
+  local working='state: working · source: run-step · ci running'
+  window="test:fm-wedge"; key=$(watch_window_key "$window")
+  dir=$(wedge_threshold_fixture terminal-repeat 'done: ready to validate' 0 2000)
+  state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture="$dir/pane.txt"
+  wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$working" exit \
+    || fail "a quiet lane behind a done line never escalated: $(cat "$out")"
+  grep -F 'possible wedge, escalation 1' "$out" >/dev/null \
+    || fail "the first escalation behind a done line was not escalation 1: $(cat "$out")"
+  ack_stopped_cycle "$state" || fail "could not acknowledge escalation 1"
+
+  # A pane update ends the episode and the new stable frame arms a fresh timer.
+  printf '%s\n' "$(( $(date +%s) - 2000 ))" > "$state/.stale-since-$key"
+  rm -f "$state/.wedge-escalations-$key"
+  : > "$out"
+  wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$working" exit \
+    || fail "a stuck frame behind a done line never raised its next step: $(cat "$out")"
+  grep -F 'possible wedge, escalation 1' "$out" >/dev/null \
+    && fail "escalation 1 was raised twice behind an unchanged done line: $(cat "$out")"
+  grep -F 'possible wedge, escalation 2' "$out" >/dev/null \
+    || fail "the next step behind a done line was not escalation 2: $(cat "$out")"
+  ack_stopped_cycle "$state" || fail "could not acknowledge escalation 2"
+  pass "a repeated wedge step behind a terminal status keeps its timer and still raises the next step"
 }
 
 # --- the wedge threshold reads the crew's own parked-gate state --------------
@@ -1144,6 +1165,7 @@ fm_test_run \
   test_wedge_threshold_defers_to_a_backlog_captain_hold \
   test_wedge_captain_hold_recheck_is_not_repeated_for_an_unchanged_worker \
   test_wedge_escalation_step_is_not_reraised_for_an_unchanged_status \
+  test_wedge_terminal_status_repeat_still_raises_the_next_step \
   test_wedge_threshold_defers_to_a_parked_gate_awaiting_a_human \
   test_wedge_threshold_parked_gate_needs_an_unanswered_decision \
   test_wedge_threshold_parked_gate_is_off_until_armed \
