@@ -15,7 +15,12 @@
 # recorded outcome was captured at exactly the status file's present position
 # (any status verb). fm_idle_repeat_recorded <task> adds that this outcome was
 # recorded for a stale wake (the index's optional fifth field, stale or other;
-# absent reads as unknown). fm_open_question_recorded <task> adds that the newest status
+# absent reads as unknown), or that the newest status line is a resting event
+# (done, failed, needs-decision, blocked, paused, captain-held) the outcome
+# already covered, whatever wake it was recorded for: a worker idle at a line
+# that says it stopped has nothing new to say, while a newest working or
+# verbless line after a signal outcome keeps its turn because going idle there
+# may be the stop. fm_open_question_recorded <task> adds that the newest status
 # line is an open needs-decision or blocked event. Any
 # missing, unreadable, or unready piece returns 1, so the caller treats the
 # question as new: a repeat alert or a paid turn costs less than a missed one.
@@ -103,7 +108,12 @@ capture_status_position() { # <task>
 }
 
 fm_idle_repeat_recorded() {  # <task>
-  fm_status_position_recorded "$1" && [ "$BRANCH_OUTCOME_INDEX_KIND" = stale ]
+  local line
+  fm_status_position_recorded "$1" || return 1
+  [ "$BRANCH_OUTCOME_INDEX_KIND" != stale ] || return 0
+  line=$(last_status_line "$STATE/$1.status") || return 1
+  case "$(status_line_verb "$line")" in done|failed|needs-decision|blocked) return 0 ;; esac
+  status_is_paused "$line" || status_is_captain_held "$line"
 }
 
 fm_status_position_recorded() {  # <task>

@@ -2,9 +2,9 @@
 # fm-supervision-host-repeat-lib.sh - sourced by bin/fm-supervision-host.sh. The
 # repeat idle alert skip (docs/supervision-host.md "Repeat idle alerts"): a
 # claim made only of bare "stale: <pane>" rows for workers whose last outcome
-# is already recorded for a stale wake at the status file's present position,
-# whatever the status (bin/fm-outcome-index-lib.sh fm_idle_repeat_recorded), is settled
-# without an engine turn.
+# is already recorded at the status file's present position, for a stale wake
+# or under a resting newest line (bin/fm-outcome-index-lib.sh
+# fm_idle_repeat_recorded), is settled without an engine turn.
 #
 # Needs from the host: SCRIPT_DIR, STATE, GEN, log_line, and the grant already
 # published for the claimed rows.
@@ -14,7 +14,8 @@
 # status) and acknowledgement the engine would have run, and logged one skip line. Anything
 # short of that returns 1 with nothing acknowledged, and the caller runs the
 # turn as before. Decorated stale reasons (wedge escalations, unread
-# instructions, dialogs, dead agents) are never skipped.
+# instructions, dialogs, dead agents) are never skipped here; the watcher
+# itself withholds a repeated escalation step or captain-hold recheck.
 
 command -v last_status_line >/dev/null 2>&1 || {
   # shellcheck source=bin/fm-classify-lib.sh
