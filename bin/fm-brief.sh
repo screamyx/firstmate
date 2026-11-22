@@ -636,11 +636,11 @@ HERDR_SECTION=$(printf '%s\n' \
 '   It re-checks refuse-default immediately before stop and again immediately before delete, and fails closed on ambiguity.' \
 '4. If an experiment requires a deliberate mid-run session stop, use only `"$HERDR_LAB_HELPER" stop "$HERDR_LAB_SESSION"`; it performs the same immediate refuse-default check.' \
 '5. Forbidden commands: direct `herdr server stop`, `hc server stop`, `hc server restart`, `herdr-core server stop`, `herdr-core server restart`, every other server-global operation such as `herdr server live-handoff` or reload/update operations, direct `herdr session stop`, direct `herdr session delete`, and any Herdr call scoped only by ambient or inline `HERDR_SESSION`.' \
-'6. The helper records the live default session before provisioning and verifies the identical fleet state after teardown.' \
-'   A missing, stopped, or changed default session is a hard tripwire failure, never a cleanup warning to ignore.' \
+'6. See the `bin/fm-herdr-lab.sh` header for the fleet-state tripwire and `FM_HERDR_LAB_FLEET_SESSION` rule.' \
+'   A missing, stopped, or changed fleet session is a hard tripwire failure, never a cleanup warning to ignore.' \
 '' \
 'Rules 1-4 and 6 and the helper apply to Herdr 0.7.3 (Herdr 1) labs; never bypass the helper there, even for a read-only lifecycle probe or cleanup after failure.' \
-'A Herdr 2 / herdr-app lab with its own scratch `hc` cores needs neither the Herdr 1 CLI nor its default session, but rules 5 and 7-9 bind it as they bind every lab.' \
+'A Herdr 2 / herdr-app lab with its own scratch `hc` cores needs neither the Herdr 1 CLI nor its fleet session, but rules 5 and 7-9 bind it as they bind every lab.' \
 '' \
 '7. An inherited `HC_SOCKET` (or any other socket override) beats `HC_SESSION`, so every `hc` call in a lab, whatever the operation, must reach only the lab'\''s own scratch core; the `default` session is never addressed.' \
 '   Clear any inherited override and pin the lab'\''s own scratch socket and session on that same call: `env -u HC_SOCKET HC_SESSION=<lab session> HC_SOCKET=<lab scratch socket> hc ...`; `'"$(shell_quote "$FM_ROOT/bin/fm-hc-lab.sh")"' run <lab session> <hc arguments...>` does this for a core it provisioned.' \
@@ -649,8 +649,7 @@ HERDR_SECTION=$(printf '%s\n' \
 '   Before any lab record the `herdr-core.service` MainPID (`systemctl --user show -p MainPID --value herdr-core.service`, only where `systemctl --user` works) and whether the default core socket exists; no service or no live core is a valid baseline, recorded as such.' \
 '   After the lab read the same values.' \
 '   A different MainPID, a MainPID that went empty, a MainPID that went from empty to a value, a default core socket that was present and is now gone, or a default core socket that was absent and now exists is a hard failure: report it at once.' \
-'   The same values before and after, including empty both times, pass; without systemd the socket check alone is the tripwire.' \
-'The captain fleet uses the running `default` session.')
+'   The same values before and after, including empty both times, pass; without systemd the socket check alone is the tripwire.')
 else
 IFS= read -r -d '' HERDR_SECTION <<'EOF' || true
 # Herdr lifecycle declaration - NOT ENABLED
