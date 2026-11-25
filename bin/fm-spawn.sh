@@ -4421,12 +4421,6 @@ if [ "$RELAUNCH" -eq 0 ] && [ "$KIND" != secondmate ] &&
   fi
   SPAWN_TREEHOUSE_PROJECT_LOCK_HELD=1
 fi
-if [ "$RELAUNCH" -eq 0 ] && [ "$KIND" != secondmate ] && [ "$BACKEND" != orca ]; then
-  SPAWN_TREEHOUSE_ROOT=$(fm_treehouse_spawn_root "$FM_HOME") || {
-    echo "error: could not resolve which Treehouse pool this home's clone of $PROJ_ABS uses" >&2
-    exit 1
-  }
-fi
 if [ -n "$SPAWN_PROJECT_CAPACITY" ]; then
   if ! fm_project_capacity_occupants "$SPAWN_TREEHOUSE_PROJECT_LOCK" "$PROJ_ABS" "$STATE" "$ID"; then
     echo "error: spawn refused: project $(basename "$PROJ_ABS") declares a capacity of $SPAWN_PROJECT_CAPACITY, but this machine's task records cannot all be read to count it ($FM_PROJECT_CAPACITY_ERROR)" >&2
@@ -4754,6 +4748,12 @@ if [ "$RELAUNCH" -eq 0 ] && [ "$KIND" != secondmate ]; then
     fi
     [ -d "$WORKTREE_ROOT" ] || {
       echo "error: $ID cannot launch: $PROJ_NAME registers worktree-root=$WORKTREE_ROOT, which is not an existing directory; create it or correct data/projects.md, then spawn again" >&2
+      exit 1
+    }
+    SPAWN_TREEHOUSE_ROOT=$WORKTREE_ROOT
+  elif [ "$BACKEND" != orca ]; then
+    SPAWN_TREEHOUSE_ROOT=$(fm_treehouse_spawn_root "$FM_HOME") || {
+      echo "error: could not resolve which Treehouse pool this home's clone of $PROJ_ABS uses" >&2
       exit 1
     }
   fi
@@ -5634,7 +5634,7 @@ EOF
       # A durable lease (bin/fm-home-seed.sh's pattern): there is no pane to run
       # the interactive `treehouse get` in, and a slot a live T3 thread points at
       # must never be handed on while that thread could re-create it.
-      WT=$(cd "$PROJ_ABS" && spawn_treehouse get --lease --lease-holder "$ID" ${WORKTREE_ROOT:+--root "$WORKTREE_ROOT"}) || {
+      WT=$(cd "$PROJ_ABS" && spawn_treehouse get --lease --lease-holder "$ID") || {
         echo "error: treehouse get --lease failed to lease a worktree for $ID from $PROJ_ABS" >&2
         exit 1
       }
@@ -5751,7 +5751,7 @@ spawn_send_key() { # <target> <key>
 # outlives its pane, so an aborted spawn returns it (spawn_abort_cleanup) and
 # bin/fm-teardown.sh returns it for a finished task.
 spawn_lease_herdr_slot() {
-  WT=$(cd "$PROJ_ABS" && spawn_treehouse get --lease --lease-holder "$ID" ${WORKTREE_ROOT:+--root "$WORKTREE_ROOT"}) || {
+  WT=$(cd "$PROJ_ABS" && spawn_treehouse get --lease --lease-holder "$ID") || {
     echo "error: treehouse get --lease failed to lease a worktree for $ID from $PROJ_ABS; $(spawn_endpoint_hint)" >&2
     exit 1
   }
@@ -6297,9 +6297,7 @@ elif [ "$KIND" != secondmate ] && [ "$BACKEND" != orca ]; then
   elif [ "$BACKEND" = herdr ]; then
     spawn_lease_herdr_slot
   else
-    if [ -n "$WORKTREE_ROOT" ]; then
-      spawn_send_text_line "$WT_TARGET" "treehouse get --root '${WORKTREE_ROOT//\'/\'\\\'\'}'"
-    elif [ -n "$SPAWN_TREEHOUSE_ROOT" ]; then
+    if [ -n "$SPAWN_TREEHOUSE_ROOT" ]; then
       spawn_send_text_line "$WT_TARGET" "treehouse --root $(shell_quote "$SPAWN_TREEHOUSE_ROOT") get"
     else
       spawn_send_text_line "$WT_TARGET" 'treehouse get'

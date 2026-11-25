@@ -135,6 +135,32 @@ spawn_root_for() {  # <home>
     _ "$ROOT/bin/fm-wake-lib.sh" "$home"
 }
 
+test_registered_root_wins_over_an_unusable_fallback() {
+  local case_dir id out status mate reg wt
+  case_dir="$TMP_ROOT/registered-root"
+  id='mate-pool-registered-s4'
+  make_pool_fakebin "$case_dir/fake" >/dev/null
+  make_main_home "$case_dir"
+  make_mate_home "$case_dir" local
+  mate="$case_dir/mate-home"
+  reg="$case_dir/registered-root"
+  mkdir -p "$reg" "$mate/inside"
+  printf -- '- project [no-mistakes worktree-root=%s] - fixture with a pool root (added 2026-11-26)\n' \
+    "$reg" > "$mate/data/projects.md"
+
+  out=$(TREEHOUSE_ROOT="$mate/inside" run_pool_spawn "$case_dir" "$mate" "$id")
+  status=$?
+  expect_code 0 "$status" "a registered worktree root must spawn even when the fallback root is unusable"$'\n'"$out"
+  [ "$(cat "$case_dir/treehouse.log")" = "treehouse --root '$reg' get" ] \
+    || fail "the spawn did not use the registered root: $(cat "$case_dir/treehouse.log")"
+  wt=$(meta_worktree "$mate" "$id")
+  case "$wt" in
+    "$reg/"*) ;;
+    *) fail "the spawn recorded a worktree outside the registered root: $wt" ;;
+  esac
+  pass "a registered worktree root wins over a fallback root the home would refuse"
+}
+
 test_local_secondmate_pool_root_is_outside_the_home() {
   local case_dir mate home_real root slot dir
   case_dir="$TMP_ROOT/outside-home"
@@ -278,6 +304,7 @@ test_treehouse_root_under_the_home_is_refused() {
 }
 
 test_local_secondmate_pool_root_is_outside_the_home
+test_registered_root_wins_over_an_unusable_fallback
 test_relative_treehouse_root_is_ignored
 test_treehouse_root_under_the_home_is_refused
 test_local_secondmate_spawns_from_its_own_clone_pool
