@@ -137,6 +137,7 @@ tests/fm-harness-adapter-references.test.sh	257
 tests/fm-harness-liveness-drift-live-e2e.test.sh	1125
 tests/fm-harness-precedence.test.sh	5744
 tests/fm-hc-lab.test.sh	776
+tests/fm-herdr-agent-tree.test.sh	3869
 tests/fm-herdr-attached-viewer-live-e2e.test.sh	2482
 tests/fm-herdr-groups.test.sh	4602
 tests/fm-herdr-lab.test.sh	39043
@@ -171,6 +172,7 @@ tests/fm-live-gate.test.sh	16481
 tests/fm-live-lab-isolation.test.sh	3657
 tests/fm-live-lab-up-mate.test.sh	18011
 tests/fm-live-lab.test.sh	84559
+tests/fm-lock-lib.test.sh	156
 tests/fm-mail-check.test.sh	8476
 tests/fm-mail.test.sh	11369
 tests/fm-merge-local.test.sh	9152
@@ -216,6 +218,7 @@ tests/fm-project-capacity.test.sh	83310
 tests/fm-project-mode.test.sh	678
 tests/fm-project-origin.test.sh	312
 tests/fm-public-followup.test.sh	436520
+tests/fm-ps-width.test.sh	681
 tests/fm-quota-array-dispatch-live-e2e.test.sh	186
 tests/fm-quota-choose.test.sh	2966
 tests/fm-read-repetition-live.test.sh	1356
