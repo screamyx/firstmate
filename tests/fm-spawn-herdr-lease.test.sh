@@ -173,8 +173,9 @@ test_lease_carries_the_registered_worktree_root() {
   out=$(run_lease_spawn "$dir" "$id")
   status=$?
   expect_code 0 "$status" "spawn with a registered worktree root should succeed"$'\n'"$out"
-  assert_grep "get --lease --lease-holder $id --root $dir/wtroot" "$dir/fake/treehouse-log" \
-    "the Herdr lease did not carry the registered worktree root"
+  grep -Fqx -- "--root $dir/wtroot get --lease --lease-holder $id" "$dir/fake/treehouse-log" \
+    || fail \
+    "the Herdr lease did not carry the registered worktree root: $(cat "$dir/fake/treehouse-log")"
   pass "a Herdr lease carries the project's registered worktree root"
 }
 
