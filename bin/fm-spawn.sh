@@ -364,6 +364,12 @@
 #   itself a linked worktree of the project repository still launches. A pane
 #   that never reaches an isolated worktree refuses at the end of that wait,
 #   naming the last path seen and why it was rejected.
+#   The root home acquires every task slot (the pane's `treehouse get` and the
+#   Herdr and t3code durable leases alike) from Treehouse's default pool; a
+#   local secondmate home passes `--root` so its slot comes from a pool outside
+#   the Firstmate home and is a worktree of that home's own clone, never
+#   another home's (bin/fm-wake-lib.sh's fm_treehouse_spawn_root owns the choice).
+#   A project's registered worktree-root= (below) takes precedence over both.
 #   That placement is proven only at launch. Every ship or scout therefore
 #   receives `FM_TASK_ID=<task-id>` before launch, on the same backend-specific
 #   environment channel as GOTMPDIR, and bin/fm-test-run.sh refuses to execute the
@@ -1802,6 +1808,7 @@ SPAWN_TREEHOUSE_PROJECT_LOCK=
 SPAWN_TREEHOUSE_PROJECT_LOCK_HELD=0
 SPAWN_LANE_ADMISSION_LOCK=
 SPAWN_LANE_ADMISSION_LOCK_HELD=0
+SPAWN_TREEHOUSE_ROOT=
 SPAWN_SLOT_CLAIMED=0
 SPAWN_FRESH_ENDPOINT_OPENED=0
 SPAWN_FRESH_WIRING_PENDING=0
@@ -2777,6 +2784,14 @@ else
   ARG3=${POS[2]:-}
 fi
 [ -z "$HARNESS_ARG" ] || ARG3=$HARNESS_ARG
+
+spawn_treehouse() {
+  if [ -n "$SPAWN_TREEHOUSE_ROOT" ]; then
+    treehouse --root "$SPAWN_TREEHOUSE_ROOT" "$@"
+  else
+    treehouse "$@"
+  fi
+}
 
 shell_quote() {
   printf "'"
@@ -4735,6 +4750,12 @@ if [ "$RELAUNCH" -eq 0 ] && [ "$KIND" != secondmate ]; then
       echo "error: $ID cannot launch: $PROJ_NAME registers worktree-root=$WORKTREE_ROOT, which is not an existing directory; create it or correct data/projects.md, then spawn again" >&2
       exit 1
     }
+    SPAWN_TREEHOUSE_ROOT=$WORKTREE_ROOT
+  elif [ "$BACKEND" != orca ]; then
+    SPAWN_TREEHOUSE_ROOT=$(fm_treehouse_spawn_root "$FM_HOME") || {
+      echo "error: could not resolve which Treehouse pool this home's clone of $PROJ_ABS uses" >&2
+      exit 1
+    }
   fi
 fi
 
@@ -5613,7 +5634,7 @@ EOF
       # A durable lease (bin/fm-home-seed.sh's pattern): there is no pane to run
       # the interactive `treehouse get` in, and a slot a live T3 thread points at
       # must never be handed on while that thread could re-create it.
-      WT=$(cd "$PROJ_ABS" && treehouse get --lease --lease-holder "$ID" ${WORKTREE_ROOT:+--root "$WORKTREE_ROOT"}) || {
+      WT=$(cd "$PROJ_ABS" && spawn_treehouse get --lease --lease-holder "$ID") || {
         echo "error: treehouse get --lease failed to lease a worktree for $ID from $PROJ_ABS" >&2
         exit 1
       }
@@ -5730,7 +5751,7 @@ spawn_send_key() { # <target> <key>
 # outlives its pane, so an aborted spawn returns it (spawn_abort_cleanup) and
 # bin/fm-teardown.sh returns it for a finished task.
 spawn_lease_herdr_slot() {
-  WT=$(cd "$PROJ_ABS" && treehouse get --lease --lease-holder "$ID" ${WORKTREE_ROOT:+--root "$WORKTREE_ROOT"}) || {
+  WT=$(cd "$PROJ_ABS" && spawn_treehouse get --lease --lease-holder "$ID") || {
     echo "error: treehouse get --lease failed to lease a worktree for $ID from $PROJ_ABS; $(spawn_endpoint_hint)" >&2
     exit 1
   }
@@ -6276,8 +6297,8 @@ elif [ "$KIND" != secondmate ] && [ "$BACKEND" != orca ]; then
   elif [ "$BACKEND" = herdr ]; then
     spawn_lease_herdr_slot
   else
-    if [ -n "$WORKTREE_ROOT" ]; then
-      spawn_send_text_line "$WT_TARGET" "treehouse get --root '${WORKTREE_ROOT//\'/\'\\\'\'}'"
+    if [ -n "$SPAWN_TREEHOUSE_ROOT" ]; then
+      spawn_send_text_line "$WT_TARGET" "treehouse --root $(shell_quote "$SPAWN_TREEHOUSE_ROOT") get"
     else
       spawn_send_text_line "$WT_TARGET" 'treehouse get'
     fi

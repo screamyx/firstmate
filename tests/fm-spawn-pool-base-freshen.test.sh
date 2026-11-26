@@ -305,7 +305,7 @@ test_registered_worktree_root_reaches_treehouse_get() {
   out=$(FM_FAKE_PANE_LOG="$pane_log" FM_FAKE_LAUNCH_LOG="$launch_log" run_spawn "$id" --scout)
   status=$?
   expect_code 0 "$status" "spawn with an existing worktree root should launch"$'\n'"$out"
-  cat "$pane_log" "$launch_log" 2>/dev/null | grep -qxF "treehouse get --root '$CASE_DIR/wtroot'" \
+  cat "$pane_log" "$launch_log" 2>/dev/null | grep -qxF "treehouse --root '$CASE_DIR/wtroot' get" \
     || fail "treehouse get did not receive the registered root (pane: $(cat "$pane_log" "$launch_log" 2>/dev/null | grep treehouse))"
   pass "a registered worktree root reaches treehouse get --root, and a missing root refuses the spawn"
 }
