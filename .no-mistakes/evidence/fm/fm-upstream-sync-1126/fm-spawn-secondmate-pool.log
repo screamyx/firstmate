@@ -1,0 +1,8 @@
+ok - a local secondmate pool root and slot sit outside the home's CLAUDE.md and AGENTS.md
+ok - a registered worktree root wins over a fallback root the home would refuse
+ok - a relative TREEHOUSE_ROOT is ignored in favor of $HOME/.treehouse
+ok - an absolute TREEHOUSE_ROOT under the home is refused
+ok - a local secondmate spawn takes its slot from a pool of its own clone
+ok - a root-home spawn keeps Treehouse's default pool
+ok - a remote-seeded home keeps the default pool and the worktree-of-project check stays intact
+# all fm-spawn-secondmate-pool tests passed

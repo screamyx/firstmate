@@ -1,0 +1,2 @@
+not ok - a remote-seeded secondmate home should allocate and launch from its Treehouse pool
+error: task temp root /tmp/fm-pool-remote-seeded-r13 already exists and is not a private directory owned by this user; refusing to stage the launch command there; inspect and remove it, then retry: expected exit 0, got 1
