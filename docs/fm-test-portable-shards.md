@@ -22,6 +22,9 @@ A timed-out shard may upload no artifact, so a complete green run is what keeps 
 
 The fork-only rows for `tests/fm-herdr-agent-tree.test.sh` (3869 ms), `tests/fm-lock-lib.test.sh` (156 ms), and `tests/fm-ps-width.test.sh` (681 ms) carry the hints this fork added in ca0a124a; they are not from the upstream green-run samples and should be replaced at the next CI refresh.
 
+The 2026-11-13 `tests/fm-pi-bash-timeout.test.sh` serial hint is a provisional local measurement of 1486 ms, the slowest of five successful `bin/fm-test-run.sh tests/fm-pi-bash-timeout.test.sh` samples (1288-1486 ms) on a macOS arm64 host, collected separately from coverage and lint checks.
+Replace it with an Ubuntu timing-artifact maximum at the next CI refresh; this is not whole-shard CI timing evidence.
+
 ## Parallel lanes
 
 The two parallel lanes use longest-processing-time assignment over the committed hints.
